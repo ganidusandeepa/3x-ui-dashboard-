@@ -102,34 +102,39 @@ document.getElementById('tab-login-client').addEventListener('click', (e) => {
 // Default tab selection is handled on DOMContentLoaded using cached last tab.
 
 document.getElementById('btn-login-admin').addEventListener('click', async () => {
-    const un = document.getElementById('login-username').value;
-    const pw = document.getElementById('login-password').value;
     const btn = document.getElementById('btn-login-admin');
-    btn.textContent = "Authenticating...";
+    btn.textContent = "Checking...";
 
-    // cache username + last tab only (never store password)
-    try {
-        localStorage.setItem('xui_last_tab', 'admin');
-        localStorage.setItem('xui_admin_username', un || '');
-    } catch(e) {}
+    // cache last tab
+    try { localStorage.setItem('xui_last_tab', 'admin'); } catch(e) {}
 
     try {
+        // This endpoint is protected by Cloudflare Access.
+        // If user is not authenticated, Cloudflare will redirect to Google.
         const res = await fetch('/api/auth', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'admin', username: un, password: pw })
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'admin', username: '', password: '' })
         });
-        const data = await res.json();
-        if(data.success) {
+
+        // If Access blocks, response may be HTML; guard.
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); } catch(e) { data = null; }
+
+        if (data && data.success) {
             currentRole = 'admin';
-            adminToken = pw; // simplistic token
-            // Persist only for this browser tab/session (clears on tab close)
-            try { sessionStorage.setItem('xui_admin_token', pw); } catch(e) {}
+            adminToken = 'zero-trust-secured';
+            try { sessionStorage.setItem('xui_admin_token', 'zero-trust-secured'); } catch(e) {}
             await startAdminApp();
         } else {
-            showToast("Invalid Admin Login", "error");
+            showToast((data && data.msg) ? data.msg : 'Google login required (Cloudflare Access)', 'error');
         }
-    } catch(e) { showToast("Connection Error", "error"); }
-    btn.textContent = "Login as Admin";
+    } catch(e) {
+        showToast('Google login required (Cloudflare Access)', 'error');
+    }
+
+    btn.textContent = "Continue with Google";
 });
 
 document.getElementById('btn-login-client').addEventListener('click', async () => {
@@ -310,6 +315,11 @@ function startClientApp(client) {
 
 // --- Admin Helper Functions ---
 function getAdminHeaders() {
+    // When protected by Cloudflare Access, backend authorizes via identity header.
+    // In that case, DO NOT send Bearer password.
+    if (!adminToken || adminToken === 'zero-trust-secured') {
+        return { 'Content-Type': 'application/json' };
+    }
     return { 'Authorization': `Bearer ${adminToken}`, 'Content-Type': 'application/json' };
 }
 
@@ -445,9 +455,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     try {
         const lastTab = localStorage.getItem('xui_last_tab') || 'client';
         const cachedClient = localStorage.getItem('xui_client_id') || '';
-        const cachedAdminUser = localStorage.getItem('xui_admin_username') || '';
         if (cachedClient) document.getElementById('login-email').value = cachedClient;
-        if (cachedAdminUser) document.getElementById('login-username').value = cachedAdminUser;
 
         if (lastTab === 'admin') {
             document.getElementById('tab-login-admin').click();
@@ -458,8 +466,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         // Auto restore session
         const tok = sessionStorage.getItem('xui_admin_token');
         if (tok) {
-            // verify token by calling status
-            fetch('/api/status', { headers: { Authorization: `Bearer ${tok}` } })
+            // verify session by calling status
+            const headers = (tok === 'zero-trust-secured') ? {} : { Authorization: `Bearer ${tok}` };
+            fetch('/api/status', { headers })
               .then(r => r.json())
               .then(j => {
                   if (j && j.success) {
