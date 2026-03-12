@@ -15,7 +15,7 @@
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-body { font-family: var(--font); background: var(--bg-color); color: var(--text); overflow-x: hidden; line-height: 1.5; }
+body { font-family: var(--font); background: var(--bg-color); color: var(--text); overflow-x: hidden; line-height: 1.5; padding-bottom: env(safe-area-inset-bottom); }
 
 /* 3D BG Canvas */
 #canvas-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
@@ -102,10 +102,29 @@ header { display: flex; justify-content: space-between; align-items: center; mar
     .desktop-nav { display: none; }
     .mobile-nav { display: flex; }
     .logo { font-size: 1.5rem; }
-    .data-card-hero { grid-column: span 1; flex-direction: column; text-align: center; gap: 20px; }
-    .traffic-split { justify-content: center; }
-    .dashboard-wrapper { padding: 15px; }
-    .main-value { font-size: 2.2rem; }
+    .data-card-hero { grid-column: span 1; flex-direction: column; text-align: center; gap: 16px; padding: 20px; }
+    .traffic-split { justify-content: center; gap: 18px; }
+    .dashboard-wrapper { padding: 12px; padding-bottom: calc(var(--nav-height) + 30px + env(safe-area-inset-bottom)); }
+    header { margin-bottom: 18px; }
+    .main-value { font-size: 2.0rem; }
+    .donut-wrapper { width: 120px; height: 120px; }
+    .fab { bottom: calc(90px + env(safe-area-inset-bottom)); right: 18px; }
+}
+
+/* Extra small phones */
+@media (max-width: 420px) {
+    .dashboard-wrapper { padding: 10px; }
+    .card { padding: 14px; border-radius: 18px; }
+    .overview-grid { grid-template-columns: 1fr; gap: 14px; }
+    .traffic-split { flex-direction: row; gap: 14px; margin-top: 14px; }
+    .split-item .val { font-size: 1rem; }
+    .percent-val { top: 14px; right: 14px; font-size: 1.2rem; }
+    .mini-chart-container { height: 80px; }
+    .user-status { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
 }
 
 /* Animations */

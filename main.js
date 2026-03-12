@@ -243,8 +243,16 @@ async function loadAdminData() {
             gsap.to('#total-traffic', { innerHTML: total, duration: 1.5, snap: { innerHTML: 0.01 } });
             gsap.to('#dl-traffic', { innerHTML: down, duration: 1.5, snap: { innerHTML: 0.01 } });
             gsap.to('#up-traffic', { innerHTML: up, duration: 1.5, snap: { innerHTML: 0.01 } });
-            document.getElementById('cpu-percent').textContent = `${s.cpu}%`;
-            document.getElementById('ram-percent').textContent = `${((s.mem.current / s.mem.total) * 100).toFixed(1)}%`;
+            const cpuNum = Number(s.cpu);
+            const cpuPct = Number.isFinite(cpuNum) ? Math.max(0, Math.min(100, cpuNum)) : 0;
+            document.getElementById('cpu-percent').textContent = `${cpuPct.toFixed(1)}%`;
+
+            const memCur = Number(s.mem?.current);
+            const memTot = Number(s.mem?.total);
+            const ramPct = (Number.isFinite(memCur) && Number.isFinite(memTot) && memTot > 0)
+                ? Math.max(0, Math.min(100, (memCur / memTot) * 100))
+                : 0;
+            document.getElementById('ram-percent').textContent = `${ramPct.toFixed(1)}%`;
             donutChart.data.datasets[0].data = [down, up]; donutChart.update();
         }
 
