@@ -48,7 +48,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .donut-wrapper { width: 140px; height: 140px; }
 
 .resource-card { position: relative; overflow: hidden; }
-.percent-val { position: absolute; top: 20px; right: 20px; font-size: 1.5rem; font-weight: 800; color: var(--accent); }
+.percent-val { position: absolute; top: 20px; right: 20px; font-size: 1.5rem; font-weight: 800; color: var(--accent); max-width: 7ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mini-chart-container { height: 100px; margin-top: 10px; }
 
 /* Tabs */
