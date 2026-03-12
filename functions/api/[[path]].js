@@ -1,26 +1,21 @@
 export async function onRequest(context) {
   const { request, env } = context;
   const url = new URL(request.url);
-  
-  const PANEL_URL = env.PANEL_URL || "http://127.0.0.1:2053";
+
+  const PANEL_URL_RAW = env.PANEL_URL || "http://127.0.0.1:2053";
+  const PANEL_URL = PANEL_URL_RAW.replace(/\/$/, "");
   const ADMIN_USER = env.PANEL_USERNAME || "admin";
   const ADMIN_PASS = env.PANEL_PASSWORD || "password";
 
   const path = url.pathname.replace('/api/', '');
 
   async function getSession() {
-    // Normalize URL - remove trailing slash
-    const base = PANEL_URL.replace(/\/$/, "");
-    
-    const loginRes = await fetch(`${base}/login`, {
+    const loginRes = await fetch(`${PANEL_URL}/login`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ username: ADMIN_USER, password: ADMIN_PASS }),
       redirect: 'follow'
     });
-    
-    // Some panels redirect to /panel/ after login
-    // we need the cookie from the initial login response
     return loginRes.headers.get("set-cookie");
   }
 
@@ -28,121 +23,178 @@ export async function onRequest(context) {
 
   // Handle Authentication Request
   if (request.method === "POST" && path === "auth") {
-      const body = await request.json();
-      if (body.type === 'admin') {
-          if (cfUserRecord) {
-              return new Response(JSON.stringify({ success: true, role: 'admin', msg: 'Cloudflare Zero Trust Authenticated' }));
-          }
-          if (body.username === ADMIN_USER && body.password === ADMIN_PASS) {
-              return new Response(JSON.stringify({ success: true, role: 'admin' }));
-          }
-          return new Response(JSON.stringify({ success: false, msg: 'Invalid admin credentials' }), { status: 401 });
-      } else if (body.type === 'client') {
-          try {
-              const cookie = await getSession();
-              if(!cookie) return new Response(JSON.stringify({ success: false, msg: 'Panel Auth Failed' }), { status: 500 });
-              
-              const base = PANEL_URL.replace(/\/$/, "");
-              const apiRes = await fetch(`${base}/panel/api/inbound/list`, { headers: { "Cookie": cookie } });
-              const data = await apiRes.json();
-              if(data.success) {
-                  let foundClient = null;
-                  data.obj.forEach(inb => {
-                      if(inb.clientStats) {
-                          const client = inb.clientStats.find(c => c.email === body.id);
-                          if(client) foundClient = client;
-                      }
-                  });
-                  if(foundClient) return new Response(JSON.stringify({ success: true, role: 'client', clientData: foundClient }));
-              }
-              return new Response(JSON.stringify({ success: false, msg: 'User email not found' }), { status: 404 });
-          } catch(e) {
-              return new Response(JSON.stringify({ success: false, msg: 'Server connectivity error' }), { status: 500 });
-          }
+    const body = await request.json();
+
+    if (body.type === 'admin') {
+      if (cfUserRecord) {
+        return new Response(JSON.stringify({ success: true, role: 'admin', msg: 'Cloudflare Zero Trust Authenticated' }), {
+          headers: { "Content-Type": "application/json" }
+        });
       }
+      if (body.username === ADMIN_USER && body.password === ADMIN_PASS) {
+        return new Response(JSON.stringify({ success: true, role: 'admin' }), {
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+      return new Response(JSON.stringify({ success: false, msg: 'Invalid admin credentials' }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
+    if (body.type === 'client') {
+      try {
+        const cookie = await getSession();
+        if (!cookie) {
+          return new Response(JSON.stringify({ success: false, msg: 'Panel Auth Failed' }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" }
+          });
+        }
+
+        // Correct endpoint: /panel/api/inbounds/list
+        const apiRes = await fetch(`${PANEL_URL}/panel/api/inbounds/list`, {
+          headers: { "Cookie": cookie }
+        });
+        const data = await apiRes.json();
+
+        if (data && data.success && Array.isArray(data.obj)) {
+          let foundClient = null;
+          data.obj.forEach(inb => {
+            if (inb.clientStats) {
+              const client = inb.clientStats.find(c => c.email === body.id);
+              if (client) foundClient = client;
+            }
+          });
+
+          if (foundClient) {
+            return new Response(JSON.stringify({ success: true, role: 'client', clientData: foundClient }), {
+              headers: { "Content-Type": "application/json" }
+            });
+          }
+        }
+
+        return new Response(JSON.stringify({ success: false, msg: 'User email not found' }), {
+          status: 404,
+          headers: { "Content-Type": "application/json" }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ success: false, msg: 'Server connectivity error' }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+    }
   }
 
-  // Handle Settings (Connection Test & Sync)
+  // Settings endpoint (Cloudflare Pages: env-var based, not writable)
   if (path === "settings") {
-      if (request.method === "GET") {
-          return new Response(JSON.stringify({ panelUrl: PANEL_URL, username: ADMIN_USER, password: ADMIN_PASS }));
-      }
-      if (request.method === "POST") {
-          try {
-              const body = await request.json();
-              const base = body.panelUrl.replace(/\/$/, "");
-              const testRes = await fetch(`${base}/login`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                  body: new URLSearchParams({ username: body.username, password: body.password }),
-                  redirect: 'follow'
-              });
-              if (testRes.headers.get("set-cookie")) {
-                  return new Response(JSON.stringify({ success: true, msg: "Connection Test OK! Note: Settings must be saved in Cloudflare Dashboard Variables for persistence." }));
-              }
-              return new Response(JSON.stringify({ success: false, msg: "Login Failed" }));
-          } catch(e) {
-              return new Response(JSON.stringify({ success: false, msg: e.message }));
-          }
-      }
+    if (request.method === "GET") {
+      return new Response(JSON.stringify({
+        panelUrl: PANEL_URL,
+        username: ADMIN_USER,
+        password: ""
+      }), { headers: { "Content-Type": "application/json" } });
+    }
+    if (request.method === "POST") {
+      return new Response(JSON.stringify({
+        success: false,
+        msg: "Read-only on Cloudflare Pages. Set PANEL_URL / PANEL_USERNAME / PANEL_PASSWORD in Pages environment variables."
+      }), { status: 400, headers: { "Content-Type": "application/json" } });
+    }
   }
 
   // Require Admin Auth for other requests
   const authHeader = request.headers.get('Authorization');
-  const isZeroTrustAdmin = !!request.headers.get('Cf-Access-Authenticated-User-Email');
-
-  // Paths that MUST have admin auth (Zero Trust or Bearer Password)
-  const adminOnlyPaths = ["status", "inbounds", "history", "action"];
-  
-  if (adminOnlyPaths.includes(path) && authHeader !== `Bearer ${ADMIN_PASS}` && !isZeroTrustAdmin) {
-      return new Response(JSON.stringify({ success: false, msg: 'Unauthorized' }), { status: 401 });
+  const isZeroTrustAdmin = !!cfUserRecord;
+  if (authHeader !== `Bearer ${ADMIN_PASS}` && !isZeroTrustAdmin) {
+    return new Response(JSON.stringify({ success: false, msg: 'Unauthorized' }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" }
+    });
   }
 
-  // Admin Routes
+  // Admin routes
   try {
-    const base = PANEL_URL.replace(/\/$/, "");
     const cookie = await getSession();
-    if (!cookie) return new Response(JSON.stringify({ success: false, msg: "Panel Auth Failed" }), { status: 401 });
+    if (!cookie) {
+      return new Response(JSON.stringify({ success: false, msg: "Panel Auth Failed" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
+    const fetchInbounds = async () => {
+      const apiRes = await fetch(`${PANEL_URL}/panel/api/inbounds/list`, {
+        method: "GET",
+        headers: {
+          "Cookie": cookie,
+          "Accept": "application/json",
+          "Referer": `${PANEL_URL}/`
+        }
+      });
+      return await apiRes.json();
+    };
+
+    if (path === "system-history") {
+      const points = Array.from({ length: 10 }, (_, i) => ({
+        time: `${i}:00`,
+        cpu: 0,
+        ram: 0
+      }));
+      return new Response(JSON.stringify({ success: true, obj: points }), {
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
+    if (path === "clients") {
+      const data = await fetchInbounds();
+      const clients = [];
+      if (data && data.obj) {
+        data.obj.forEach(inb => {
+          if (inb.clientStats) {
+            inb.clientStats.forEach(c => clients.push({ ...c, inboundId: inb.id }));
+          }
+        });
+      }
+      return new Response(JSON.stringify({ success: true, obj: clients }), {
+        headers: { "Content-Type": "application/json" }
+      });
+    }
 
     let targetUrl = "";
-    if (path === "status") targetUrl = `${base}/panel/api/server/status`;
-    else if (path === "inbounds") targetUrl = `${base}/panel/api/inbound/list`;
-    else if (path === "clients") targetUrl = `${base}/panel/api/inbound/clientStatsAll`;
+    if (path === "status") targetUrl = `${PANEL_URL}/panel/api/server/status`;
+    else if (path === "inbounds") targetUrl = `${PANEL_URL}/panel/api/inbounds/list`;
     else if (path === "history") {
-        return new Response(JSON.stringify({
-            success: true,
-            obj: { dates: ['M', 'T', 'W', 'T', 'F', 'S', 'S'], up: [1, 2, 3, 2, 4, 5, 8], down: [10, 15, 12, 18, 20, 25, 30] }
-        }));
+      return new Response(JSON.stringify({
+        success: true,
+        obj: { dates: ['M', 'T', 'W', 'T', 'F', 'S', 'S'], up: [1, 2, 3, 2, 4, 5, 8], down: [10, 15, 12, 18, 20, 25, 30] }
+      }), { headers: { "Content-Type": "application/json" } });
     } else {
-        return new Response(JSON.stringify({ success: false, msg: "Endpoint not found" }));
+      return new Response(JSON.stringify({ success: false, msg: "Endpoint not found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" }
+      });
     }
 
-    const apiRes = await fetch(targetUrl, { 
-        method: "GET", 
-        headers: { 
-            "Cookie": cookie,
-            "Accept": "application/json",
-            "Referer": `${base}/`
-        } 
+    const apiRes = await fetch(targetUrl, {
+      method: "GET",
+      headers: {
+        "Cookie": cookie,
+        "Accept": "application/json",
+        "Referer": `${PANEL_URL}/`
+      }
     });
-    
-    let data;
-    try {
-        data = await apiRes.json();
-    } catch(e) {
-        if (path === "clients") {
-            const fallbackRes = await fetch(`${base}/panel/api/inbound/list`, { headers: { "Cookie": cookie, "Referer": `${base}/` } });
-            data = await fallbackRes.json();
-        } else {
-            throw new Error("Invalid JSON response from panel");
-        }
-    }
+
+    const data = await apiRes.json();
 
     return new Response(JSON.stringify({ success: true, obj: data.obj || data }), {
-        headers: { "Content-Type": "application/json" }
+      headers: { "Content-Type": "application/json" }
     });
-
   } catch (err) {
-    return new Response(JSON.stringify({ success: false, error: err.message }), { status: 500 });
+    return new Response(JSON.stringify({ success: false, error: err.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" }
+    });
   }
 }
