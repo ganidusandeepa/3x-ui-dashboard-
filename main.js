@@ -56,6 +56,7 @@ function doLogout() {
     loopInterval = null;
     currentRole = null;
     adminToken = null;
+    try { sessionStorage.removeItem('xui_admin_token'); } catch(e) {}
 
     // Reset UI
     document.getElementById('login-overlay').style.display = 'flex';
@@ -121,6 +122,8 @@ document.getElementById('btn-login-admin').addEventListener('click', async () =>
         if(data.success) {
             currentRole = 'admin';
             adminToken = pw; // simplistic token
+            // Persist only for this browser tab/session (clears on tab close)
+            try { sessionStorage.setItem('xui_admin_token', pw); } catch(e) {}
             await startAdminApp();
         } else {
             showToast("Invalid Admin Login", "error");
@@ -447,11 +450,39 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (cachedAdminUser) document.getElementById('login-username').value = cachedAdminUser;
 
         if (lastTab === 'admin') {
-            // trigger admin tab UI
             document.getElementById('tab-login-admin').click();
         } else {
             document.getElementById('tab-login-client').click();
         }
+
+        // Auto restore session
+        const tok = sessionStorage.getItem('xui_admin_token');
+        if (tok) {
+            // verify token by calling status
+            fetch('/api/status', { headers: { Authorization: `Bearer ${tok}` } })
+              .then(r => r.json())
+              .then(j => {
+                  if (j && j.success) {
+                      currentRole = 'admin';
+                      adminToken = tok;
+                      startAdminApp();
+                  }
+              })
+              .catch(() => {});
+        } else if (lastTab === 'client' && cachedClient) {
+            // auto run client check again
+            fetch('/api/auth', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'client', id: cachedClient })
+            }).then(r => r.json()).then(d => {
+                if (d && d.success) {
+                    currentRole = 'client';
+                    startClientApp(d.clientData);
+                }
+            }).catch(()=>{});
+        }
+
     } catch(e) {}
 
     // Hide UI elements until login
