@@ -144,7 +144,7 @@ document.getElementById('btn-login-client').addEventListener('click', async () =
     } catch(e) {}
 
     try {
-        const res = await fetch('/api/auth', {
+        const res = await fetch('/public/auth', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ type: 'client', id })
         });
@@ -471,7 +471,7 @@ document.addEventListener("DOMContentLoaded", async () => {
               .catch(() => {});
         } else if (lastTab === 'client' && cachedClient) {
             // auto run client check again
-            fetch('/api/auth', {
+            fetch('/public/auth', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ type: 'client', id: cachedClient })
