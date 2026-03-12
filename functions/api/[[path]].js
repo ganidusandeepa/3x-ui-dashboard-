@@ -42,7 +42,8 @@ export async function onRequest(context) {
               const cookie = await getSession();
               if(!cookie) return new Response(JSON.stringify({ success: false, msg: 'Panel Auth Failed' }), { status: 500 });
               
-              const apiRes = await fetch(`${PANEL_URL}/panel/api/inbound/list`, { headers: { "Cookie": cookie } });
+              const base = PANEL_URL.replace(/\/$/, "");
+              const apiRes = await fetch(`${base}/panel/api/inbound/list`, { headers: { "Cookie": cookie } });
               const data = await apiRes.json();
               if(data.success) {
                   let foundClient = null;
@@ -57,6 +58,31 @@ export async function onRequest(context) {
               return new Response(JSON.stringify({ success: false, msg: 'User email not found' }), { status: 404 });
           } catch(e) {
               return new Response(JSON.stringify({ success: false, msg: 'Server connectivity error' }), { status: 500 });
+          }
+      }
+  }
+
+  // Handle Settings (Connection Test & Sync)
+  if (path === "settings") {
+      if (request.method === "GET") {
+          return new Response(JSON.stringify({ panelUrl: PANEL_URL, username: ADMIN_USER, password: ADMIN_PASS }));
+      }
+      if (request.method === "POST") {
+          try {
+              const body = await request.json();
+              const base = body.panelUrl.replace(/\/$/, "");
+              const testRes = await fetch(`${base}/login`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                  body: new URLSearchParams({ username: body.username, password: body.password }),
+                  redirect: 'follow'
+              });
+              if (testRes.headers.get("set-cookie")) {
+                  return new Response(JSON.stringify({ success: true, msg: "Connection Test OK! Note: Settings must be saved in Cloudflare Dashboard Variables for persistence." }));
+              }
+              return new Response(JSON.stringify({ success: false, msg: "Login Failed" }));
+          } catch(e) {
+              return new Response(JSON.stringify({ success: false, msg: e.message }));
           }
       }
   }

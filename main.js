@@ -306,12 +306,19 @@ document.getElementById("btn-save-settings").addEventListener("click", async () 
         const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         const data = await res.json();
         if(data.success) {
-            btn.textContent = "Connected!"; showToast("Connected to panel!"); loadAdminData();
+            btn.textContent = "Test Successful!";
+            showToast(data.msg || "Successfully connected to panel!");
+            loadAdminData();
         } else {
-            btn.textContent = "Failed"; showToast("Failed to connect", "error");
+            btn.textContent = "Test Failed";
+            showToast(data.msg || "Failed to connect", "error");
         }
-    } catch(e) { showToast("Error", "error"); }
-    setTimeout(() => { btn.textContent = "Connect Real Panel"; }, 2000);
+    } catch(e) {
+        btn.textContent = "Error";
+        showToast("Error testing settings", "error");
+    }
+    
+    setTimeout(() => { btn.textContent = "Connect Real Panel"; }, 4000);
 });
 
 // Setup Initial State
