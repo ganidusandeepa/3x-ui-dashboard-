@@ -182,7 +182,18 @@ export async function onRequest(context) {
 
   // Require Admin Auth for other requests
   const authHeader = request.headers.get('Authorization');
-  const isZeroTrustAdmin = !!cfUserRecord;
+
+  // Cloudflare Access signals (UI changes across versions):
+  // - Cf-Access-Authenticated-User-Email (when identity headers are injected)
+  // - Cf-Access-Jwt-Assertion (JWT assertion header)
+  // - CF_Authorization cookie (browser cookie)
+  const hasEmailHeader = !!cfUserRecord;
+  const hasJwtAssertion = !!request.headers.get('Cf-Access-Jwt-Assertion');
+  const cookieHdr = request.headers.get('Cookie') || '';
+  const hasCfAuthCookie = /(?:^|;\s*)CF_Authorization=/.test(cookieHdr);
+
+  const isZeroTrustAdmin = hasEmailHeader || hasJwtAssertion || hasCfAuthCookie;
+
   if (authHeader !== `Bearer ${ADMIN_PASS}` && !isZeroTrustAdmin) {
     return new Response(JSON.stringify({ success: false, msg: 'Unauthorized' }), {
       status: 401,
