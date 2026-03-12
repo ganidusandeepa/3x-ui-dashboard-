@@ -315,9 +315,23 @@ document.getElementById("btn-save-settings").addEventListener("click", async () 
 });
 
 // Setup Initial State
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
     // Hide UI elements until login
     document.querySelector('.desktop-nav').style.display = 'none';
     document.querySelector('.mobile-nav').style.display = 'none';
     document.getElementById('main-fab').style.display = 'none';
+    
+    // Auto-check for Zero Trust
+    try {
+        const res = await fetch('/api/auth', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'admin', username: '', password: '' })
+        });
+        const data = await res.json();
+        if(data.success && data.msg === 'Cloudflare Zero Trust Authenticated') {
+            currentRole = 'admin';
+            adminToken = 'zero-trust-secured'; 
+            startAdminApp();
+        }
+    } catch(e) {}
 });

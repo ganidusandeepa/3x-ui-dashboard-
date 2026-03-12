@@ -17,10 +17,15 @@ export async function onRequest(context) {
     return loginRes.headers.get("set-cookie");
   }
 
+  const cfUserRecord = request.headers.get('Cf-Access-Authenticated-User-Email');
+
   // Handle Authentication Request
   if (request.method === "POST" && path === "auth") {
       const body = await request.json();
       if (body.type === 'admin') {
+          if (cfUserRecord) {
+              return new Response(JSON.stringify({ success: true, role: 'admin', msg: 'Cloudflare Zero Trust Authenticated' }));
+          }
           if (body.username === ADMIN_USER && body.password === ADMIN_PASS) {
               return new Response(JSON.stringify({ success: true, role: 'admin' }));
           }
@@ -51,7 +56,8 @@ export async function onRequest(context) {
 
   // Require Admin Auth for other requests
   const authHeader = request.headers.get('Authorization');
-  if (path !== "settings" && authHeader !== `Bearer ${ADMIN_PASS}`) {
+  const isZeroTrustAdmin = !!request.headers.get('Cf-Access-Authenticated-User-Email');
+  if (path !== "settings" && authHeader !== `Bearer ${ADMIN_PASS}` && !isZeroTrustAdmin) {
       return new Response(JSON.stringify({ success: false, msg: 'Unauthorized' }), { status: 401 });
   }
 
