@@ -242,7 +242,9 @@ async function loadAdminData() {
 
         if (stat.success) {
             const s = stat.obj;
-            const down = toGB(s.netIO.down); const up = toGB(s.netIO.up);
+            // Prefer all-time traffic counters if available; netIO is often instantaneous IO and can be tiny.
+            const down = toGB((s.netTraffic && (s.netTraffic.down ?? s.netTraffic.recv)) ?? s.netIO?.down);
+            const up = toGB((s.netTraffic && (s.netTraffic.up ?? s.netTraffic.sent)) ?? s.netIO?.up);
             const total = (parseFloat(down) + parseFloat(up)).toFixed(2);
             gsap.to('#total-traffic', { innerHTML: total, duration: 1.5, snap: { innerHTML: 0.01 } });
             gsap.to('#dl-traffic', { innerHTML: down, duration: 1.5, snap: { innerHTML: 0.01 } });
