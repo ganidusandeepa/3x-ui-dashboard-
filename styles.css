@@ -99,7 +99,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 @keyframes modalIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
 .input-group { margin-bottom: 20px; }
 .input-group label { display: block; font-size: 0.8rem; color: var(--text-dim); margin-bottom: 8px; font-weight: 600; }
-.input-group input, .input-group select { width: 100%; background: #1a1a1a; border: 1px solid var(--border); padding: 12px; border-radius: 12px; color: #fff; font-family: var(--font); }
+.input-group input, .input-group select, .input-group textarea { width: 100%; background: #1a1a1a; border: 1px solid var(--border); padding: 12px; border-radius: 12px; color: #fff; font-family: var(--font); }
 .modal-footer { display: flex; gap: 10px; margin-top: 20px; }
 .accent-btn { flex: 2; background: var(--accent); border: none; padding: 15px; border-radius: 12px; color: #000; font-weight: 800; cursor: pointer; }
 .close-btn { flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: #fff; border-radius: 12px; cursor: pointer; }

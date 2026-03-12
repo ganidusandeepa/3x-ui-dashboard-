@@ -223,9 +223,9 @@
                     </div>
                     <div class="card info-card">
                         <h3>IP Information</h3>
-                        <div class="info-row"><span>Public IP:</span> <strong id="node-ip">141.148.193.192</strong></div>
-                        <div class="info-row"><span>Region:</span> <strong>EU-Central</strong></div>
-                        <div class="info-row"><span>Ping:</span> <strong style="color:var(--green)">14ms</strong></div>
+                        <div class="info-row"><span>Public IP:</span> <strong id="node-ip">-</strong></div>
+                        <div class="info-row"><span>Region:</span> <strong id="node-region">-</strong></div>
+                        <div class="info-row"><span>Ping:</span> <strong id="node-ping" style="color:var(--green)">-</strong></div>
                         
                         <h3 style="margin-top:20px; padding-top:20px; border-top:1px solid var(--border);"><i class="fa-solid fa-link"></i> Server Config</h3>
                         <p class="subtitle" style="margin-bottom:15px; font-size:0.8rem;">Change backend 3x-ui connection url</p>
@@ -257,29 +257,45 @@
         </nav>
     </div>
 
-    <!-- Modal Mock -->
+    <!-- Admin API Tool Modal -->
     <div id="modal-overlay" class="modal-overlay">
         <div class="modal-card">
-            <h3>Add New Node</h3>
+            <h3><i class="fa-solid fa-wrench"></i> Admin API Tool</h3>
+            <p class="subtitle" style="margin: 6px 0 14px; font-size:0.85rem; color:var(--text-dim);">
+                Send requests to <code>/panel/api/*</code> via the dashboard proxy <code>/api/xui/*</code>.
+                This supports all options in the official API documentation.
+            </p>
+
             <div class="input-group">
-                <label>Remark</label>
-                <input type="text" placeholder="e.g., US-VLESS">
+                <label>Endpoint (after /panel/api/)</label>
+                <input type="text" id="api-path" placeholder="e.g., inbounds/addClient or server/restartXrayService" value="inbounds/list">
             </div>
+
             <div class="input-group">
-                <label>Protocol</label>
-                <select>
-                    <option>VLESS</option>
-                    <option>VMess</option>
-                    <option>Trojan</option>
+                <label>Method</label>
+                <select id="api-method">
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
                 </select>
             </div>
+
+            <div class="input-group">
+                <label>JSON Body (for POST)</label>
+                <textarea id="api-body" rows="6" style="width:100%; background:#1a1a1a; border:1px solid var(--border); padding:12px; border-radius:12px; color:#fff; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;" placeholder='{"id":2, "email":"poorna"}'></textarea>
+            </div>
+
             <div class="modal-footer">
-                <button class="accent-btn" onclick="closeModal()">Create</button>
+                <button class="accent-btn" id="btn-api-send">Send</button>
                 <button class="close-btn" onclick="closeModal()">Close</button>
+            </div>
+
+            <div class="input-group" style="margin-top:14px;">
+                <label>Response</label>
+                <textarea id="api-response" rows="7" readonly style="width:100%; background:#0f0f0f; border:1px solid var(--border); padding:12px; border-radius:12px; color:#d6d6d6; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;"></textarea>
             </div>
         </div>
     </div>
 
-    <script src="main.js?v=17" data-cfasync="false"></script>
+    <script src="main.js?v=18" data-cfasync="false"></script>
 </body>
 </html>

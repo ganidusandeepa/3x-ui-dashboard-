@@ -302,6 +302,47 @@ window.triggerAction = (action) => {
 function closeModal() { document.getElementById('modal-overlay').classList.remove('active'); }
 document.getElementById('main-fab').addEventListener('click', () => { document.getElementById('modal-overlay').classList.add('active'); });
 
+// Admin API Tool
+try {
+    document.getElementById('btn-api-send').addEventListener('click', async () => {
+        const path = document.getElementById('api-path').value.trim().replace(/^\/+/, '');
+        const method = document.getElementById('api-method').value;
+        const bodyText = document.getElementById('api-body').value.trim();
+        const respBox = document.getElementById('api-response');
+        respBox.value = 'Loading...';
+
+        const url = `/api/xui/${path}`;
+        const opts = { method, headers: getAdminHeaders() };
+
+        if (method === 'POST') {
+            opts.headers['Content-Type'] = 'application/json';
+            if (bodyText) {
+                try { JSON.parse(bodyText); } catch(e) {
+                    respBox.value = 'Invalid JSON body';
+                    return;
+                }
+                opts.body = bodyText;
+            } else {
+                opts.body = '{}';
+            }
+        }
+
+        try {
+            const res = await fetch(url, opts);
+            const txt = await res.text();
+            // pretty print JSON if possible
+            try {
+                const j = JSON.parse(txt);
+                respBox.value = JSON.stringify(j, null, 2);
+            } catch(e) {
+                respBox.value = txt;
+            }
+        } catch (e) {
+            respBox.value = String(e);
+        }
+    });
+} catch(e) {}
+
 function switchTab(tabId) {
     document.querySelectorAll('.nav-btn, .m-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
     document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === `tab-${tabId}`));
@@ -360,6 +401,14 @@ async function loadAdminData() {
                 ? Math.max(0, Math.min(100, (memCur / memTot) * 100))
                 : 0;
             document.getElementById('ram-percent').textContent = `${ramPct.toFixed(1)}%`;
+
+            // IP info (from server status)
+            try {
+                document.getElementById('node-ip').textContent = s.publicIP?.ipv4 || s.publicIP?.ipv6 || '-';
+                document.getElementById('node-region').textContent = s.publicIP?.country || '-';
+                document.getElementById('node-ping').textContent = '-';
+            } catch(e) {}
+
             donutChart.data.datasets[0].data = [down, up]; donutChart.update();
         }
 
