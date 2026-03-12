@@ -51,6 +51,29 @@ let currentRole = null;
 let adminToken = null;
 let loopInterval = null;
 
+function doLogout() {
+    try { clearInterval(loopInterval); } catch(e) {}
+    loopInterval = null;
+    currentRole = null;
+    adminToken = null;
+
+    // Reset UI
+    document.getElementById('login-overlay').style.display = 'flex';
+    document.querySelector('.desktop-nav').style.display = 'none';
+    document.querySelector('.mobile-nav').style.display = 'none';
+    document.getElementById('main-fab').style.display = 'none';
+
+    // restore default tab (client) UI
+    try { document.getElementById('tab-login-client').click(); } catch(e) {}
+}
+
+// Logout button (header)
+document.addEventListener('click', (e) => {
+    if (e.target && (e.target.id === 'btn-logout' || e.target.closest('#btn-logout'))) {
+        doLogout();
+    }
+});
+
 function showToast(msg, type="info") {
     const container = document.getElementById('toast-container');
     const toast = document.createElement('div');
@@ -137,6 +160,8 @@ document.getElementById('btn-login-client').addEventListener('click', async () =
 // Activate specific Dashboard
 async function startAdminApp() {
     document.getElementById('login-overlay').style.display = 'none';
+    // show logout
+    try { document.getElementById('btn-logout').style.display = 'inline-flex'; } catch(e) {}
     document.getElementById('tab-user-view').style.display = 'none';
 
     document.querySelector('.desktop-nav').style.display = 'flex';
@@ -159,6 +184,8 @@ async function startAdminApp() {
 
 function startClientApp(client) {
     document.getElementById('login-overlay').style.display = 'none';
+    // show logout
+    try { document.getElementById('btn-logout').style.display = 'inline-flex'; } catch(e) {}
     // Hide Admin Navigation completely
     document.querySelector('.desktop-nav').style.visibility = 'hidden';
     document.querySelector('.mobile-nav').style.display = 'none';

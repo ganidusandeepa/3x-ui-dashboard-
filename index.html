@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>3x-ui Admin Dashboard</title>
-    <link rel="stylesheet" href="styles.css?v=8">
+    <link rel="stylesheet" href="styles.css?v=9">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" data-cfasync="false"></script>
@@ -63,9 +63,14 @@
                 <button class="nav-btn" data-tab="clients"><i class="fa-solid fa-users"></i> Clients</button>
                 <button class="nav-btn" data-tab="system"><i class="fa-solid fa-microchip"></i> System</button>
             </nav>
-            <div class="user-status">
-                <div class="status-dot online"></div>
-                <span>Server: <strong style="color:var(--accent-color)">OK</strong></span>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div class="user-status">
+                    <div class="status-dot online"></div>
+                    <span>Server: <strong style="color:var(--accent-color)">OK</strong></span>
+                </div>
+                <button id="btn-logout" class="nav-btn" style="padding:10px 12px; display:flex; align-items:center; gap:8px;">
+                    <i class="fa-solid fa-right-from-bracket"></i> Logout
+                </button>
             </div>
         </header>
         
@@ -274,6 +279,6 @@
         </div>
     </div>
 
-    <script src="main.js?v=12" data-cfasync="false"></script>
+    <script src="main.js?v=13" data-cfasync="false"></script>
 </body>
 </html>
