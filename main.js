@@ -42,7 +42,11 @@ try {
 } catch(e) { console.warn("WebGL BG Init Failed"); }
 
 // --- Global Utils ---
-const toGB = (bytes) => ((bytes || 0) / (1024 ** 3)).toFixed(2);
+const toGB = (bytes) => {
+    const n = typeof bytes === 'string' ? Number(bytes) : Number(bytes ?? 0);
+    const safe = Number.isFinite(n) ? n : 0;
+    return (safe / (1024 ** 3)).toFixed(2);
+};
 let currentRole = null;
 let adminToken = null;
 let loopInterval = null;

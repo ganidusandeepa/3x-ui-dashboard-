@@ -15,12 +15,18 @@
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-body { font-family: var(--font); background: var(--bg-color); color: var(--text); overflow-x: hidden; line-height: 1.5; padding-bottom: env(safe-area-inset-bottom); }
+html, body { width: 100%; overflow-x: hidden; }
+body { font-family: var(--font); background: var(--bg-color); color: var(--text); line-height: 1.5; padding-bottom: env(safe-area-inset-bottom); }
 
 /* 3D BG Canvas */
-#canvas-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
+#canvas-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; overflow: hidden; }
+#canvas-container canvas { display: block; width: 100% !important; height: 100% !important; }
 
 .dashboard-wrapper { width: 100%; max-width: 1200px; margin: 0 auto; padding: 20px; padding-bottom: calc(var(--nav-height) + 30px); }
+
+/* prevent grid items from forcing horizontal overflow */
+.card, .item-card { min-width: 0; }
+.overview-grid, .charts-row, .system-grid, .inbound-grid, .client-container { min-width: 0; }
 
 /* Header Styling */
 header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
@@ -103,12 +109,18 @@ header { display: flex; justify-content: space-between; align-items: center; mar
     .mobile-nav { display: flex; }
     .logo { font-size: 1.5rem; }
 
+    /* Full-width container on mobile/tablet */
+    .dashboard-wrapper { max-width: none; width: 100%; padding: 12px; padding-bottom: calc(var(--nav-height) + 30px + env(safe-area-inset-bottom)); }
+
     /* Force single-column layout to remove right-side empty space */
     .overview-grid { grid-template-columns: 1fr; gap: 14px; }
-    .data-card-hero { grid-column: span 1; flex-direction: column; text-align: center; gap: 16px; padding: 20px; }
+    .charts-row { display: block; }
 
+    /* Prevent other grids from overflowing horizontally */
+    .inbound-grid, .client-container, .system-grid { grid-template-columns: 1fr; }
+
+    .data-card-hero { grid-column: span 1; flex-direction: column; text-align: center; gap: 16px; padding: 20px; }
     .traffic-split { justify-content: center; gap: 18px; }
-    .dashboard-wrapper { padding: 12px; padding-bottom: calc(var(--nav-height) + 30px + env(safe-area-inset-bottom)); }
     header { margin-bottom: 18px; }
     .main-value { font-size: 2.0rem; }
     .donut-wrapper { width: 120px; height: 120px; }
