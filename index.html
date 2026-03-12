@@ -219,9 +219,30 @@
                         <button class="sys-btn" id="btn-add-client"><i class="fa-solid fa-plus"></i> Create</button>
                         <button class="sys-btn" id="btn-add-client-refresh"><i class="fa-solid fa-rotate"></i> Refresh Inbounds</button>
                     </div>
+
+                    <h3 style="margin-top:18px;"><i class="fa-solid fa-screwdriver-wrench"></i> Inbound Tools</h3>
+                    <div class="sys-actions" style="grid-template-columns:1fr 1fr;">
+                        <button class="sys-btn" id="btn-inb-onlines"><i class="fa-solid fa-signal"></i> Onlines</button>
+                        <button class="sys-btn" id="btn-inb-lastonline"><i class="fa-solid fa-clock"></i> Last Online</button>
+                        <button class="sys-btn warning" id="btn-inb-reset"><i class="fa-solid fa-eraser"></i> Reset Inbound</button>
+                        <button class="sys-btn danger" id="btn-all-reset"><i class="fa-solid fa-trash-can"></i> Reset ALL</button>
+                    </div>
+
+                    <h3 style="margin-top:18px;"><i class="fa-solid fa-user-gear"></i> Client Tools</h3>
+                    <div class="input-group">
+                        <label>Client Email/ID</label>
+                        <input id="tool-email" type="text" placeholder="e.g., poorna">
+                    </div>
+                    <div class="sys-actions" style="grid-template-columns:1fr 1fr;">
+                        <button class="sys-btn warning" id="btn-client-reset"><i class="fa-solid fa-rotate"></i> Reset Traffic</button>
+                        <button class="sys-btn danger" id="btn-client-del"><i class="fa-solid fa-user-xmark"></i> Delete</button>
+                        <button class="sys-btn" id="btn-client-ips"><i class="fa-solid fa-location-dot"></i> IPs</button>
+                        <button class="sys-btn" id="btn-client-ips-clear"><i class="fa-solid fa-broom"></i> Clear IPs</button>
+                    </div>
+
                     <div class="input-group" style="margin-top:12px;">
                         <label>Result</label>
-                        <textarea id="addc-result" rows="7" readonly placeholder="VLESS/sub links will appear here..."></textarea>
+                        <textarea id="addc-result" rows="10" readonly placeholder="Results will appear here..."></textarea>
                     </div>
                 </div>
 
@@ -346,6 +367,6 @@
         </div>
     </div>
 
-    <script src="main.js?v=20" data-cfasync="false"></script>
+    <script src="main.js?v=21" data-cfasync="false"></script>
 </body>
 </html>

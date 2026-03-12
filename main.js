@@ -688,8 +688,84 @@ async function addClientVless() {
 }
 
 try {
+    const out = () => document.getElementById('addc-result');
+    const getInboundId = () => Number(document.getElementById('addc-inbound')?.value);
+    const getEmail = () => (document.getElementById('tool-email')?.value || '').trim();
+
     document.getElementById('btn-add-client')?.addEventListener('click', addClientVless);
     document.getElementById('btn-add-client-refresh')?.addEventListener('click', loadAdminData);
+
+    // Inbound tools
+    document.getElementById('btn-inb-onlines')?.addEventListener('click', async () => {
+        out().value = 'Loading onlines...';
+        const r = await callXui('inbounds/onlines', 'POST', {});
+        out().value = JSON.stringify(r, null, 2);
+    });
+
+    document.getElementById('btn-inb-lastonline')?.addEventListener('click', async () => {
+        out().value = 'Loading last online...';
+        const r = await callXui('inbounds/lastOnline', 'POST', {});
+        out().value = JSON.stringify(r, null, 2);
+    });
+
+    document.getElementById('btn-inb-reset')?.addEventListener('click', async () => {
+        const id = getInboundId();
+        if (!id) return;
+        if (!confirm(`Reset ALL client traffic for inbound ${id}?`)) return;
+        out().value = 'Resetting inbound traffics...';
+        const r = await callXui(`inbounds/resetAllClientTraffics/${id}`, 'POST', {});
+        out().value = JSON.stringify(r, null, 2);
+        loadAdminData();
+    });
+
+    document.getElementById('btn-all-reset')?.addEventListener('click', async () => {
+        if (!confirm('Reset ALL traffics for ALL inbounds?')) return;
+        out().value = 'Resetting ALL traffics...';
+        const r = await callXui('inbounds/resetAllTraffics', 'POST', {});
+        out().value = JSON.stringify(r, null, 2);
+        loadAdminData();
+    });
+
+    // Client tools
+    document.getElementById('btn-client-reset')?.addEventListener('click', async () => {
+        const inboundId = getInboundId();
+        const email = getEmail();
+        if (!inboundId || !email) { showToast('Select inbound + enter email', 'error'); return; }
+        if (!confirm(`Reset traffic for ${email} in inbound ${inboundId}?`)) return;
+        out().value = 'Resetting client traffic...';
+        const r = await callXui(`inbounds/${inboundId}/resetClientTraffic/${encodeURIComponent(email)}`, 'POST', {});
+        out().value = JSON.stringify(r, null, 2);
+        loadAdminData();
+    });
+
+    document.getElementById('btn-client-del')?.addEventListener('click', async () => {
+        const inboundId = getInboundId();
+        const email = getEmail();
+        if (!inboundId || !email) { showToast('Select inbound + enter email', 'error'); return; }
+        if (!confirm(`DELETE client ${email} from inbound ${inboundId}?`)) return;
+        out().value = 'Deleting client...';
+        const r = await callXui(`inbounds/${inboundId}/delClientByEmail/${encodeURIComponent(email)}`, 'POST', {});
+        out().value = JSON.stringify(r, null, 2);
+        loadAdminData();
+    });
+
+    document.getElementById('btn-client-ips')?.addEventListener('click', async () => {
+        const email = getEmail();
+        if (!email) { showToast('Enter email', 'error'); return; }
+        out().value = 'Fetching client IPs...';
+        const r = await callXui(`inbounds/clientIps/${encodeURIComponent(email)}`, 'POST', {});
+        out().value = JSON.stringify(r, null, 2);
+    });
+
+    document.getElementById('btn-client-ips-clear')?.addEventListener('click', async () => {
+        const email = getEmail();
+        if (!email) { showToast('Enter email', 'error'); return; }
+        if (!confirm(`Clear IPs for ${email}?`)) return;
+        out().value = 'Clearing client IPs...';
+        const r = await callXui(`inbounds/clearClientIps/${encodeURIComponent(email)}`, 'POST', {});
+        out().value = JSON.stringify(r, null, 2);
+    });
+
 } catch(e) {}
 
 // Setup Initial State
