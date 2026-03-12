@@ -308,31 +308,15 @@ async function loadAdminData() {
 }
 
 // Settings Saving
+// Cloudflare Pages backend is env-var based; settings POST is read-only.
+// UX: make it clear and disable to avoid confusing users.
 document.getElementById("btn-save-settings").addEventListener("click", async () => {
     const btn = document.getElementById("btn-save-settings");
-    btn.textContent = "Connecting...";
-    try {
-        const payload = {
-            panelUrl: document.getElementById("setting-url").value,
-            username: document.getElementById("setting-user").value,
-            password: document.getElementById("setting-pass").value
-        };
-        const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-        const data = await res.json();
-        if(data.success) {
-            btn.textContent = "Test Successful!";
-            showToast(data.msg || "Successfully connected to panel!");
-            loadAdminData();
-        } else {
-            btn.textContent = "Test Failed";
-            showToast(data.msg || "Failed to connect", "error");
-        }
-    } catch(e) {
-        btn.textContent = "Error";
-        showToast("Error testing settings", "error");
-    }
-    
-    setTimeout(() => { btn.textContent = "Connect Real Panel"; }, 4000);
+    showToast("This dashboard is configured via Cloudflare Pages environment variables (PANEL_URL / PANEL_USERNAME / PANEL_PASSWORD).", "error");
+    btn.textContent = "Managed by Cloudflare";
+    btn.disabled = true;
+    btn.style.opacity = '0.7';
+    btn.style.cursor = 'not-allowed';
 });
 
 // Setup Initial State

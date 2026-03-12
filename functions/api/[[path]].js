@@ -124,6 +124,42 @@ export async function onRequest(context) {
       });
     }
 
+    // Generic proxy for ALL endpoints from the official API documentation.
+    // Usage: /api/xui/<path>  ->  ${PANEL_URL}/panel/api/<path>
+    // Example: /api/xui/server/status -> /panel/api/server/status
+    if (path.startsWith('xui/')) {
+      const subPath = path.slice(4).replace(/^\/+/, '');
+      const targetUrl = `${PANEL_URL}/panel/api/${subPath}`;
+
+      const headers = {
+        "Cookie": cookie,
+        "Accept": "application/json",
+        "Referer": `${PANEL_URL}/`
+      };
+
+      // Forward Content-Type if present
+      const ct = request.headers.get('Content-Type');
+      if (ct) headers['Content-Type'] = ct;
+
+      let body;
+      if (request.method !== 'GET' && request.method !== 'HEAD') {
+        // If it's JSON, keep it as text to forward cleanly.
+        body = await request.text();
+      }
+
+      const proxied = await fetch(targetUrl, {
+        method: request.method,
+        headers,
+        body
+      });
+
+      const text = await proxied.text();
+      return new Response(text, {
+        status: proxied.status,
+        headers: { "Content-Type": proxied.headers.get('Content-Type') || 'application/json' }
+      });
+    }
+
     const fetchInbounds = async () => {
       const apiRes = await fetch(`${PANEL_URL}/panel/api/inbounds/list`, {
         method: "GET",
