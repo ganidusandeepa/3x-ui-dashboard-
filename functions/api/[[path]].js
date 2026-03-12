@@ -9,11 +9,18 @@ export async function onRequest(context) {
   const path = url.pathname.replace('/api/', '');
 
   async function getSession() {
-    const loginRes = await fetch(`${PANEL_URL}/login`, {
+    // Normalize URL - remove trailing slash
+    const base = PANEL_URL.replace(/\/$/, "");
+    
+    const loginRes = await fetch(`${base}/login`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ username: ADMIN_USER, password: ADMIN_PASS })
+      body: new URLSearchParams({ username: ADMIN_USER, password: ADMIN_PASS }),
+      redirect: 'follow'
     });
+    
+    // Some panels redirect to /panel/ after login
+    // we need the cookie from the initial login response
     return loginRes.headers.get("set-cookie");
   }
 
@@ -67,13 +74,14 @@ export async function onRequest(context) {
 
   // Admin Routes
   try {
+    const base = PANEL_URL.replace(/\/$/, "");
     const cookie = await getSession();
     if (!cookie) return new Response(JSON.stringify({ success: false, msg: "Panel Auth Failed" }), { status: 401 });
 
     let targetUrl = "";
-    if (path === "status") targetUrl = `${PANEL_URL}/panel/api/server/status`;
-    else if (path === "inbounds") targetUrl = `${PANEL_URL}/panel/api/inbound/list`;
-    else if (path === "clients") targetUrl = `${PANEL_URL}/panel/api/inbound/clientStatsAll`; // Try v2 stats first
+    if (path === "status") targetUrl = `${base}/panel/api/server/status`;
+    else if (path === "inbounds") targetUrl = `${base}/panel/api/inbound/list`;
+    else if (path === "clients") targetUrl = `${base}/panel/api/inbound/clientStatsAll`;
     else if (path === "history") {
         return new Response(JSON.stringify({
             success: true,
@@ -87,7 +95,8 @@ export async function onRequest(context) {
         method: "GET", 
         headers: { 
             "Cookie": cookie,
-            "Accept": "application/json"
+            "Accept": "application/json",
+            "Referer": `${base}/`
         } 
     });
     
@@ -95,9 +104,8 @@ export async function onRequest(context) {
     try {
         data = await apiRes.json();
     } catch(e) {
-        // If v2 stats failed, fallback to manual list
         if (path === "clients") {
-            const fallbackRes = await fetch(`${PANEL_URL}/panel/api/inbound/list`, { headers: { "Cookie": cookie } });
+            const fallbackRes = await fetch(`${base}/panel/api/inbound/list`, { headers: { "Cookie": cookie, "Referer": `${base}/` } });
             data = await fallbackRes.json();
         } else {
             throw new Error("Invalid JSON response from panel");
