@@ -10,33 +10,28 @@ A modern, animated, and mobile-responsive dashboard for managing your 3x-ui pane
 - **Real-time Metrics**: Dynamic charts for CPU, RAM, and Traffic.
 - **Proxy Server**: Secure Node.js backend to communicate with your panel.
 
-## Installation
+## ☁️ Cloudflare Deployment (Recommended)
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/3x-ui-dashboard.git
-   cd 3x-ui-dashboard
-   ```
+This dashboard is ready to be hosted on **Cloudflare Pages**.
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+1. **Upload to GitHub**: Push this folder to your GitHub.
+2. **Setup Cloudflare Pages**:
+   - Go to the Cloudflare Dashboard -> Workers & Pages -> Create -> Pages -> Connect to Git.
+   - Select your repository.
+   - **Build Settings**: Leave everything blank (Build command and Build output directory should be empty if your files are in the root).
+3. **Set Environment Variables**:
+   - Inside your Cloudflare Pages project, go to **Settings** -> **Variables and Secrets**.
+   - Add these three variables so the backend can talk to your server:
+     - `PANEL_URL` : (e.g., `http://1.2.3.4:2053`)
+     - `PANEL_USERNAME` : (your admin user)
+     - `PANEL_PASSWORD` : (your admin pass)
+4. **Deploy**: Cloudflare will automatically detect the `functions` folder and use it as your backend!
 
-3. Start the server:
-   ```bash
-   npm start
-   ```
+## 📦 Local Installation (Optional)
+1. Install dependencies: `npm install`
+2. Start: `npm start` (Runs the Node.js preview version)
 
-4. Open your browser at `http://localhost:8000`.
-
-## Configuration
-Go to the **System** tab in the dashboard UI to enter your panel URL, username, and password. This will create a `server-config.json` file locally.
-
-## Deployment
-For hosting, you can use:
-- **VPS**: Run it with `pm2`.
-- **Render / Railway**: These platforms support Node.js backends and are easier to set up than Cloudflare for this specific project.
-
-### Cloudflare Note
-Note that Cloudflare Pages is for **static** sites. Since this dashboard uses a Node.js backend to bypass CORS and proxy API requests, it cannot be hosted directly on Cloudflare Pages without significant modification. We recommend using a Node.js-friendly host like **Render.com**.
+## 🎨 Features
+- **Zero-Latency Monitoring**: Hosted on Cloudflare's Edge.
+- **Mobile Optimized**: Home, Nodes, Users, and System tabs.
+- **GSAP & Three.js**: High-end animations and 3D backgrounds.
