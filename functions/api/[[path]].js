@@ -68,7 +68,39 @@ export async function onRequest(context) {
           });
 
           if (foundClient) {
-            return new Response(JSON.stringify({ success: true, role: 'client', clientData: foundClient }), {
+            // Enrich with online status + IP list (no admin token needed on client check)
+            let isOnline = null;
+            let ips = [];
+
+            try {
+              const onRes = await fetch(`${PANEL_URL}/panel/api/inbounds/onlines`, {
+                method: 'POST',
+                headers: { "Cookie": cookie, "Content-Type": "application/json" },
+                body: JSON.stringify({})
+              });
+              const onData = await onRes.json();
+              if (onData && onData.success && Array.isArray(onData.obj)) {
+                isOnline = onData.obj.includes(foundClient.email);
+              }
+            } catch (e) {}
+
+            try {
+              const ipRes = await fetch(`${PANEL_URL}/panel/api/inbounds/clientIps/${encodeURIComponent(foundClient.email)}`, {
+                method: 'POST',
+                headers: { "Cookie": cookie, "Content-Type": "application/json" },
+                body: JSON.stringify({})
+              });
+              const ipData = await ipRes.json();
+              if (ipData && ipData.success && Array.isArray(ipData.obj)) {
+                ips = ipData.obj;
+              }
+            } catch (e) {}
+
+            return new Response(JSON.stringify({
+              success: true,
+              role: 'client',
+              clientData: { ...foundClient, isOnline, ips }
+            }), {
               headers: { "Content-Type": "application/json" }
             });
           }

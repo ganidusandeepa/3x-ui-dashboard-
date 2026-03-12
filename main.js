@@ -75,6 +75,12 @@ document.getElementById('tab-login-client').addEventListener('click', (e) => {
     document.getElementById('login-form-client').style.display = 'block';
 });
 
+// Default to client login tab first
+try {
+    document.getElementById('login-form-admin').style.display = 'none';
+    document.getElementById('login-form-client').style.display = 'block';
+} catch(e) {}
+
 document.getElementById('btn-login-admin').addEventListener('click', async () => {
     const un = document.getElementById('login-username').value;
     const pw = document.getElementById('login-password').value;
@@ -158,6 +164,23 @@ function startClientApp(client) {
     const totalUsed = (down + up).toFixed(2);
     const limit = parseFloat(toGB(client.total));
     const remainDesc = limit === 0 ? "Unlimited GB" : `${limit.toFixed(2)} GB`;
+
+    // Extra details
+    const fmtTime = (ms) => {
+        const n = Number(ms);
+        if (!Number.isFinite(n) || n <= 0) return '-';
+        return new Date(n).toLocaleString();
+    };
+    try {
+        document.getElementById('user-email').textContent = client.email || '-';
+        document.getElementById('user-uuid').textContent = client.uuid || '-';
+        document.getElementById('user-subid').textContent = client.subId || '-';
+        document.getElementById('user-last-online').textContent = fmtTime(client.lastOnline);
+        const onlineTxt = client.isOnline === true ? 'Online' : (client.isOnline === false ? 'Offline' : '-');
+        document.getElementById('user-online').textContent = onlineTxt;
+        const ips = Array.isArray(client.ips) ? client.ips.join(', ') : (client.ips || '-');
+        document.getElementById('user-ips').textContent = ips || '-';
+    } catch(e) {}
 
     gsap.to('#user-used', { innerHTML: totalUsed, duration: 1.5, snap: { innerHTML: 0.01 } });
     gsap.to('#user-dl', { innerHTML: down, duration: 1, snap: { innerHTML: 0.01 } });

@@ -22,11 +22,18 @@
                 <i class="fa-solid fa-server" style="color:var(--accent)"></i> 3x-ui Access
             </h2>
             <div class="tabs" style="display:flex; margin-bottom: 20px; border-bottom: 1px solid var(--border);">
-                <button id="tab-login-admin" style="flex:1; padding:10px; background:none; border:none; color:var(--accent); border-bottom: 2px solid var(--accent); font-weight:bold; cursor:pointer;">Admin</button>
-                <button id="tab-login-client" style="flex:1; padding:10px; background:none; border:none; color:var(--text-dim); border-bottom: 2px solid transparent; font-weight:bold; cursor:pointer;">Client Check</button>
+                <button id="tab-login-client" style="flex:1; padding:10px; background:none; border:none; color:var(--accent); border-bottom: 2px solid var(--accent); font-weight:bold; cursor:pointer;">Client Check</button>
+                <button id="tab-login-admin" style="flex:1; padding:10px; background:none; border:none; color:var(--text-dim); border-bottom: 2px solid transparent; font-weight:bold; cursor:pointer;">Admin</button>
             </div>
             
-            <div id="login-form-admin">
+            <div id="login-form-client">
+                <div class="input-group">
+                    <input type="text" id="login-email" placeholder="Your Exact Email or ID">
+                </div>
+                <button class="accent-btn" style="width: 100%; margin-top: 10px;" id="btn-login-client">Check Traffic</button>
+            </div>
+            
+            <div id="login-form-admin" style="display:none;">
                 <div class="input-group">
                     <input type="text" id="login-username" placeholder="Username">
                 </div>
@@ -37,13 +44,6 @@
                 <div style="margin-top: 15px; font-size:0.85rem; color:var(--text-dim);">
                     <i class="fa-solid fa-shield-halved" style="color:var(--green)"></i> Cloudflare Zero Trust auto-detect enabled.
                 </div>
-            </div>
-            
-            <div id="login-form-client" style="display:none;">
-                <div class="input-group">
-                    <input type="text" id="login-email" placeholder="Your Exact Email or ID">
-                </div>
-                <button class="accent-btn" style="width: 100%; margin-top: 10px;" id="btn-login-client">Check Traffic</button>
             </div>
         </div>
     </div>
@@ -101,6 +101,17 @@
                     <div style="width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:4px; margin-top:15px; overflow:hidden;">
                         <div id="user-progress" style="width: 0%; height:100%; background:linear-gradient(90deg, #0066ff, var(--accent)); transition:width 1s;"></div>
                     </div>
+                </div>
+
+                <!-- Account Details -->
+                <div class="card" style="margin-top:20px;">
+                    <h3><i class="fa-solid fa-id-card"></i> Account Details</h3>
+                    <div class="info-row"><span>ID/Email:</span> <strong id="user-email">-</strong></div>
+                    <div class="info-row"><span>Status:</span> <strong id="user-online">-</strong></div>
+                    <div class="info-row"><span>Last Online:</span> <strong id="user-last-online">-</strong></div>
+                    <div class="info-row"><span>UUID:</span> <strong id="user-uuid">-</strong></div>
+                    <div class="info-row"><span>Subscription ID:</span> <strong id="user-subid">-</strong></div>
+                    <div class="info-row"><span>IPs:</span> <strong id="user-ips">-</strong></div>
                 </div>
             </section>
 
@@ -241,6 +252,6 @@
         </div>
     </div>
 
-    <script src="main.js?v=10" data-cfasync="false"></script>
+    <script src="main.js?v=11" data-cfasync="false"></script>
 </body>
 </html>
