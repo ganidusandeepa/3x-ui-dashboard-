@@ -630,14 +630,33 @@ function buildLinksForClient(inbound, client) {
 
 async function addClientVless() {
     const out = document.getElementById('addc-result');
+    const uiCard = document.getElementById('ui-result');
+    const uiBody = document.getElementById('ui-result-body');
     const inboundId = Number(document.getElementById('addc-inbound')?.value);
     const email = document.getElementById('addc-email')?.value?.trim();
     const limitGb = Number(document.getElementById('addc-limit')?.value || 0);
     const days = Number(document.getElementById('addc-days')?.value || 0);
 
+    const showUICard = () => { if (uiCard) uiCard.style.display = 'block'; if (uiBody) uiBody.innerHTML = ''; };
+    const addKV = (k,v) => { const row=document.createElement('div'); row.className='kv'; row.innerHTML=`<div class="k">${k}</div><div class="v">${v}</div>`; uiBody.appendChild(row); };
+    const addCopyField = (label, value) => {
+        const wrap=document.createElement('div');
+        wrap.innerHTML = `<div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:6px;">${label}</div>`;
+        const row=document.createElement('div'); row.className='copy-row';
+        const inp=document.createElement('input'); inp.value=value||''; inp.readOnly=true;
+        const btn=document.createElement('button'); btn.className='sys-btn'; btn.textContent='Copy';
+        btn.addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(value||''); showToast('Copied'); }catch(e){ showToast('Copy failed','error'); } });
+        row.appendChild(inp); row.appendChild(btn);
+        wrap.appendChild(row);
+        uiBody.appendChild(wrap);
+    };
+
     if (!email) { showToast('Enter client email/ID', 'error'); return; }
     if (!inboundId) { showToast('Select inbound', 'error'); return; }
 
+    showUICard();
+    addKV('Action','Create Client');
+    addKV('Status','Working...');
     out.value = 'Creating client...';
 
     // get uuid
@@ -646,7 +665,9 @@ async function addClientVless() {
     const clientId = (typeof uuid === 'string') ? uuid.trim() : null;
 
     if (!clientId) {
+        showToast('Failed to generate UUID','error');
         out.value = 'Failed to generate UUID';
+        try { document.getElementById('ui-result-body').innerHTML = ''; } catch(e) {}
         return;
     }
 
@@ -680,7 +701,39 @@ async function addClientVless() {
     const inb = (window.__inboundsCache || []).find(x => Number(x.id) === inboundId);
     const links = inb ? buildLinksForClient(inb, { id: clientId, email, subId }) : { vlessLink: null, subLink: null };
 
-    out.value = JSON.stringify({ api: res, vless: links.vlessLink, sub: links.subLink }, null, 2);
+    const payloadOut = { api: res, vless: links.vlessLink, sub: links.subLink };
+    out.value = JSON.stringify(payloadOut, null, 2);
+
+    try {
+        const uiBody = document.getElementById('ui-result-body');
+        if (uiBody) {
+            uiBody.innerHTML = '';
+            const ok = res && (res.success === true || res.msg === 'success');
+            const status = ok ? 'Success' : 'Check response';
+            const row = document.createElement('div');
+            row.className = 'kv';
+            row.innerHTML = `<div class="k">Status</div><div class="v" style="color:${ok?'var(--green)':'var(--accent)'}">${status}</div>`;
+            uiBody.appendChild(row);
+
+            const addCopy = (label,val) => {
+                const wrap=document.createElement('div');
+                wrap.innerHTML = `<div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:6px;">${label}</div>`;
+                const row=document.createElement('div'); row.className='copy-row';
+                const inp=document.createElement('input'); inp.value=val||''; inp.readOnly=true;
+                const btn=document.createElement('button'); btn.className='sys-btn'; btn.textContent='Copy';
+                btn.addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(val||''); showToast('Copied'); }catch(e){ showToast('Copy failed','error'); } });
+                row.appendChild(inp); row.appendChild(btn);
+                wrap.appendChild(row);
+                uiBody.appendChild(wrap);
+            };
+
+            if (links.subLink) addCopy('Subscription link', links.subLink);
+            if (links.vlessLink) addCopy('VLESS link', links.vlessLink);
+        }
+        const uiCard = document.getElementById('ui-result');
+        if (uiCard) uiCard.style.display = 'block';
+    } catch(e) {}
+
     showToast('Client created');
 
     // refresh view
@@ -695,34 +748,78 @@ try {
     document.getElementById('btn-add-client')?.addEventListener('click', addClientVless);
     document.getElementById('btn-add-client-refresh')?.addEventListener('click', loadAdminData);
 
+    const showResultUI = (title, obj) => {
+        const uiCard = document.getElementById('ui-result');
+        const uiBody = document.getElementById('ui-result-body');
+        const raw = document.getElementById('addc-result');
+        if (uiCard) uiCard.style.display = 'block';
+        if (uiBody) uiBody.innerHTML = '';
+        if (raw) raw.value = JSON.stringify(obj, null, 2);
+
+        const addTitle = (t) => {
+            const h=document.createElement('div');
+            h.style.fontWeight='800';
+            h.textContent=t;
+            uiBody.appendChild(h);
+        };
+        const addChips = (arr) => {
+            const w=document.createElement('div'); w.className='chips';
+            (arr||[]).forEach(x=>{ const c=document.createElement('div'); c.className='chip'; c.textContent=String(x); w.appendChild(c); });
+            uiBody.appendChild(w);
+        };
+        const addKV = (k,v) => { const row=document.createElement('div'); row.className='kv'; row.innerHTML=`<div class="k">${k}</div><div class="v">${v}</div>`; uiBody.appendChild(row); };
+
+        addTitle(title);
+
+        if (obj && obj.success === false) {
+            addKV('Status','Failed');
+            addKV('Message', obj.msg || obj.error || '-');
+            return;
+        }
+
+        // Onlines: obj.obj is list
+        if (obj && Array.isArray(obj.obj)) {
+            addKV('Count', obj.obj.length);
+            addChips(obj.obj);
+            return;
+        }
+
+        // Last online: obj.obj is list of {email,lastOnline}
+        if (obj && Array.isArray(obj.obj?.data)) {
+            addKV('Count', obj.obj.data.length);
+            addChips(obj.obj.data.map(x => `${x.email}: ${x.lastOnline}`));
+            return;
+        }
+
+        // Default
+        addKV('Status','OK');
+        addKV('Info','See raw JSON below');
+    };
+
     // Inbound tools
     document.getElementById('btn-inb-onlines')?.addEventListener('click', async () => {
-        out().value = 'Loading onlines...';
         const r = await callXui('inbounds/onlines', 'POST', {});
-        out().value = JSON.stringify(r, null, 2);
+        showResultUI('Online users', r);
     });
 
     document.getElementById('btn-inb-lastonline')?.addEventListener('click', async () => {
-        out().value = 'Loading last online...';
         const r = await callXui('inbounds/lastOnline', 'POST', {});
-        out().value = JSON.stringify(r, null, 2);
+        showResultUI('Last online', r);
     });
 
     document.getElementById('btn-inb-reset')?.addEventListener('click', async () => {
         const id = getInboundId();
         if (!id) return;
         if (!confirm(`Reset ALL client traffic for inbound ${id}?`)) return;
-        out().value = 'Resetting inbound traffics...';
         const r = await callXui(`inbounds/resetAllClientTraffics/${id}`, 'POST', {});
-        out().value = JSON.stringify(r, null, 2);
+        showResultUI(`Reset inbound ${id}`, r);
         loadAdminData();
     });
 
     document.getElementById('btn-all-reset')?.addEventListener('click', async () => {
         if (!confirm('Reset ALL traffics for ALL inbounds?')) return;
-        out().value = 'Resetting ALL traffics...';
         const r = await callXui('inbounds/resetAllTraffics', 'POST', {});
-        out().value = JSON.stringify(r, null, 2);
+        showResultUI('Reset ALL traffics', r);
         loadAdminData();
     });
 
@@ -732,9 +829,8 @@ try {
         const email = getEmail();
         if (!inboundId || !email) { showToast('Select inbound + enter email', 'error'); return; }
         if (!confirm(`Reset traffic for ${email} in inbound ${inboundId}?`)) return;
-        out().value = 'Resetting client traffic...';
         const r = await callXui(`inbounds/${inboundId}/resetClientTraffic/${encodeURIComponent(email)}`, 'POST', {});
-        out().value = JSON.stringify(r, null, 2);
+        showResultUI(`Reset traffic: ${email}`, r);
         loadAdminData();
     });
 
@@ -743,27 +839,24 @@ try {
         const email = getEmail();
         if (!inboundId || !email) { showToast('Select inbound + enter email', 'error'); return; }
         if (!confirm(`DELETE client ${email} from inbound ${inboundId}?`)) return;
-        out().value = 'Deleting client...';
         const r = await callXui(`inbounds/${inboundId}/delClientByEmail/${encodeURIComponent(email)}`, 'POST', {});
-        out().value = JSON.stringify(r, null, 2);
+        showResultUI(`Delete client: ${email}`, r);
         loadAdminData();
     });
 
     document.getElementById('btn-client-ips')?.addEventListener('click', async () => {
         const email = getEmail();
         if (!email) { showToast('Enter email', 'error'); return; }
-        out().value = 'Fetching client IPs...';
         const r = await callXui(`inbounds/clientIps/${encodeURIComponent(email)}`, 'POST', {});
-        out().value = JSON.stringify(r, null, 2);
+        showResultUI(`Client IPs: ${email}`, r);
     });
 
     document.getElementById('btn-client-ips-clear')?.addEventListener('click', async () => {
         const email = getEmail();
         if (!email) { showToast('Enter email', 'error'); return; }
         if (!confirm(`Clear IPs for ${email}?`)) return;
-        out().value = 'Clearing client IPs...';
         const r = await callXui(`inbounds/clearClientIps/${encodeURIComponent(email)}`, 'POST', {});
-        out().value = JSON.stringify(r, null, 2);
+        showResultUI(`Clear IPs: ${email}`, r);
     });
 
 } catch(e) {}

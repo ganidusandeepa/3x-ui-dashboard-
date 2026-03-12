@@ -240,9 +240,13 @@
                         <button class="sys-btn" id="btn-client-ips-clear"><i class="fa-solid fa-broom"></i> Clear IPs</button>
                     </div>
 
-                    <div class="input-group" style="margin-top:12px;">
-                        <label>Result</label>
-                        <textarea id="addc-result" rows="10" readonly placeholder="Results will appear here..."></textarea>
+                    <div class="card" id="ui-result" style="margin-top:12px; display:none;">
+                        <h3><i class="fa-solid fa-circle-info"></i> Result</h3>
+                        <div id="ui-result-body" style="display:flex; flex-direction:column; gap:10px;"></div>
+                        <details style="margin-top:10px;">
+                            <summary style="cursor:pointer; color: var(--text-dim);">View raw JSON</summary>
+                            <textarea id="addc-result" rows="10" readonly style="margin-top:10px;" placeholder="Raw JSON..."></textarea>
+                        </details>
                     </div>
                 </div>
 
@@ -367,6 +371,6 @@
         </div>
     </div>
 
-    <script src="main.js?v=21" data-cfasync="false"></script>
+    <script src="main.js?v=22" data-cfasync="false"></script>
 </body>
 </html>
