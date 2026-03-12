@@ -57,7 +57,11 @@ export async function onRequest(context) {
   // Require Admin Auth for other requests
   const authHeader = request.headers.get('Authorization');
   const isZeroTrustAdmin = !!request.headers.get('Cf-Access-Authenticated-User-Email');
-  if (path !== "settings" && authHeader !== `Bearer ${ADMIN_PASS}` && !isZeroTrustAdmin) {
+
+  // Paths that MUST have admin auth (Zero Trust or Bearer Password)
+  const adminOnlyPaths = ["status", "inbounds", "history", "action"];
+  
+  if (adminOnlyPaths.includes(path) && authHeader !== `Bearer ${ADMIN_PASS}` && !isZeroTrustAdmin) {
       return new Response(JSON.stringify({ success: false, msg: 'Unauthorized' }), { status: 401 });
   }
 
