@@ -115,11 +115,18 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 @media (max-width: 420px) {
     .dashboard-wrapper { padding: 10px; }
     .card { padding: 14px; border-radius: 18px; }
-    .overview-grid { grid-template-columns: 1fr; gap: 14px; }
-    .traffic-split { flex-direction: row; gap: 14px; margin-top: 14px; }
-    .split-item .val { font-size: 1rem; }
-    .percent-val { top: 14px; right: 14px; font-size: 1.2rem; }
-    .mini-chart-container { height: 80px; }
+    .overview-grid { grid-template-columns: 1fr; gap: 12px; }
+
+    /* Compact Global Traffic */
+    .data-card-hero { padding: 16px; }
+    .data-card-hero .main-value { font-size: 1.7rem; margin: 6px 0; }
+    .traffic-split { flex-direction: row; gap: 12px; margin-top: 10px; }
+    .split-item .label { font-size: 0.65rem; margin-bottom: 2px; }
+    .split-item .val { font-size: 0.95rem; }
+    .donut-wrapper { width: 104px; height: 104px; }
+
+    .percent-val { top: 14px; right: 14px; font-size: 1.15rem; }
+    .mini-chart-container { height: 72px; }
     .user-status { display: none; }
 }
 
