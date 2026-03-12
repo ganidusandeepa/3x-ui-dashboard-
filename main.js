@@ -75,17 +75,20 @@ document.getElementById('tab-login-client').addEventListener('click', (e) => {
     document.getElementById('login-form-client').style.display = 'block';
 });
 
-// Default to client login tab first
-try {
-    document.getElementById('login-form-admin').style.display = 'none';
-    document.getElementById('login-form-client').style.display = 'block';
-} catch(e) {}
+// Default tab selection is handled on DOMContentLoaded using cached last tab.
 
 document.getElementById('btn-login-admin').addEventListener('click', async () => {
     const un = document.getElementById('login-username').value;
     const pw = document.getElementById('login-password').value;
     const btn = document.getElementById('btn-login-admin');
     btn.textContent = "Authenticating...";
+
+    // cache username + last tab only (never store password)
+    try {
+        localStorage.setItem('xui_last_tab', 'admin');
+        localStorage.setItem('xui_admin_username', un || '');
+    } catch(e) {}
+
     try {
         const res = await fetch('/api/auth', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -107,6 +110,13 @@ document.getElementById('btn-login-client').addEventListener('click', async () =
     const id = document.getElementById('login-email').value;
     const btn = document.getElementById('btn-login-client');
     btn.textContent = "Checking...";
+
+    // cache last client id + last tab
+    try {
+        localStorage.setItem('xui_last_tab', 'client');
+        localStorage.setItem('xui_client_id', id || '');
+    } catch(e) {}
+
     try {
         const res = await fetch('/api/auth', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -171,6 +181,11 @@ function startClientApp(client) {
         if (!Number.isFinite(n) || n <= 0) return '-';
         return new Date(n).toLocaleString();
     };
+
+    // keep links for buttons
+    let currentSubLink = client.subLink || null;
+    let currentVlessLink = client.vlessLink || null;
+
     try {
         document.getElementById('user-email').textContent = client.email || '-';
         document.getElementById('user-uuid').textContent = client.uuid || '-';
@@ -180,6 +195,58 @@ function startClientApp(client) {
         document.getElementById('user-online').textContent = onlineTxt;
         const ips = Array.isArray(client.ips) ? client.ips.join(', ') : (client.ips || '-');
         document.getElementById('user-ips').textContent = ips || '-';
+    } catch(e) {}
+
+    // Buttons: copy + QR
+    const copyText = async (text) => {
+        if (!text) return false;
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch (e) {
+            // fallback
+            try {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                ta.remove();
+                return true;
+            } catch (e2) {
+                return false;
+            }
+        }
+    };
+
+    try {
+        document.getElementById('btn-copy-sub')?.addEventListener('click', async () => {
+            const ok = await copyText(currentSubLink);
+            showToast(ok ? 'Subscription link copied' : 'No subscription link available', ok ? 'info' : 'error');
+        }, { once: true });
+
+        document.getElementById('btn-copy-vless')?.addEventListener('click', async () => {
+            const ok = await copyText(currentVlessLink);
+            showToast(ok ? 'VLESS link copied' : 'No VLESS link available', ok ? 'info' : 'error');
+        }, { once: true });
+
+        const qrModal = document.getElementById('qr-modal');
+        const qrBox = document.getElementById('qr-box');
+        const closeBtn = document.getElementById('btn-close-qr');
+
+        document.getElementById('btn-show-qr')?.addEventListener('click', () => {
+            if (!currentVlessLink) { showToast('No VLESS link available', 'error'); return; }
+            qrBox.innerHTML = '';
+            // eslint-disable-next-line no-undef
+            new QRCode(qrBox, { text: currentVlessLink, width: 240, height: 240, correctLevel: QRCode.CorrectLevel.M });
+            qrModal.style.display = 'flex';
+        }, { once: true });
+
+        closeBtn?.addEventListener('click', () => { qrModal.style.display = 'none'; }, { once: true });
+        qrModal?.addEventListener('click', (e) => { if (e.target === qrModal) qrModal.style.display = 'none'; }, { once: true });
+
     } catch(e) {}
 
     gsap.to('#user-used', { innerHTML: totalUsed, duration: 1.5, snap: { innerHTML: 0.01 } });
@@ -344,6 +411,22 @@ document.getElementById("btn-save-settings").addEventListener("click", async () 
 
 // Setup Initial State
 document.addEventListener("DOMContentLoaded", async () => {
+    // Restore cached login inputs/tab
+    try {
+        const lastTab = localStorage.getItem('xui_last_tab') || 'client';
+        const cachedClient = localStorage.getItem('xui_client_id') || '';
+        const cachedAdminUser = localStorage.getItem('xui_admin_username') || '';
+        if (cachedClient) document.getElementById('login-email').value = cachedClient;
+        if (cachedAdminUser) document.getElementById('login-username').value = cachedAdminUser;
+
+        if (lastTab === 'admin') {
+            // trigger admin tab UI
+            document.getElementById('tab-login-admin').click();
+        } else {
+            document.getElementById('tab-login-client').click();
+        }
+    } catch(e) {}
+
     // Hide UI elements until login
     document.querySelector('.desktop-nav').style.display = 'none';
     document.querySelector('.mobile-nav').style.display = 'none';

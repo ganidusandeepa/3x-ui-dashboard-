@@ -96,10 +96,54 @@ export async function onRequest(context) {
               }
             } catch (e) {}
 
+            // Build subscription link + VLESS link
+            let subLink = null;
+            let vlessLink = null;
+            try {
+              const host = new URL(PANEL_URL).hostname;
+              // default sub endpoint from your panel setup
+              subLink = `https://${host}:7262/sub/nope/${foundClient.subId}`;
+
+              // find inbound to build vless
+              const inbound = data.obj.find(x => Number(x.id) === Number(foundClient.inboundId));
+              if (inbound) {
+                const stream = JSON.parse(inbound.streamSettings || '{}');
+                const port = inbound.port;
+                const remark = inbound.remark || port;
+                const network = stream.network || 'ws';
+                const security = stream.security || 'none';
+
+                let qs = new URLSearchParams();
+                qs.set('type', network);
+                qs.set('encryption', 'none');
+
+                if (network === 'ws') {
+                  const ws = stream.wsSettings || {};
+                  qs.set('path', ws.path || '/');
+                  // host header for ws
+                  const wsHost = ws.host || inbound?.host || host;
+                  qs.set('host', wsHost);
+                }
+
+                if (security === 'tls') {
+                  qs.set('security', 'tls');
+                  const tls = stream.tlsSettings || {};
+                  const sni = tls.serverName || host;
+                  qs.set('sni', sni);
+                  const alpn = Array.isArray(tls.alpn) ? tls.alpn.join(',') : '';
+                  if (alpn) qs.set('alpn', alpn);
+                  const fp = tls.settings?.fingerprint || 'chrome';
+                  if (fp) qs.set('fp', fp);
+                }
+
+                vlessLink = `vless://${foundClient.uuid}@${host}:${port}?${qs.toString()}#${encodeURIComponent(`${remark}-${foundClient.email}`)}`;
+              }
+            } catch (e) {}
+
             return new Response(JSON.stringify({
               success: true,
               role: 'client',
-              clientData: { ...foundClient, isOnline, ips }
+              clientData: { ...foundClient, isOnline, ips, subLink, vlessLink }
             }), {
               headers: { "Content-Type": "application/json" }
             });
