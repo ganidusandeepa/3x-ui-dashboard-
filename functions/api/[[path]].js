@@ -69,6 +69,7 @@ export async function onRequest(context) {
     let targetUrl = "";
     if (path === "status") targetUrl = `${PANEL_URL}/panel/api/server/status`;
     else if (path === "inbounds") targetUrl = `${PANEL_URL}/panel/api/inbound/list`;
+    else if (path === "clients") targetUrl = `${PANEL_URL}/panel/api/inbound/clientStatsAll`; // Try v2 stats first
     else if (path === "history") {
         return new Response(JSON.stringify({
             success: true,
@@ -78,8 +79,27 @@ export async function onRequest(context) {
         return new Response(JSON.stringify({ success: false, msg: "Endpoint not found" }));
     }
 
-    const apiRes = await fetch(targetUrl, { method: "GET", headers: { "Cookie": cookie } });
-    const data = await apiRes.json();
+    const apiRes = await fetch(targetUrl, { 
+        method: "GET", 
+        headers: { 
+            "Cookie": cookie,
+            "Accept": "application/json"
+        } 
+    });
+    
+    let data;
+    try {
+        data = await apiRes.json();
+    } catch(e) {
+        // If v2 stats failed, fallback to manual list
+        if (path === "clients") {
+            const fallbackRes = await fetch(`${PANEL_URL}/panel/api/inbound/list`, { headers: { "Cookie": cookie } });
+            data = await fallbackRes.json();
+        } else {
+            throw new Error("Invalid JSON response from panel");
+        }
+    }
+
     return new Response(JSON.stringify({ success: true, obj: data.obj || data }), {
         headers: { "Content-Type": "application/json" }
     });
