@@ -98,11 +98,15 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .close-btn { flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: #fff; border-radius: 12px; cursor: pointer; }
 
 /* Responsive Adjustments */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
     .desktop-nav { display: none; }
     .mobile-nav { display: flex; }
     .logo { font-size: 1.5rem; }
+
+    /* Force single-column layout to remove right-side empty space */
+    .overview-grid { grid-template-columns: 1fr; gap: 14px; }
     .data-card-hero { grid-column: span 1; flex-direction: column; text-align: center; gap: 16px; padding: 20px; }
+
     .traffic-split { justify-content: center; gap: 18px; }
     .dashboard-wrapper { padding: 12px; padding-bottom: calc(var(--nav-height) + 30px + env(safe-area-inset-bottom)); }
     header { margin-bottom: 18px; }
