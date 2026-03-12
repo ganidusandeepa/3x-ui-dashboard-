@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3x-ui Admin Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    <div id="toast-container"></div>
+
+    <!-- Floating Action Button -->
+    <button class="fab" id="main-fab">
+        <i class="fa-solid fa-plus"></i>
+    </button>
+
+    <div class="dashboard-wrapper">
+        <header>
+            <div class="logo"><i class="fa-solid fa-server"></i> 3x-ui<span>.panel</span></div>
+            <nav class="desktop-nav">
+                <button class="nav-btn active" data-tab="overview"><i class="fa-solid fa-chart-pie"></i> Overview</button>
+                <button class="nav-btn" data-tab="inbounds"><i class="fa-solid fa-network-wired"></i> Inbounds</button>
+                <button class="nav-btn" data-tab="clients"><i class="fa-solid fa-users"></i> Clients</button>
+                <button class="nav-btn" data-tab="system"><i class="fa-solid fa-microchip"></i> System</button>
+            </nav>
+            <div class="user-status">
+                <div class="status-dot online"></div>
+                <span>Server: <strong style="color:var(--accent-color)">OK</strong></span>
+            </div>
+        </header>
+        
+        <main>
+            <!-- OVERVIEW TAB -->
+            <section id="tab-overview" class="tab-content active">
+                <div class="overview-grid">
+                    <!-- Premium Data Usage Card -->
+                    <div class="card data-card-hero">
+                        <div class="data-text">
+                            <h3><i class="fa-solid fa-globe"></i> Global Traffic</h3>
+                            <div class="main-value"><span id="total-traffic">0.00</span> <span class="unit">GB</span></div>
+                            <div class="traffic-split">
+                                <div class="split-item down">
+                                    <span class="label">DOWNLOAD</span>
+                                    <span class="val"><i class="fa-solid fa-arrow-down"></i> <span id="dl-traffic">0.00</span> GB</span>
+                                </div>
+                                <div class="split-item up">
+                                    <span class="label">UPLOAD</span>
+                                    <span class="val"><i class="fa-solid fa-arrow-up"></i> <span id="up-traffic">0.00</span> GB</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="donut-wrapper">
+                            <canvas id="usageDonut"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Compact Resource Stats -->
+                    <div class="card resource-card">
+                        <h3><i class="fa-solid fa-microchip"></i> CPU Usage</h3>
+                        <div class="mini-chart-container">
+                            <canvas id="cpuChart"></canvas>
+                        </div>
+                        <div class="percent-val" id="cpu-percent">0%</div>
+                    </div>
+
+                    <div class="card resource-card">
+                        <h3><i class="fa-solid fa-memory"></i> RAM Memory</h3>
+                        <div class="mini-chart-container">
+                            <canvas id="ramChart"></canvas>
+                        </div>
+                        <div class="percent-val" id="ram-percent">0%</div>
+                    </div>
+                </div>
+
+                <div class="charts-row">
+                    <div class="card main-chart-card">
+                        <h3><i class="fa-solid fa-chart-line"></i> Traffic Analytics (7 Days)</h3>
+                        <div style="height: 300px;">
+                            <canvas id="trafficChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- INBOUNDS TAB -->
+            <section id="tab-inbounds" class="tab-content">
+                <div class="inbound-grid" id="inbound-cards-container">
+                    <!-- Cards injected here by JS for better mobile experience -->
+                </div>
+            </section>
+
+            <!-- CLIENTS TAB -->
+            <section id="tab-clients" class="tab-content">
+                <div class="client-container" id="client-list">
+                    <!-- Client cards for mobile -->
+                </div>
+            </section>
+
+            <!-- SYSTEM TAB -->
+            <section id="tab-system" class="tab-content">
+                <div class="system-grid">
+                    <div class="card sys-control-card">
+                        <h3>Core Controller</h3>
+                        <p class="subtitle">Xray Version: 1.8.4</p>
+                        <div class="sys-actions">
+                            <button class="sys-btn" onclick="triggerAction('Restart Server')"><i class="fa-solid fa-rotate"></i> Restart</button>
+                            <button class="sys-btn danger" onclick="triggerAction('Kill Connections')"><i class="fa-solid fa-bolt"></i> Kill All</button>
+                            <button class="sys-btn warning" onclick="triggerAction('Clear Cache')"><i class="fa-solid fa-broom"></i> Clean</button>
+                        </div>
+                    </div>
+                    <div class="card info-card">
+                        <h3>IP Information</h3>
+                        <div class="info-row"><span>Public IP:</span> <strong id="node-ip">141.148.193.192</strong></div>
+                        <div class="info-row"><span>Region:</span> <strong>EU-Central</strong></div>
+                        <div class="info-row"><span>Ping:</span> <strong style="color:var(--green)">14ms</strong></div>
+                        
+                        <h3 style="margin-top:20px; padding-top:20px; border-top:1px solid var(--border);"><i class="fa-solid fa-link"></i> Server Config</h3>
+                        <p class="subtitle" style="margin-bottom:15px; font-size:0.8rem;">Change backend 3x-ui connection url</p>
+                        
+                        <div class="input-group">
+                            <label>Panel API URL</label>
+                            <input type="text" id="setting-url" placeholder="http://192.168.1.1:2053">
+                        </div>
+                        <div class="input-group">
+                            <label>Username</label>
+                            <input type="text" id="setting-user" placeholder="admin">
+                        </div>
+                        <div class="input-group">
+                            <label>Password</label>
+                            <input type="password" id="setting-pass" placeholder="password">
+                        </div>
+                        <button class="sys-btn" id="btn-save-settings" style="width:100%; border-color:var(--accent); color:var(--accent);">Connect Real Panel</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Mobile Bottom Nav -->
+        <nav class="mobile-nav">
+            <button class="m-nav-btn active" data-tab="overview"><i class="fa-solid fa-house"></i><span>Home</span></button>
+            <button class="m-nav-btn" data-tab="inbounds"><i class="fa-solid fa-link"></i><span>Nodes</span></button>
+            <button class="m-nav-btn" data-tab="clients"><i class="fa-solid fa-user-group"></i><span>Users</span></button>
+            <button class="m-nav-btn" data-tab="system"><i class="fa-solid fa-gears"></i><span>System</span></button>
+        </nav>
+    </div>
+
+    <!-- Modal Mock -->
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="modal-card">
+            <h3>Add New Node</h3>
+            <div class="input-group">
+                <label>Remark</label>
+                <input type="text" placeholder="e.g., US-VLESS">
+            </div>
+            <div class="input-group">
+                <label>Protocol</label>
+                <select>
+                    <option>VLESS</option>
+                    <option>VMess</option>
+                    <option>Trojan</option>
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button class="accent-btn" onclick="closeModal()">Create</button>
+                <button class="close-btn" onclick="closeModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>

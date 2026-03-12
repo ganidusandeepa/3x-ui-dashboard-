@@ -1,0 +1,5 @@
+node_modules/
+server-config.json
+.DS_Store
+*.log
+nohup.out
