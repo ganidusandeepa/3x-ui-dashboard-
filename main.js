@@ -414,19 +414,37 @@ async function loadAdminData() {
         }
 
         if (inb.success) {
+            // cache for add-client builder
+            window.__inboundsCache = inb.obj || [];
+
+            // fill inbound selector
+            try {
+                const sel = document.getElementById('addc-inbound');
+                if (sel) {
+                    sel.innerHTML = '';
+                    (inb.obj || []).forEach(node => {
+                        const opt = document.createElement('option');
+                        opt.value = node.id;
+                        const name = node.remark || `inbound-${node.id}`;
+                        opt.textContent = `${name} • ${node.protocol?.toUpperCase?.() || node.protocol} • :${node.port}`;
+                        sel.appendChild(opt);
+                    });
+                }
+            } catch(e) {}
+
             const container = document.getElementById('inbound-cards-container');
             container.innerHTML = '';
-            inb.obj.forEach(node => {
+            (inb.obj || []).forEach(node => {
                 container.innerHTML += `
                     <div class="card item-card">
                         <div class="item-header">
-                            <div><strong style="font-size:1.1rem">${node.remark}</strong><p class="subtitle" style="margin:0">${node.protocol.toUpperCase()} • Port ${node.port}</p></div>
+                            <div><strong style="font-size:1.1rem">${node.remark || ''}</strong><p class="subtitle" style="margin:0">${(node.protocol||'').toUpperCase()} • Port ${node.port}</p></div>
                             <div class="status-badge ${node.enable ? 'active' : ''}">${node.enable ? 'Online' : 'Off'}</div>
                         </div>
                         <div class="item-stats">
                             <div class="stat-box"><span class="label">DOWN</span><span class="val">${toGB(node.down)} GB</span></div>
                             <div class="stat-box"><span class="label">UP</span><span class="val">${toGB(node.up)} GB</span></div>
-                            <div class="stat-box"><span class="label">USERS</span><span class="val">${node.clientStats.length}</span></div>
+                            <div class="stat-box"><span class="label">USERS</span><span class="val">${node.clientStats?.length ?? 0}</span></div>
                         </div>
                     </div>`;
             });
@@ -566,6 +584,113 @@ function wireServerTools() {
 
 // wire once
 try { wireServerTools(); } catch(e) {}
+
+// --- Inbounds: Add Client (VLESS) ---
+function buildLinksForClient(inbound, client) {
+    try {
+        const host = window.location.hostname.replace(/^www\./, '');
+        const panelHost = host; // same domain assumption
+
+        const subLink = client.subId ? `https://${panelHost}:7262/sub/nope/${client.subId}` : null;
+
+        const stream = JSON.parse(inbound.streamSettings || '{}');
+        const port = inbound.port;
+        const remark = inbound.remark || port;
+        const network = stream.network || 'ws';
+        const security = stream.security || 'none';
+
+        let qs = new URLSearchParams();
+        qs.set('type', network);
+        qs.set('encryption', 'none');
+
+        if (network === 'ws') {
+            const ws = stream.wsSettings || {};
+            qs.set('path', ws.path || '/');
+            const wsHost = ws.host || panelHost;
+            qs.set('host', wsHost);
+        }
+
+        if (security === 'tls') {
+            qs.set('security', 'tls');
+            const tls = stream.tlsSettings || {};
+            const sni = tls.serverName || panelHost;
+            qs.set('sni', sni);
+            const alpn = Array.isArray(tls.alpn) ? tls.alpn.join(',') : '';
+            if (alpn) qs.set('alpn', alpn);
+            const fp = tls.settings?.fingerprint || 'chrome';
+            if (fp) qs.set('fp', fp);
+        }
+
+        const vlessLink = `vless://${client.id}@${panelHost}:${port}?${qs.toString()}#${encodeURIComponent(`${remark}-${client.email}`)}`;
+        return { vlessLink, subLink };
+    } catch(e) {
+        return { vlessLink: null, subLink: null };
+    }
+}
+
+async function addClientVless() {
+    const out = document.getElementById('addc-result');
+    const inboundId = Number(document.getElementById('addc-inbound')?.value);
+    const email = document.getElementById('addc-email')?.value?.trim();
+    const limitGb = Number(document.getElementById('addc-limit')?.value || 0);
+    const days = Number(document.getElementById('addc-days')?.value || 0);
+
+    if (!email) { showToast('Enter client email/ID', 'error'); return; }
+    if (!inboundId) { showToast('Select inbound', 'error'); return; }
+
+    out.value = 'Creating client...';
+
+    // get uuid
+    const uuidRes = await callXui('server/getNewUUID', 'GET');
+    const uuid = (uuidRes && (uuidRes.obj || uuidRes.uuid || uuidRes.data)) ? (uuidRes.obj || uuidRes.uuid || uuidRes.data) : (typeof uuidRes === 'string' ? uuidRes : null);
+    const clientId = (typeof uuid === 'string') ? uuid.trim() : null;
+
+    if (!clientId) {
+        out.value = 'Failed to generate UUID';
+        return;
+    }
+
+    const subId = Math.random().toString(36).slice(2, 18);
+    const expiryTime = days > 0 ? (Date.now() + days * 24 * 60 * 60 * 1000) : 0;
+    const totalGB = limitGb > 0 ? Math.floor(limitGb * (1024 ** 3)) : 0;
+
+    const payload = {
+        id: inboundId,
+        settings: {
+            clients: [
+                {
+                    id: clientId,
+                    email,
+                    enable: true,
+                    expiryTime,
+                    limitIp: 0,
+                    reset: 0,
+                    subId,
+                    totalGB,
+                    flow: '',
+                    tgId: ''
+                }
+            ]
+        }
+    };
+
+    const res = await callXui('inbounds/addClient', 'POST', payload);
+
+    // Build links from cached inbound
+    const inb = (window.__inboundsCache || []).find(x => Number(x.id) === inboundId);
+    const links = inb ? buildLinksForClient(inb, { id: clientId, email, subId }) : { vlessLink: null, subLink: null };
+
+    out.value = JSON.stringify({ api: res, vless: links.vlessLink, sub: links.subLink }, null, 2);
+    showToast('Client created');
+
+    // refresh view
+    loadAdminData();
+}
+
+try {
+    document.getElementById('btn-add-client')?.addEventListener('click', addClientVless);
+    document.getElementById('btn-add-client-refresh')?.addEventListener('click', loadAdminData);
+} catch(e) {}
 
 // Setup Initial State
 document.addEventListener("DOMContentLoaded", async () => {

@@ -197,6 +197,34 @@
 
             <!-- INBOUNDS TAB -->
             <section id="tab-inbounds" class="tab-content">
+                <div class="card" style="margin-bottom:16px;">
+                    <h3><i class="fa-solid fa-user-plus"></i> Add Client (VLESS)</h3>
+                    <div class="input-group">
+                        <label>Inbound</label>
+                        <select id="addc-inbound"></select>
+                    </div>
+                    <div class="input-group">
+                        <label>Client Email/ID</label>
+                        <input id="addc-email" type="text" placeholder="e.g., poorna">
+                    </div>
+                    <div class="input-group">
+                        <label>Traffic Limit (GB) - 0 = Unlimited</label>
+                        <input id="addc-limit" type="number" value="0" min="0" step="1">
+                    </div>
+                    <div class="input-group">
+                        <label>Expiry (days)</label>
+                        <input id="addc-days" type="number" value="30" min="0" step="1">
+                    </div>
+                    <div class="sys-actions" style="grid-template-columns:1fr 1fr;">
+                        <button class="sys-btn" id="btn-add-client"><i class="fa-solid fa-plus"></i> Create</button>
+                        <button class="sys-btn" id="btn-add-client-refresh"><i class="fa-solid fa-rotate"></i> Refresh Inbounds</button>
+                    </div>
+                    <div class="input-group" style="margin-top:12px;">
+                        <label>Result</label>
+                        <textarea id="addc-result" rows="7" readonly placeholder="VLESS/sub links will appear here..."></textarea>
+                    </div>
+                </div>
+
                 <div class="inbound-grid" id="inbound-cards-container">
                     <!-- Cards injected here by JS for better mobile experience -->
                 </div>
@@ -318,6 +346,6 @@
         </div>
     </div>
 
-    <script src="main.js?v=19" data-cfasync="false"></script>
+    <script src="main.js?v=20" data-cfasync="false"></script>
 </body>
 </html>
