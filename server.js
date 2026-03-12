@@ -45,6 +45,39 @@ initClient(currentConfig).then(c => apiClient = c).catch(console.error);
 
 app.use(express.static(path.join(__dirname)));
 
+app.post('/api/auth', async (req, res) => {
+    const { type, username, password, id } = req.body;
+    
+    if (type === 'admin') {
+        if (username === currentConfig.username && password === currentConfig.password) {
+            return res.json({ success: true, role: 'admin' });
+        }
+        return res.status(401).json({ success: false, msg: 'Invalid admin credentials' });
+    } 
+    
+    if (type === 'client') {
+        if (!apiClient) return res.status(500).json({ success: false, msg: 'Backend not ready' });
+        try {
+            const result = await apiClient.getInbounds();
+            if (result && result.obj) {
+                for (let inb of result.obj) {
+                    if (inb.clientStats) {
+                        const client = inb.clientStats.find(c => c.email === id);
+                        if (client) {
+                            return res.json({ success: true, role: 'client', clientData: client });
+                        }
+                    }
+                }
+            }
+            return res.status(404).json({ success: false, msg: 'User email not found' });
+        } catch(e) {
+            return res.status(500).json({ success: false, msg: e.message });
+        }
+    }
+});
+
+// Settings update allows anon but that's okay for local.
+
 app.post('/api/settings', async (req, res) => {
     try {
         currentConfig = req.body;
@@ -56,7 +89,16 @@ app.post('/api/settings', async (req, res) => {
     }
 });
 
-app.get('/api/status', async (req, res) => {
+// Auth Middleware for Admin specific resources
+function requireAdmin(req, res, next) {
+    const auth = req.headers.authorization;
+    if (auth === `Bearer ${currentConfig.password}`) {
+        return next();
+    }
+    return res.status(401).json({ success: false, msg: 'Unauthorized Dashboard Access' });
+}
+
+app.get('/api/status', requireAdmin, async (req, res) => {
     if (!apiClient) return res.status(500).json({ success: false, msg: "Not configured" });
     try {
         const result = await apiClient.getServerStatus();
@@ -67,7 +109,7 @@ app.get('/api/status', async (req, res) => {
     }
 });
 
-app.get('/api/inbounds', async (req, res) => {
+app.get('/api/inbounds', requireAdmin, async (req, res) => {
     if (!apiClient) return res.status(500).json({ success: false });
     try {
         const result = await apiClient.getInbounds();
@@ -77,7 +119,7 @@ app.get('/api/inbounds', async (req, res) => {
     }
 });
 
-app.get('/api/clients', async (req, res) => {
+app.get('/api/clients', requireAdmin, async (req, res) => {
     if (!apiClient) return res.status(500).json({ success: false });
     try {
         // Collect clients from inbounds
@@ -98,7 +140,7 @@ app.get('/api/clients', async (req, res) => {
 
 // Since the panel doesn't store graph metrics, we generate a small flat mock array 
 // so the UI charts don't break - but they don't mean much.
-app.get('/api/system-history', (req, res) => {
+app.get('/api/system-history', requireAdmin, (req, res) => {
     const points = Array.from({length: 10}, (_, i) => ({
         time: `${i}:00`,
         cpu: 0,
@@ -107,7 +149,7 @@ app.get('/api/system-history', (req, res) => {
     res.json({ success: true, obj: points });
 });
 
-app.post('/api/action', async (req, res) => {
+app.post('/api/action', requireAdmin, async (req, res) => {
     // Attempting real mock actions
     const { action } = req.body;
     if (!apiClient) return res.status(500).json({ success: false });

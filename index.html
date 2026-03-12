@@ -15,6 +15,36 @@
     <div id="canvas-container"></div>
     <div id="toast-container"></div>
 
+    <!-- Login Overlay -->
+    <div id="login-overlay" class="modal-overlay active" style="z-index: 9999; background: var(--bg-color); display: flex;">
+        <div class="modal-card" style="text-align: center; max-width: 400px;">
+            <h2 style="margin-bottom: 20px; font-weight:800; font-size:1.8rem;">
+                <i class="fa-solid fa-server" style="color:var(--accent)"></i> 3x-ui Access
+            </h2>
+            <div class="tabs" style="display:flex; margin-bottom: 20px; border-bottom: 1px solid var(--border);">
+                <button id="tab-login-admin" style="flex:1; padding:10px; background:none; border:none; color:var(--accent); border-bottom: 2px solid var(--accent); font-weight:bold; cursor:pointer;">Admin</button>
+                <button id="tab-login-client" style="flex:1; padding:10px; background:none; border:none; color:var(--text-dim); border-bottom: 2px solid transparent; font-weight:bold; cursor:pointer;">Client Check</button>
+            </div>
+            
+            <div id="login-form-admin">
+                <div class="input-group">
+                    <input type="text" id="login-username" placeholder="Username">
+                </div>
+                <div class="input-group">
+                    <input type="password" id="login-password" placeholder="Password">
+                </div>
+                <button class="accent-btn" style="width: 100%; margin-top: 10px;" id="btn-login-admin">Login as Admin</button>
+            </div>
+            
+            <div id="login-form-client" style="display:none;">
+                <div class="input-group">
+                    <input type="text" id="login-email" placeholder="Your Exact Email or ID">
+                </div>
+                <button class="accent-btn" style="width: 100%; margin-top: 10px;" id="btn-login-client">Check Traffic</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Floating Action Button -->
     <button class="fab" id="main-fab">
         <i class="fa-solid fa-plus"></i>
@@ -36,6 +66,41 @@
         </header>
         
         <main>
+            <!-- USER VIEW TAB (Appears only for clients) -->
+            <section id="tab-user-view" class="tab-content">
+                <div class="overview-grid">
+                    <div class="card data-card-hero">
+                        <div class="data-text">
+                            <h3><i class="fa-solid fa-user"></i> My Traffic Usage</h3>
+                            <div class="main-value"><span id="user-used">0.00</span> <span class="unit">GB</span></div>
+                            <p class="subtitle" style="font-size: 1.1rem; color:var(--text-dim);">Total Limit: <strong id="user-total" style="color:#fff;">0.00 GB</strong></p>
+                            
+                            <div class="traffic-split" style="margin-top: 30px;">
+                                <div class="split-item down">
+                                    <span class="label">DOWNLOAD</span>
+                                    <span class="val"><i class="fa-solid fa-arrow-down"></i> <span id="user-dl">0.00</span> GB</span>
+                                </div>
+                                <div class="split-item up">
+                                    <span class="label">UPLOAD</span>
+                                    <span class="val"><i class="fa-solid fa-arrow-up"></i> <span id="user-up">0.00</span> GB</span>
+                                </div>
+                            </div>
+                            <p style="margin-top: 20px; color: var(--text-dim);">Status: <strong id="user-status-text" class="status-badge active" style="margin-left:10px;">Active</strong></p>
+                        </div>
+                        <div class="donut-wrapper" style="width: 180px; height: 180px;">
+                            <canvas id="userDonut"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <!-- Progress Line -->
+                <div class="card" style="margin-top:20px;">
+                    <h3>Consumption</h3>
+                    <div style="width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:4px; margin-top:15px; overflow:hidden;">
+                        <div id="user-progress" style="width: 0%; height:100%; background:linear-gradient(90deg, #0066ff, var(--accent)); transition:width 1s;"></div>
+                    </div>
+                </div>
+            </section>
+
             <!-- OVERVIEW TAB -->
             <section id="tab-overview" class="tab-content active">
                 <div class="overview-grid">
