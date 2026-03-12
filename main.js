@@ -407,6 +407,7 @@ async function loadAdminData() {
                 document.getElementById('node-ip').textContent = s.publicIP?.ipv4 || s.publicIP?.ipv6 || '-';
                 document.getElementById('node-region').textContent = s.publicIP?.country || '-';
                 document.getElementById('node-ping').textContent = '-';
+                document.getElementById('xray-version').textContent = s.xray?.version || '-';
             } catch(e) {}
 
             donutChart.data.datasets[0].data = [down, up]; donutChart.update();
@@ -468,6 +469,103 @@ document.getElementById("btn-save-settings").addEventListener("click", async () 
     btn.style.opacity = '0.7';
     btn.style.cursor = 'not-allowed';
 });
+
+// --- Server Tools (Admin-only; uses /api/xui proxy) ---
+function setServerOutput(val) {
+    try {
+        const el = document.getElementById('server-output');
+        if (el) el.value = typeof val === 'string' ? val : JSON.stringify(val, null, 2);
+    } catch(e) {}
+}
+
+async function callXui(path, method='GET', bodyObj=null) {
+    const url = `/api/xui/${path.replace(/^\/+/, '')}`;
+    const opts = { method, headers: getAdminHeaders() };
+    if (method === 'POST') {
+        opts.headers = { ...opts.headers, 'Content-Type': 'application/json' };
+        opts.body = JSON.stringify(bodyObj ?? {});
+    }
+    const res = await fetch(url, opts);
+    const ct = res.headers.get('Content-Type') || '';
+    if (ct.includes('application/json')) return await res.json();
+    return await res.text();
+}
+
+async function downloadFromXui(path, filename) {
+    const url = `/api/xui/${path.replace(/^\/+/, '')}`;
+    const res = await fetch(url, { method: 'GET', headers: getAdminHeaders() });
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+function wireServerTools() {
+    const byId = (id) => document.getElementById(id);
+
+    byId('btn-xray-restart')?.addEventListener('click', async () => {
+        setServerOutput('Restarting Xray...');
+        const r = await callXui('server/restartXrayService', 'POST', {});
+        setServerOutput(r);
+        loadAdminData();
+    });
+
+    byId('btn-xray-stop')?.addEventListener('click', async () => {
+        setServerOutput('Stopping Xray...');
+        const r = await callXui('server/stopXrayService', 'POST', {});
+        setServerOutput(r);
+        loadAdminData();
+    });
+
+    byId('btn-geo-update')?.addEventListener('click', async () => {
+        setServerOutput('Updating geo files...');
+        const r = await callXui('server/updateGeofile', 'POST', {});
+        setServerOutput(r);
+    });
+
+    byId('btn-dl-config')?.addEventListener('click', async () => {
+        setServerOutput('Downloading config.json...');
+        await downloadFromXui('server/getConfigJson', 'config.json');
+        setServerOutput('Downloaded config.json');
+    });
+
+    byId('btn-dl-db')?.addEventListener('click', async () => {
+        setServerOutput('Downloading database...');
+        await downloadFromXui('server/getDb', 'x-ui.db');
+        setServerOutput('Downloaded x-ui.db');
+    });
+
+    byId('btn-new-uuid')?.addEventListener('click', async () => {
+        const r = await callXui('server/getNewUUID', 'GET');
+        setServerOutput(r);
+    });
+
+    byId('btn-new-x25519')?.addEventListener('click', async () => {
+        const r = await callXui('server/getNewX25519Cert', 'GET');
+        setServerOutput(r);
+    });
+
+    const getCount = () => Number(byId('log-count')?.value || 200);
+
+    byId('btn-logs')?.addEventListener('click', async () => {
+        const c = getCount();
+        const r = await callXui(`server/logs/${c}`, 'POST', { level: 'info', syslog: false });
+        setServerOutput(r);
+    });
+
+    byId('btn-xray-logs')?.addEventListener('click', async () => {
+        const c = getCount();
+        const r = await callXui(`server/xraylogs/${c}`, 'POST', { filter: '', level: 'info' });
+        setServerOutput(r);
+    });
+}
+
+// wire once
+try { wireServerTools(); } catch(e) {}
 
 // Setup Initial State
 document.addEventListener("DOMContentLoaded", async () => {

@@ -214,35 +214,57 @@
                 <div class="system-grid">
                     <div class="card sys-control-card">
                         <h3>Core Controller</h3>
-                        <p class="subtitle">Xray Version: 1.8.4</p>
+                        <p class="subtitle">Xray Version: <strong id="xray-version">-</strong></p>
                         <div class="sys-actions">
-                            <button class="sys-btn" onclick="triggerAction('Restart Server')"><i class="fa-solid fa-rotate"></i> Restart</button>
-                            <button class="sys-btn danger" onclick="triggerAction('Kill Connections')"><i class="fa-solid fa-bolt"></i> Kill All</button>
-                            <button class="sys-btn warning" onclick="triggerAction('Clear Cache')"><i class="fa-solid fa-broom"></i> Clean</button>
+                            <button class="sys-btn" id="btn-xray-restart"><i class="fa-solid fa-rotate"></i> Restart</button>
+                            <button class="sys-btn danger" id="btn-xray-stop"><i class="fa-solid fa-circle-stop"></i> Stop</button>
+                            <button class="sys-btn" id="btn-geo-update"><i class="fa-solid fa-globe"></i> Update Geo</button>
                         </div>
                     </div>
+
                     <div class="card info-card">
                         <h3>IP Information</h3>
                         <div class="info-row"><span>Public IP:</span> <strong id="node-ip">-</strong></div>
                         <div class="info-row"><span>Region:</span> <strong id="node-region">-</strong></div>
                         <div class="info-row"><span>Ping:</span> <strong id="node-ping" style="color:var(--green)">-</strong></div>
-                        
-                        <h3 style="margin-top:20px; padding-top:20px; border-top:1px solid var(--border);"><i class="fa-solid fa-link"></i> Server Config</h3>
-                        <p class="subtitle" style="margin-bottom:15px; font-size:0.8rem;">Change backend 3x-ui connection url</p>
+
+                        <h3 style="margin-top:20px; padding-top:20px; border-top:1px solid var(--border);"><i class="fa-solid fa-screwdriver-wrench"></i> Server Tools</h3>
+                        <div class="sys-actions" style="grid-template-columns: 1fr 1fr;">
+                            <button class="sys-btn" id="btn-dl-config"><i class="fa-solid fa-file-code"></i> Config.json</button>
+                            <button class="sys-btn" id="btn-dl-db"><i class="fa-solid fa-database"></i> DB</button>
+                            <button class="sys-btn" id="btn-new-uuid"><i class="fa-solid fa-fingerprint"></i> New UUID</button>
+                            <button class="sys-btn" id="btn-new-x25519"><i class="fa-solid fa-key"></i> X25519</button>
+                        </div>
+
+                        <div class="input-group" style="margin-top:14px;">
+                            <label>Logs count</label>
+                            <input type="number" id="log-count" value="200" min="50" max="5000">
+                        </div>
+                        <div class="sys-actions" style="grid-template-columns: 1fr 1fr; margin-top:10px;">
+                            <button class="sys-btn" id="btn-logs"><i class="fa-solid fa-scroll"></i> System Logs</button>
+                            <button class="sys-btn" id="btn-xray-logs"><i class="fa-solid fa-bug"></i> Xray Logs</button>
+                        </div>
+                        <div class="input-group" style="margin-top:12px;">
+                            <label>Output</label>
+                            <textarea id="server-output" rows="8" readonly placeholder="Output will appear here..."></textarea>
+                        </div>
+
+                        <h3 style="margin-top:20px; padding-top:20px; border-top:1px solid var(--border);"><i class="fa-solid fa-link"></i> Panel Config</h3>
+                        <p class="subtitle" style="margin-bottom:15px; font-size:0.8rem;">This dashboard is managed via Cloudflare Pages env vars.</p>
                         
                         <div class="input-group">
                             <label>Panel API URL</label>
-                            <input type="text" id="setting-url" placeholder="http://192.168.1.1:2053">
+                            <input type="text" id="setting-url" placeholder="http://192.168.1.1:2053" disabled>
                         </div>
                         <div class="input-group">
                             <label>Username</label>
-                            <input type="text" id="setting-user" placeholder="admin">
+                            <input type="text" id="setting-user" placeholder="admin" disabled>
                         </div>
                         <div class="input-group">
                             <label>Password</label>
-                            <input type="password" id="setting-pass" placeholder="password">
+                            <input type="password" id="setting-pass" placeholder="password" disabled>
                         </div>
-                        <button class="sys-btn" id="btn-save-settings" style="width:100%; border-color:var(--accent); color:var(--accent);">Connect Real Panel</button>
+                        <button class="sys-btn" id="btn-save-settings" style="width:100%; border-color:var(--accent); color:var(--accent);" disabled>Managed by Cloudflare</button>
                     </div>
                 </div>
             </section>
@@ -296,6 +318,6 @@
         </div>
     </div>
 
-    <script src="main.js?v=18" data-cfasync="false"></script>
+    <script src="main.js?v=19" data-cfasync="false"></script>
 </body>
 </html>
