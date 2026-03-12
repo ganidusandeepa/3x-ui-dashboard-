@@ -300,6 +300,15 @@ export async function onRequest(context) {
 
     const data = await apiRes.json();
 
+    // If request came from a browser navigation to /api/status, redirect back to UI
+    // so Access auth flow works smoothly.
+    const accept = request.headers.get('Accept') || '';
+    const secFetchDest = request.headers.get('Sec-Fetch-Dest') || '';
+    const isNav = accept.includes('text/html') || secFetchDest === 'document';
+    if (path === 'status' && isNav) {
+      return Response.redirect(`${url.origin}/?admin=1`, 302);
+    }
+
     return new Response(JSON.stringify({ success: true, obj: data.obj || data }), {
       headers: { "Content-Type": "application/json" }
     });

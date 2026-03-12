@@ -102,39 +102,10 @@ document.getElementById('tab-login-client').addEventListener('click', (e) => {
 // Default tab selection is handled on DOMContentLoaded using cached last tab.
 
 document.getElementById('btn-login-admin').addEventListener('click', async () => {
-    const btn = document.getElementById('btn-login-admin');
-    btn.textContent = "Checking...";
-
-    // cache last tab
+    // Cloudflare Access needs a top-level navigation to perform the Google redirect.
+    // A fetch() will not show the login UI.
     try { localStorage.setItem('xui_last_tab', 'admin'); } catch(e) {}
-
-    try {
-        // This endpoint is protected by Cloudflare Access.
-        // If user is not authenticated, Cloudflare will redirect to Google.
-        const res = await fetch('/api/auth', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'admin', username: '', password: '' })
-        });
-
-        // If Access blocks, response may be HTML; guard.
-        const text = await res.text();
-        let data;
-        try { data = JSON.parse(text); } catch(e) { data = null; }
-
-        if (data && data.success) {
-            currentRole = 'admin';
-            adminToken = 'zero-trust-secured';
-            try { sessionStorage.setItem('xui_admin_token', 'zero-trust-secured'); } catch(e) {}
-            await startAdminApp();
-        } else {
-            showToast((data && data.msg) ? data.msg : 'Google login required (Cloudflare Access)', 'error');
-        }
-    } catch(e) {
-        showToast('Google login required (Cloudflare Access)', 'error');
-    }
-
-    btn.textContent = "Continue with Google";
+    window.location.href = '/api/status';
 });
 
 document.getElementById('btn-login-client').addEventListener('click', async () => {
@@ -451,6 +422,20 @@ document.getElementById("btn-save-settings").addEventListener("click", async () 
 
 // Setup Initial State
 document.addEventListener("DOMContentLoaded", async () => {
+    // If we came back from Cloudflare Access (e.g., after visiting /api/status),
+    // verify admin session and open admin UI.
+    try {
+        const p = new URLSearchParams(window.location.search);
+        if (p.get('admin') === '1') {
+            // remove query param
+            window.history.replaceState({}, document.title, window.location.pathname);
+            currentRole = 'admin';
+            adminToken = 'zero-trust-secured';
+            sessionStorage.setItem('xui_admin_token', 'zero-trust-secured');
+            startAdminApp();
+        }
+    } catch(e) {}
+
     // Restore cached login inputs/tab
     try {
         const lastTab = localStorage.getItem('xui_last_tab') || 'client';
@@ -475,9 +460,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                       currentRole = 'admin';
                       adminToken = tok;
                       startAdminApp();
+                  } else {
+                      // Not logged in / blocked by Access
+                      sessionStorage.removeItem('xui_admin_token');
                   }
               })
-              .catch(() => {});
+              .catch(() => { sessionStorage.removeItem('xui_admin_token'); });
         } else if (lastTab === 'client' && cachedClient) {
             // auto run client check again
             fetch('/public/auth', {
