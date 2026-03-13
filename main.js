@@ -1438,13 +1438,26 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     } catch(e) {}
 
-    // Restore cached login inputs/tab
+    // Restore cached login inputs/tab + allow direct-link auto fill
     try {
+        const urlParams = new URLSearchParams(window.location.search);
         const lastTab = localStorage.getItem('xui_last_tab') || 'client';
         const cachedClient = localStorage.getItem('xui_client_id') || '';
-        if (cachedClient) document.getElementById('login-email').value = cachedClient;
 
-        if (lastTab === 'admin') {
+        const directClient = (urlParams.get('client') || urlParams.get('id') || '').trim();
+        const directAuto = urlParams.get('auto') === '1' || urlParams.get('auto') === 'true';
+
+        if (directClient) {
+            document.getElementById('login-email').value = directClient;
+            // also cache it
+            try { localStorage.setItem('xui_client_id', directClient); localStorage.setItem('xui_last_tab', 'client'); } catch(e) {}
+        } else if (cachedClient) {
+            document.getElementById('login-email').value = cachedClient;
+        }
+
+        if (directClient || directAuto) {
+            document.getElementById('tab-login-client').click();
+        } else if (lastTab === 'admin') {
             document.getElementById('tab-login-admin').click();
         } else {
             document.getElementById('tab-login-client').click();
@@ -1468,18 +1481,23 @@ document.addEventListener("DOMContentLoaded", async () => {
                   }
               })
               .catch(() => { sessionStorage.removeItem('xui_admin_token'); });
-        } else if (lastTab === 'client' && cachedClient) {
-            // auto run client check again
-            fetch('/public/auth', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ type: 'client', id: cachedClient })
-            }).then(r => r.json()).then(d => {
-                if (d && d.success) {
-                    currentRole = 'client';
-                    startClientApp(d.clientData);
-                }
-            }).catch(()=>{});
+        } else if ((lastTab === 'client' && cachedClient) || directAuto) {
+            const idToCheck = (directClient || cachedClient || '').trim();
+            if (idToCheck) {
+                // auto run client check again (or via direct link ?client=...&auto=1)
+                fetch('/public/auth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: 'client', id: idToCheck })
+                }).then(r => r.json()).then(d => {
+                    if (d && d.success) {
+                        currentRole = 'client';
+                        startClientApp(d.clientData);
+                    } else if (directAuto) {
+                        showToast((d && d.msg) || 'User not found', 'error');
+                    }
+                }).catch(()=>{ if (directAuto) showToast('Connection Error', 'error'); });
+            }
         }
 
     } catch(e) {}
