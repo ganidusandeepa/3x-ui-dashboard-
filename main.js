@@ -200,13 +200,19 @@ function startClientApp(client) {
         document.getElementById('user-progress').style.width = `100%`;
     }
 
-    // User Donut
-    const donutCtx = document.getElementById('userDonut').getContext('2d');
-    new Chart(donutCtx, {
-        type: 'doughnut',
-        data: { datasets: [{ data: [down, up], backgroundColor: ['#0066ff', '#00ffcc'], borderWidth: 0 }] },
-        options: { cutout: '80%', plugins: { tooltip: { enabled: false } } }
-    });
+    // User Donut (optional)
+    try {
+        if (typeof Chart !== 'undefined') {
+            const donutCtx = document.getElementById('userDonut')?.getContext?.('2d');
+            if (donutCtx) {
+                new Chart(donutCtx, {
+                    type: 'doughnut',
+                    data: { datasets: [{ data: [down, up], backgroundColor: ['#0066ff', '#00ffcc'], borderWidth: 0 }] },
+                    options: { cutout: '80%', plugins: { tooltip: { enabled: false } } }
+                });
+            }
+        }
+    } catch(e) { /* ignore chart failures */ }
 }
 
 // --- Admin Helper Functions ---
@@ -278,7 +284,15 @@ document.querySelectorAll('.nav-btn, .m-nav-btn').forEach(btn => btn.addEventLis
 // --- Admins Charts Setup ---
 let trafficChart, donutChart, cpuChart, ramChart;
 function initAdminCharts() {
-    const trafficCtx = document.getElementById('trafficChart').getContext('2d');
+    try {
+        if (typeof Chart === 'undefined') {
+            console.warn('Chart.js not loaded; skipping charts');
+            return;
+        }
+    } catch(e) { return; }
+
+    const trafficCtx = document.getElementById('trafficChart')?.getContext?.('2d');
+    if (!trafficCtx) return;
     trafficChart = new Chart(trafficCtx, {
         type: 'line', data: { labels: ['M','T','W','T','F','S','S'], datasets: [
             { label: 'Down', data: [5,8,4,7,9,12,10], borderColor: '#0066ff', tension: 0.4, fill: true, backgroundColor: 'rgba(0,102,255,0.05)' },
@@ -287,14 +301,14 @@ function initAdminCharts() {
         scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#555' } } } }
     });
 
-    const donutCtx = document.getElementById('usageDonut').getContext('2d');
-    donutChart = new Chart(donutCtx, { type: 'doughnut', data: { datasets: [{ data: [70, 30], backgroundColor: ['#0066ff', '#00ffcc'], borderWidth: 0 }] }, options: { cutout: '80%', plugins: { tooltip: { enabled: false } } }});
+    const donutCtx = document.getElementById('usageDonut')?.getContext?.('2d');
+    if (donutCtx) donutChart = new Chart(donutCtx, { type: 'doughnut', data: { datasets: [{ data: [70, 30], backgroundColor: ['#0066ff', '#00ffcc'], borderWidth: 0 }] }, options: { cutout: '80%', plugins: { tooltip: { enabled: false } } }});
 
-    const cpuCtx = document.getElementById('cpuChart').getContext('2d');
-    cpuChart = new Chart(cpuCtx, { type: 'line', data: { labels: Array(10).fill(''), datasets: [{ data: [10,15,12,20,18,25,22,30,28,35], borderColor: '#00ffcc', borderWidth: 2, pointRadius: 0, tension: 0.4 }]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }});
+    const cpuCtx = document.getElementById('cpuChart')?.getContext?.('2d');
+    if (cpuCtx) cpuChart = new Chart(cpuCtx, { type: 'line', data: { labels: Array(10).fill(''), datasets: [{ data: [10,15,12,20,18,25,22,30,28,35], borderColor: '#00ffcc', borderWidth: 2, pointRadius: 0, tension: 0.4 }]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }});
 
-    const ramCtx = document.getElementById('ramChart').getContext('2d');
-    ramChart = new Chart(ramCtx, { type: 'line', data: { labels: Array(10).fill(''), datasets: [{ data: [40,42,41,45,44,48,46,50,49,52], borderColor: '#0066ff', borderWidth: 2, pointRadius: 0, tension: 0.4 }]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }});
+    const ramCtx = document.getElementById('ramChart')?.getContext?.('2d');
+    if (ramCtx) ramChart = new Chart(ramCtx, { type: 'line', data: { labels: Array(10).fill(''), datasets: [{ data: [40,42,41,45,44,48,46,50,49,52], borderColor: '#0066ff', borderWidth: 2, pointRadius: 0, tension: 0.4 }]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }});
 }
 
 // --- Admin Data Injection ---
@@ -313,9 +327,18 @@ async function loadAdminData() {
             const down = toGB((s.netTraffic && (s.netTraffic.down ?? s.netTraffic.recv)) ?? s.netIO?.down);
             const up = toGB((s.netTraffic && (s.netTraffic.up ?? s.netTraffic.sent)) ?? s.netIO?.up);
             const total = (parseFloat(down) + parseFloat(up)).toFixed(2);
-            gsap.to('#total-traffic', { innerHTML: total, duration: 1.5, snap: { innerHTML: 0.01 } });
-            gsap.to('#dl-traffic', { innerHTML: down, duration: 1.5, snap: { innerHTML: 0.01 } });
-            gsap.to('#up-traffic', { innerHTML: up, duration: 1.5, snap: { innerHTML: 0.01 } });
+            try {
+                if (typeof gsap !== 'undefined') {
+                    gsap.to('#total-traffic', { innerHTML: total, duration: 1.5, snap: { innerHTML: 0.01 } });
+                    gsap.to('#dl-traffic', { innerHTML: down, duration: 1.5, snap: { innerHTML: 0.01 } });
+                    gsap.to('#up-traffic', { innerHTML: up, duration: 1.5, snap: { innerHTML: 0.01 } });
+                } else {
+                    document.getElementById('total-traffic').textContent = total;
+                    document.getElementById('dl-traffic').textContent = down;
+                    document.getElementById('up-traffic').textContent = up;
+                }
+            } catch(e) {}
+
             const cpuNum = Number(s.cpu);
             const cpuPct = Number.isFinite(cpuNum) ? Math.max(0, Math.min(100, cpuNum)) : 0;
             document.getElementById('cpu-percent').textContent = `${cpuPct.toFixed(1)}%`;
