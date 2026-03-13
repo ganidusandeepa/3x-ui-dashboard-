@@ -55,7 +55,20 @@
     <div class="dashboard-wrapper">
         <header>
             <div class="logo"><i class="fa-solid fa-server"></i> 3x-ui<span>.panel</span></div>
-            <div style="display:flex; align-items:center; gap:10px;">
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+                <!-- Admin quick nav (top tabs removed) -->
+                <select id="admin-tab-select" class="sys-btn" style="padding:10px 12px; display:none; min-width:170px;">
+                    <option value="overview">Overview</option>
+                    <option value="inbounds">Inbounds</option>
+                    <option value="clients">Clients</option>
+                    <option value="system">System</option>
+                </select>
+
+                <!-- Theme toggle -->
+                <button id="btn-theme" class="sys-btn" style="padding:10px 12px; display:flex; align-items:center; gap:8px;">
+                    <i class="fa-solid fa-moon"></i> Theme
+                </button>
+
                 <div class="user-status">
                     <div class="status-dot online"></div>
                     <span>Server: <strong style="color:var(--accent-color)">OK</strong></span>

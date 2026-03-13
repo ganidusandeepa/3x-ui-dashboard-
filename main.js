@@ -39,7 +39,23 @@ function showToast(msg, type="info") {
     toast.style.borderColor = type === 'error' ? 'var(--red)' : 'var(--accent)';
     toast.innerHTML = `<i class="fa-solid fa-bell"></i> <span>${msg}</span>`;
     container.appendChild(toast);
-    setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3000);
+
+    try {
+        if (typeof gsap !== 'undefined') {
+            gsap.fromTo(toast, { y: 8, opacity: 0 }, { y: 0, opacity: 1, duration: 0.18, ease: 'power2.out' });
+        }
+    } catch(e) {}
+
+    setTimeout(() => {
+        try {
+            if (typeof gsap !== 'undefined') {
+                gsap.to(toast, { opacity: 0, y: -6, duration: 0.18, onComplete: () => toast.remove() });
+                return;
+            }
+        } catch(e) {}
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
 }
 
 // --- Login / Auth UI Logic ---
@@ -125,11 +141,29 @@ async function startAdminApp() {
     try { document.querySelector('.desktop-nav')?.style && (document.querySelector('.desktop-nav').style.display = 'none'); } catch(e) {}
     try { document.querySelector('.mobile-nav')?.style && (document.querySelector('.mobile-nav').style.display = 'none'); } catch(e) {}
     document.getElementById('main-fab').style.display = 'flex';
-    
-    switchTab('overview');
+
+    // Show admin select nav
+    try {
+        const sel = document.getElementById('admin-tab-select');
+        if (sel) sel.style.display = 'inline-flex';
+        if (sel && sel.value) switchTab(sel.value);
+        else switchTab('overview');
+    } catch(e) {
+        switchTab('overview');
+    }
+
     initAdminCharts();
     await loadAdminData();
+
+    // Animate cards in (admin)
+    try {
+        if (typeof gsap !== 'undefined') {
+            gsap.from('.card, .item-card', { opacity: 0, y: 12, duration: 0.35, stagger: 0.02, ease: 'power2.out' });
+        }
+    } catch(e) {}
+
     loopInterval = setInterval(loadAdminData, 10000);
+
     // load settings
     fetch('/api/settings').then(r=>r.json()).then(set=>{
         if(set && set.panelUrl) {
@@ -144,6 +178,10 @@ function startClientApp(client) {
     document.getElementById('login-overlay').style.display = 'none';
     // show logout
     try { document.getElementById('btn-logout').style.display = 'inline-flex'; } catch(e) {}
+
+    // Hide admin select nav
+    try { const sel = document.getElementById('admin-tab-select'); if (sel) sel.style.display = 'none'; } catch(e) {}
+
     // Hide Admin Navigation completely (nav removed from HTML)
     try { document.querySelector('.desktop-nav')?.style && (document.querySelector('.desktop-nav').style.display = 'none'); } catch(e) {}
     try { document.querySelector('.mobile-nav')?.style && (document.querySelector('.mobile-nav').style.display = 'none'); } catch(e) {}
@@ -231,7 +269,86 @@ window.triggerAction = (action) => {
 };
 
 function closeModal() { document.getElementById('modal-overlay').classList.remove('active'); }
-document.getElementById('main-fab').addEventListener('click', () => { document.getElementById('modal-overlay').classList.add('active'); });
+document.getElementById('main-fab').addEventListener('click', () => {
+    const m = document.getElementById('modal-overlay');
+    m.classList.add('active');
+    try {
+        if (typeof gsap !== 'undefined') {
+            const card = m.querySelector('.modal-card');
+            if (card) gsap.fromTo(card, { opacity: 0, y: 18, scale: 0.98 }, { opacity: 1, y: 0, scale: 1, duration: 0.22, ease: 'power2.out' });
+        }
+    } catch(e) {}
+});
+
+// Theme toggle (night mode / day mode)
+try {
+    const btnTheme = document.getElementById('btn-theme');
+    const applyTheme = (mode) => {
+        const light = mode === 'light';
+        document.body.classList.toggle('theme-light', light);
+        try { localStorage.setItem('xui_theme', light ? 'light' : 'dark'); } catch(e) {}
+        try {
+            const icon = btnTheme?.querySelector('i');
+            if (icon) icon.className = light ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+        } catch(e) {}
+    };
+
+    // load saved theme
+    try { applyTheme(localStorage.getItem('xui_theme') || 'dark'); } catch(e) {}
+
+    btnTheme?.addEventListener('click', () => {
+        const isLight = document.body.classList.contains('theme-light');
+        applyTheme(isLight ? 'dark' : 'light');
+        try { if (typeof gsap !== 'undefined') gsap.fromTo(btnTheme, { scale: 0.98 }, { scale: 1, duration: 0.12 }); } catch(e) {}
+    });
+} catch(e) {}
+
+// Simple draggable modal (no GSAP Draggable plugin required)
+try {
+    const overlay = document.getElementById('modal-overlay');
+    const card = overlay?.querySelector('.modal-card');
+    if (card) {
+        let dragging = false;
+        let startX = 0, startY = 0;
+        let baseX = 0, baseY = 0;
+
+        const onDown = (e) => {
+            // only desktop-ish
+            if (e.button !== undefined && e.button !== 0) return;
+            dragging = true;
+            const pt = e.touches?.[0] || e;
+            startX = pt.clientX;
+            startY = pt.clientY;
+            const tr = card.style.transform || '';
+            const m = tr.match(/translate\(([-0-9.]+)px,\s*([-0-9.]+)px\)/);
+            baseX = m ? Number(m[1]) : 0;
+            baseY = m ? Number(m[2]) : 0;
+            card.style.cursor = 'grabbing';
+            e.preventDefault?.();
+        };
+
+        const onMove = (e) => {
+            if (!dragging) return;
+            const pt = e.touches?.[0] || e;
+            const dx = pt.clientX - startX;
+            const dy = pt.clientY - startY;
+            const x = baseX + dx;
+            const y = baseY + dy;
+            card.style.transform = `translate(${x}px, ${y}px)`;
+        };
+
+        const onUp = () => {
+            if (!dragging) return;
+            dragging = false;
+            card.style.cursor = '';
+        };
+
+        // drag only when modal is open and user starts drag on the card header-ish area
+        card.addEventListener('pointerdown', onDown);
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+    }
+} catch(e) {}
 
 // Admin API Tool
 try {
@@ -275,10 +392,45 @@ try {
 } catch(e) {}
 
 function switchTab(tabId) {
-    document.querySelectorAll('.nav-btn, .m-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === `tab-${tabId}`));
+    try {
+        document.querySelectorAll('.nav-btn, .m-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
+    } catch(e) {}
+
+    const allTabs = Array.from(document.querySelectorAll('.tab-content'));
+    const targetId = `tab-${tabId}`;
+    const target = document.getElementById(targetId);
+
+    if (!target) return;
+
+    // GSAP tab transition if available
+    if (typeof gsap !== 'undefined') {
+        const currentlyActive = allTabs.find(t => t.classList.contains('active'));
+        if (currentlyActive && currentlyActive !== target) {
+            gsap.to(currentlyActive, { opacity: 0, y: 6, duration: 0.15, onComplete: () => {
+                currentlyActive.classList.remove('active');
+                currentlyActive.style.opacity = '';
+                currentlyActive.style.transform = '';
+
+                target.classList.add('active');
+                gsap.fromTo(target, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.22 });
+            }});
+            return;
+        }
+    }
+
+    allTabs.forEach(t => t.classList.toggle('active', t.id === targetId));
 }
-document.querySelectorAll('.nav-btn, .m-nav-btn').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+
+// Old nav wiring (top tabs may be removed)
+try {
+    document.querySelectorAll('.nav-btn, .m-nav-btn').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+} catch(e) {}
+
+// Admin select (replacement for top tabs)
+try {
+    const sel = document.getElementById('admin-tab-select');
+    sel?.addEventListener('change', () => switchTab(sel.value));
+} catch(e) {}
 
 
 // --- Admins Charts Setup ---

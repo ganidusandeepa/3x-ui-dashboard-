@@ -14,6 +14,15 @@
     --nav-height: 70px;
 }
 
+/* Light theme override (toggle via body.theme-light) */
+body.theme-light {
+    --bg-color: #f6f7fb;
+    --card-bg: rgba(255, 255, 255, 0.75);
+    --border: rgba(10, 10, 10, 0.08);
+    --text: #0b0b0b;
+    --text-dim: #4b5563;
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { width: 100%; overflow-x: hidden; }
 body { font-family: var(--font); background: var(--bg-color); color: var(--text); line-height: 1.5; padding-bottom: env(safe-area-inset-bottom); }
