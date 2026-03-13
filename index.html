@@ -246,10 +246,42 @@
 
             <!-- CLIENTS TAB -->
             <section id="tab-clients" class="tab-content">
+                <div class="card" style="margin-bottom:14px;">
+                    <h3><i class="fa-solid fa-magnifying-glass"></i> Search Clients</h3>
+                    <div class="input-group" style="margin:0;">
+                        <label>Search (email / id)</label>
+                        <input id="client-search" type="text" placeholder="type to filter..." autocomplete="off">
+                    </div>
+                    <p class="subtitle" style="margin-top:10px;">Tip: click a client card to open details.</p>
+                </div>
+
                 <div class="client-container" id="client-list">
-                    <!-- Client cards for mobile -->
+                    <!-- Client cards injected by JS -->
                 </div>
             </section>
+
+            <!-- Client Detail Drawer -->
+            <div id="client-drawer" class="drawer" aria-hidden="true" style="display:none;">
+                <div class="drawer-backdrop" id="drawer-backdrop"></div>
+                <aside class="drawer-panel" role="dialog" aria-modal="true">
+                    <div class="drawer-header">
+                        <div>
+                            <div class="drawer-title" id="drawer-title">Client</div>
+                            <div class="drawer-sub" id="drawer-sub">-</div>
+                        </div>
+                        <button class="sys-btn" id="drawer-close" style="padding:10px 12px;"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+
+                    <div class="drawer-body" id="drawer-body">
+                        <!-- filled by JS -->
+                    </div>
+
+                    <div class="drawer-footer">
+                        <button class="sys-btn warning" id="drawer-reset"><i class="fa-solid fa-rotate"></i> Reset Traffic</button>
+                        <button class="sys-btn danger" id="drawer-delete"><i class="fa-solid fa-user-xmark"></i> Delete</button>
+                    </div>
+                </aside>
+            </div>
 
             <!-- SYSTEM TAB -->
             <section id="tab-system" class="tab-content">

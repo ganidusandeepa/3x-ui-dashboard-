@@ -66,6 +66,10 @@ let currentRole = null;
 let adminToken = null;
 let loopInterval = null;
 
+// Client list cache (for search + drawer)
+let __clientsCache = [];
+let __clientSearchTerm = '';
+
 function doLogout() {
     try { clearInterval(loopInterval); } catch(e) {}
     loopInterval = null;
@@ -606,6 +610,12 @@ function initAdminCharts() {
 // --- Admin Data Injection ---
 async function loadAdminData() {
     try {
+        window.__lastAdminUpdate = Date.now();
+        try {
+            const dot = document.querySelector('.user-status .status-dot');
+            if (dot) dot.classList.add('online');
+        } catch(e) {}
+
         const [stat, inb, cli, sys] = await Promise.all([
             fetch('/api/status', {headers: getAdminHeaders()}).then(r => r.json()),
             fetch('/api/inbounds', {headers: getAdminHeaders()}).then(r => r.json()),
@@ -701,32 +711,8 @@ async function loadAdminData() {
         }
 
         if (cli.success) {
-            const container = document.getElementById('client-list');
-            container.innerHTML = '';
-            cli.obj.forEach(user => {
-                container.innerHTML += `
-                    <div class="card item-card reveal" style="margin-bottom:10px; opacity:0; transform: translateY(14px);">
-                        <div class="item-header" style="margin:0">
-                            <div style="display:flex; align-items:center; gap:12px">
-                                <i class="fa-solid fa-circle-user" style="font-size:1.5rem; color:var(--blue)"></i>
-                                <div><strong>${user.email}</strong><p class="subtitle" style="margin:0">Limit: ${user.total > 0 ? toGB(user.total)+' GB' : 'Unlim'}</p></div>
-                            </div>
-                            <div class="stat-box" style="text-align:right"><span class="label">USED</span><span class="val" style="color:var(--accent)">${toGB(user.up + user.down)} GB</span></div>
-                        </div>
-                    </div>`;
-            });
-
-            // Stagger reveal (Clients)
-            try {
-                const els = container.querySelectorAll('.reveal');
-                if (typeof gsap !== 'undefined') {
-                    gsap.to(els, { opacity: 1, y: 0, duration: 0.35, stagger: 0.02, ease: 'power2.out' });
-                } else if (typeof anime !== 'undefined') {
-                    anime({ targets: els, opacity: [0,1], translateY: [14,0], delay: anime.stagger(20), duration: 320, easing: 'easeOutCubic' });
-                } else {
-                    els.forEach(el => { el.style.opacity = '1'; el.style.transform = 'translateY(0)'; });
-                }
-            } catch(e) {}
+            __clientsCache = Array.isArray(cli.obj) ? cli.obj : [];
+            renderClientsList(__clientsCache);
         }
 
         if (sys.success) {
@@ -737,6 +723,158 @@ async function loadAdminData() {
 
     } catch(e) { console.error("Data Load Error"); }
 }
+
+function renderClientsList(list) {
+    const container = document.getElementById('client-list');
+    if (!container) return;
+
+    const term = (__clientSearchTerm || '').toLowerCase();
+    const filtered = (Array.isArray(list) ? list : []).filter(u => {
+        const email = String(u.email || '').toLowerCase();
+        const id = String(u.id || u.uuid || '').toLowerCase();
+        return !term || email.includes(term) || id.includes(term);
+    });
+
+    container.innerHTML = '';
+    filtered.forEach((user) => {
+        const used = toGB((user.up || 0) + (user.down || 0));
+        const limitTxt = (user.total > 0) ? `${toGB(user.total)} GB` : 'Unlim';
+        const id = user.id || user.uuid || '';
+
+        container.innerHTML += `
+            <div class="card item-card reveal" data-client-email="${String(user.email||'').replace(/"/g,'&quot;')}" data-client-id="${String(id).replace(/"/g,'&quot;')}" style="margin-bottom:10px; opacity:0; transform: translateY(14px); cursor:pointer;">
+                <div class="item-header" style="margin:0">
+                    <div style="display:flex; align-items:center; gap:12px">
+                        <i class="fa-solid fa-circle-user" style="font-size:1.5rem; color:var(--blue)"></i>
+                        <div>
+                            <strong>${user.email}</strong>
+                            <p class="subtitle" style="margin:0">Limit: ${limitTxt}</p>
+                        </div>
+                    </div>
+                    <div class="stat-box" style="text-align:right"><span class="label">USED</span><span class="val" style="color:var(--accent)">${used} GB</span></div>
+                </div>
+            </div>`;
+    });
+
+    // animate list in
+    try {
+        const els = container.querySelectorAll('.reveal');
+        if (typeof gsap !== 'undefined') {
+            gsap.to(els, { opacity: 1, y: 0, duration: 0.35, stagger: 0.02, ease: 'power2.out' });
+        } else if (typeof anime !== 'undefined') {
+            anime({ targets: els, opacity: [0,1], translateY: [14,0], delay: anime.stagger(20), duration: 320, easing: 'easeOutCubic' });
+        } else {
+            els.forEach(el => { el.style.opacity = '1'; el.style.transform = 'translateY(0)'; });
+        }
+    } catch(e) {}
+}
+
+function openClientDrawer(user) {
+    const wrap = document.getElementById('client-drawer');
+    const backdrop = document.getElementById('drawer-backdrop');
+    const panel = wrap?.querySelector('.drawer-panel');
+    if (!wrap || !backdrop || !panel) return;
+
+    document.getElementById('drawer-title').textContent = user.email || 'Client';
+    document.getElementById('drawer-sub').textContent = user.id || user.uuid || '';
+
+    const used = toGB((user.up || 0) + (user.down || 0));
+    const down = toGB(user.down || 0);
+    const up = toGB(user.up || 0);
+    const limit = user.total > 0 ? `${toGB(user.total)} GB` : 'Unlimited';
+
+    const body = document.getElementById('drawer-body');
+    if (body) {
+        body.innerHTML = `
+            <div class="card" style="padding:14px;">
+                <h3 style="margin-bottom:10px;"><i class="fa-solid fa-chart-simple"></i> Usage</h3>
+                <div class="info-row"><span>Used:</span> <strong id="drawer-used">${used} GB</strong></div>
+                <div class="info-row"><span>Download:</span> <strong>${down} GB</strong></div>
+                <div class="info-row"><span>Upload:</span> <strong>${up} GB</strong></div>
+                <div class="info-row"><span>Limit:</span> <strong>${limit}</strong></div>
+            </div>
+            <div class="card" style="padding:14px;">
+                <h3 style="margin-bottom:10px;"><i class="fa-solid fa-screwdriver-wrench"></i> Quick Actions</h3>
+                <p class="subtitle">Uses the same tools as “Client Tools” tab.</p>
+            </div>
+        `;
+    }
+
+    // wire actions
+    try {
+        const setToolEmail = () => {
+            const tool = document.getElementById('tool-email');
+            if (tool) tool.value = user.email || '';
+        };
+        document.getElementById('drawer-reset').onclick = () => { setToolEmail(); document.getElementById('btn-client-reset')?.click(); };
+        document.getElementById('drawer-delete').onclick = () => { setToolEmail(); document.getElementById('btn-client-del')?.click(); };
+    } catch(e) {}
+
+    wrap.style.display = 'block';
+    wrap.setAttribute('aria-hidden', 'false');
+
+    try {
+        if (typeof gsap !== 'undefined') {
+            gsap.to(backdrop, { opacity: 1, duration: 0.2 });
+            gsap.to(panel, { x: 0, duration: 0.28, ease: 'power2.out' });
+        } else if (typeof anime !== 'undefined') {
+            anime({ targets: backdrop, opacity: [0,1], duration: 200, easing: 'linear' });
+            anime({ targets: panel, translateX: ['110%','0%'], duration: 280, easing: 'easeOutCubic' });
+        } else {
+            backdrop.style.opacity = '1';
+            panel.style.transform = 'translateX(0)';
+        }
+    } catch(e) {}
+}
+
+function closeClientDrawer() {
+    const wrap = document.getElementById('client-drawer');
+    const backdrop = document.getElementById('drawer-backdrop');
+    const panel = wrap?.querySelector('.drawer-panel');
+    if (!wrap || !backdrop || !panel) return;
+
+    const done = () => {
+        wrap.style.display = 'none';
+        wrap.setAttribute('aria-hidden', 'true');
+        backdrop.style.opacity = '0';
+        panel.style.transform = '';
+    };
+
+    try {
+        if (typeof gsap !== 'undefined') {
+            gsap.to(backdrop, { opacity: 0, duration: 0.18 });
+            gsap.to(panel, { x: '110%', duration: 0.22, ease: 'power2.in', onComplete: done });
+            return;
+        }
+        if (typeof anime !== 'undefined') {
+            anime({ targets: backdrop, opacity: [1,0], duration: 180, easing: 'linear' });
+            anime({ targets: panel, translateX: ['0%','110%'], duration: 220, easing: 'easeInCubic', complete: done });
+            return;
+        }
+    } catch(e) {}
+
+    done();
+}
+
+// Clients: search + click-to-drawer
+try {
+    const inp = document.getElementById('client-search');
+    inp?.addEventListener('input', () => {
+        __clientSearchTerm = inp.value || '';
+        renderClientsList(__clientsCache);
+    });
+
+    document.getElementById('client-list')?.addEventListener('click', (e) => {
+        const card = e.target?.closest?.('[data-client-email]');
+        if (!card) return;
+        const email = card.getAttribute('data-client-email');
+        const user = (__clientsCache || []).find(u => String(u.email) === String(email));
+        if (user) openClientDrawer(user);
+    });
+
+    document.getElementById('drawer-close')?.addEventListener('click', closeClientDrawer);
+    document.getElementById('drawer-backdrop')?.addEventListener('click', closeClientDrawer);
+} catch(e) {}
 
 // Settings Saving
 // Cloudflare Pages backend is env-var based; settings POST is read-only.
