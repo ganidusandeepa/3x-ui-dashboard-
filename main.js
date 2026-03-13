@@ -40,36 +40,17 @@ function showToast(msg, type="info") {
     toast.innerHTML = `<i class="fa-solid fa-bell"></i> <span>${msg}</span>`;
     container.appendChild(toast);
 
-    // Prefer anime.js if present, else GSAP, else CSS
+    // GSAP toast animation (fallback to CSS)
     try {
-        if (typeof anime !== 'undefined') {
-            anime({
-                targets: toast,
-                translateY: [10, 0],
-                opacity: [0, 1],
-                duration: 220,
-                easing: 'easeOutCubic'
-            });
-        } else if (typeof gsap !== 'undefined') {
-            gsap.fromTo(toast, { y: 8, opacity: 0 }, { y: 0, opacity: 1, duration: 0.18, ease: 'power2.out' });
+        if (typeof gsap !== 'undefined') {
+            gsap.fromTo(toast, { y: 10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.2, ease: 'power2.out' });
         }
     } catch(e) {}
 
     setTimeout(() => {
         try {
-            if (typeof anime !== 'undefined') {
-                anime({
-                    targets: toast,
-                    translateY: [0, -8],
-                    opacity: [1, 0],
-                    duration: 180,
-                    easing: 'easeInCubic',
-                    complete: () => toast.remove()
-                });
-                return;
-            }
             if (typeof gsap !== 'undefined') {
-                gsap.to(toast, { opacity: 0, y: -6, duration: 0.18, onComplete: () => toast.remove() });
+                gsap.to(toast, { opacity: 0, y: -8, duration: 0.18, ease: 'power2.in', onComplete: () => toast.remove() });
                 return;
             }
         } catch(e) {}
@@ -175,9 +156,32 @@ async function startAdminApp() {
     initAdminCharts();
     await loadAdminData();
 
-    // Animate cards in (admin)
+    // Animate cards in (admin) + scroll reveals
     try {
-        if (typeof gsap !== 'undefined') {
+        if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
+            gsap.registerPlugin(ScrollTrigger);
+
+            // Initial load: soft stagger
+            gsap.from('.card, .item-card', { opacity: 0, y: 12, duration: 0.35, stagger: 0.02, ease: 'power2.out' });
+
+            // Scroll reveal for long pages
+            gsap.utils.toArray('.card, .item-card').forEach((el) => {
+                gsap.fromTo(el,
+                    { opacity: 0, y: 18 },
+                    {
+                        opacity: 1,
+                        y: 0,
+                        duration: 0.5,
+                        ease: 'power2.out',
+                        scrollTrigger: {
+                            trigger: el,
+                            start: 'top 85%',
+                            toggleActions: 'play none none reverse'
+                        }
+                    }
+                );
+            });
+        } else if (typeof gsap !== 'undefined') {
             gsap.from('.card, .item-card', { opacity: 0, y: 12, duration: 0.35, stagger: 0.02, ease: 'power2.out' });
         }
     } catch(e) {}
@@ -296,17 +300,8 @@ document.getElementById('main-fab').addEventListener('click', () => {
         const card = m.querySelector('.modal-card');
         if (!card) return;
 
-        if (typeof anime !== 'undefined') {
-            anime({
-                targets: card,
-                opacity: [0, 1],
-                translateY: [22, 0],
-                scale: [0.98, 1],
-                duration: 260,
-                easing: 'easeOutExpo'
-            });
-        } else if (typeof gsap !== 'undefined') {
-            gsap.fromTo(card, { opacity: 0, y: 18, scale: 0.98 }, { opacity: 1, y: 0, scale: 1, duration: 0.22, ease: 'power2.out' });
+        if (typeof gsap !== 'undefined') {
+            gsap.fromTo(card, { opacity: 0, y: 22, scale: 0.98 }, { opacity: 1, y: 0, scale: 1, duration: 0.26, ease: 'power2.out' });
         }
     } catch(e) {}
 });
@@ -334,17 +329,27 @@ try {
     });
 } catch(e) {}
 
-// Simple draggable modal (no GSAP Draggable plugin required)
+// Draggable modal (uses GSAP Draggable if available; fallback to basic pointer drag)
 try {
     const overlay = document.getElementById('modal-overlay');
     const card = overlay?.querySelector('.modal-card');
-    if (card) {
+
+    if (card && typeof gsap !== 'undefined' && typeof Draggable !== 'undefined') {
+        gsap.registerPlugin(Draggable);
+        Draggable.create(card, {
+            type: 'x,y',
+            inertia: false, // InertiaPlugin is paid; keep off.
+            bounds: window,
+            cursor: 'grab',
+            activeCursor: 'grabbing'
+        });
+    } else if (card) {
+        // fallback
         let dragging = false;
         let startX = 0, startY = 0;
         let baseX = 0, baseY = 0;
 
         const onDown = (e) => {
-            // only desktop-ish
             if (e.button !== undefined && e.button !== 0) return;
             dragging = true;
             const pt = e.touches?.[0] || e;
@@ -363,9 +368,7 @@ try {
             const pt = e.touches?.[0] || e;
             const dx = pt.clientX - startX;
             const dy = pt.clientY - startY;
-            const x = baseX + dx;
-            const y = baseY + dy;
-            card.style.transform = `translate(${x}px, ${y}px)`;
+            card.style.transform = `translate(${baseX + dx}px, ${baseY + dy}px)`;
         };
 
         const onUp = () => {
@@ -374,7 +377,6 @@ try {
             card.style.cursor = '';
         };
 
-        // drag only when modal is open and user starts drag on the card header-ish area
         card.addEventListener('pointerdown', onDown);
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
