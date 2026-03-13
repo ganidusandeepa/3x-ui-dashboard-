@@ -65,6 +65,8 @@ function animateNumber(elOrSelector, to, opts = {}) {
 let currentRole = null;
 let adminToken = null;
 let loopInterval = null;
+let clientLoopInterval = null;
+let __clientLast = null; // { downBytes, upBytes, ts }
 
 // Background (Vanta)
 let __vanta = null;
@@ -75,7 +77,10 @@ let __clientSearchTerm = '';
 
 function doLogout() {
     try { clearInterval(loopInterval); } catch(e) {}
+    try { clearInterval(clientLoopInterval); } catch(e) {}
     loopInterval = null;
+    clientLoopInterval = null;
+    __clientLast = null;
     currentRole = null;
     adminToken = null;
     try { sessionStorage.removeItem('xui_admin_token'); } catch(e) {}
@@ -284,6 +289,31 @@ async function startAdminApp() {
     }).catch(()=>{});
 }
 
+function updateClientSpeedsFromDelta(nowDown, nowUp) {
+    try {
+        const now = Date.now();
+        if (!__clientLast) {
+            __clientLast = { downBytes: Number(nowDown)||0, upBytes: Number(nowUp)||0, ts: now };
+            setTextSafe('#user-dl-speed', '0');
+            setTextSafe('#user-up-speed', '0');
+            return;
+        }
+        const dt = (now - __clientLast.ts) / 1000;
+        if (dt <= 0) return;
+        const dDown = (Number(nowDown)||0) - (__clientLast.downBytes||0);
+        const dUp = (Number(nowUp)||0) - (__clientLast.upBytes||0);
+
+        // Mbps
+        const downMbps = Math.max(0, (dDown * 8) / (dt * 1e6));
+        const upMbps = Math.max(0, (dUp * 8) / (dt * 1e6));
+
+        animateNumber('#user-dl-speed', downMbps, { decimals: 2, duration: 500 });
+        animateNumber('#user-up-speed', upMbps, { decimals: 2, duration: 500 });
+
+        __clientLast = { downBytes: Number(nowDown)||0, upBytes: Number(nowUp)||0, ts: now };
+    } catch(e) {}
+}
+
 function startClientApp(client) {
     document.getElementById('login-overlay').style.display = 'none';
     // show logout
@@ -301,6 +331,9 @@ function startClientApp(client) {
     // Hide all tabs except user view
     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
     document.getElementById('tab-user-view').classList.add('active');
+
+    // compute speed (based on delta bytes between refreshes)
+    updateClientSpeedsFromDelta(client.down, client.up);
 
     const down = parseFloat(toGB(client.down));
     const up = parseFloat(toGB(client.up));
@@ -371,7 +404,9 @@ function startClientApp(client) {
         if (typeof Chart !== 'undefined') {
             const donutCtx = document.getElementById('userDonut')?.getContext?.('2d');
             if (donutCtx) {
-                new Chart(donutCtx, {
+                // destroy existing chart to avoid stacking
+                try { window.__userDonut?.destroy?.(); } catch(e) {}
+                window.__userDonut = new Chart(donutCtx, {
                     type: 'doughnut',
                     data: { datasets: [{ data: [down, up], backgroundColor: ['#0066ff', '#00ffcc'], borderWidth: 0 }] },
                     options: { cutout: '80%', plugins: { tooltip: { enabled: false } } }
@@ -379,6 +414,25 @@ function startClientApp(client) {
             }
         }
     } catch(e) { /* ignore chart failures */ }
+
+    // Auto-refresh client stats every 30s (to update speed + usage)
+    try { clearInterval(clientLoopInterval); } catch(e) {}
+    clientLoopInterval = null;
+    try {
+        const idToCheck = (localStorage.getItem('xui_client_id') || client.email || '').trim();
+        if (idToCheck) {
+            clientLoopInterval = setInterval(() => {
+                fetch('/public/auth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: 'client', id: idToCheck })
+                })
+                .then(r => r.json())
+                .then(d => { if (d && d.success) startClientApp(d.clientData); })
+                .catch(()=>{});
+            }, 30000);
+        }
+    } catch(e) {}
 }
 
 // --- Admin Helper Functions ---
