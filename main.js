@@ -4,6 +4,64 @@ const toGB = (bytes) => {
     const safe = Number.isFinite(n) ? n : 0;
     return (safe / (1024 ** 3)).toFixed(2);
 };
+
+function setTextSafe(selOrEl, text) {
+    try {
+        const el = typeof selOrEl === 'string' ? document.querySelector(selOrEl) : selOrEl;
+        if (el) el.textContent = String(text);
+    } catch(e) {}
+}
+
+function animateNumber(elOrSelector, to, opts = {}) {
+    const duration = Number(opts.duration ?? 800);
+    const decimals = Number(opts.decimals ?? 2);
+    const from = Number(opts.from ?? null);
+    const formatter = typeof opts.formatter === 'function'
+        ? opts.formatter
+        : (v) => Number(v).toFixed(decimals);
+
+    const el = typeof elOrSelector === 'string' ? document.querySelector(elOrSelector) : elOrSelector;
+    if (!el) return;
+
+    let startVal = Number.isFinite(from) ? from : Number(el.textContent);
+    if (!Number.isFinite(startVal)) startVal = 0;
+    const endVal = Number(to);
+    if (!Number.isFinite(endVal)) {
+        el.textContent = formatter(0);
+        return;
+    }
+
+    // Prefer GSAP core, else anime.js
+    try {
+        if (typeof gsap !== 'undefined') {
+            const obj = { v: startVal };
+            gsap.to(obj, {
+                v: endVal,
+                duration: duration / 1000,
+                ease: 'power2.out',
+                onUpdate: () => { el.textContent = formatter(obj.v); }
+            });
+            return;
+        }
+    } catch(e) {}
+
+    try {
+        if (typeof anime !== 'undefined') {
+            const obj = { v: startVal };
+            anime({
+                targets: obj,
+                v: endVal,
+                duration,
+                easing: 'easeOutCubic',
+                update: () => { el.textContent = formatter(obj.v); }
+            });
+            return;
+        }
+    } catch(e) {}
+
+    el.textContent = formatter(endVal);
+}
+
 let currentRole = null;
 let adminToken = null;
 let loopInterval = null;
@@ -432,25 +490,56 @@ function switchTab(tabId) {
     const allTabs = Array.from(document.querySelectorAll('.tab-content'));
     const targetId = `tab-${tabId}`;
     const target = document.getElementById(targetId);
-
     if (!target) return;
 
-    // GSAP tab transition if available
-    if (typeof gsap !== 'undefined') {
-        const currentlyActive = allTabs.find(t => t.classList.contains('active'));
-        if (currentlyActive && currentlyActive !== target) {
-            gsap.to(currentlyActive, { opacity: 0, y: 6, duration: 0.15, onComplete: () => {
+    const currentlyActive = allTabs.find(t => t.classList.contains('active'));
+    if (currentlyActive === target) return;
+
+    // Prefer GSAP (free core), fallback to anime.js
+    if (typeof gsap !== 'undefined' && currentlyActive) {
+        gsap.to(currentlyActive, {
+            opacity: 0,
+            y: 8,
+            duration: 0.18,
+            ease: 'power2.inOut',
+            onComplete: () => {
                 currentlyActive.classList.remove('active');
                 currentlyActive.style.opacity = '';
                 currentlyActive.style.transform = '';
 
                 target.classList.add('active');
-                gsap.fromTo(target, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.22 });
-            }});
-            return;
-        }
+                gsap.fromTo(target, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.26, ease: 'power2.out' });
+            }
+        });
+        return;
     }
 
+    if (typeof anime !== 'undefined' && currentlyActive) {
+        anime({
+            targets: currentlyActive,
+            opacity: [1, 0],
+            translateY: [0, 8],
+            duration: 180,
+            easing: 'easeInOutCubic',
+            complete: () => {
+                currentlyActive.classList.remove('active');
+                currentlyActive.style.opacity = '';
+                currentlyActive.style.transform = '';
+
+                target.classList.add('active');
+                anime({
+                    targets: target,
+                    opacity: [0, 1],
+                    translateY: [14, 0],
+                    duration: 260,
+                    easing: 'easeOutCubic'
+                });
+            }
+        });
+        return;
+    }
+
+    // no animation fallback
     allTabs.forEach(t => t.classList.toggle('active', t.id === targetId));
 }
 
@@ -513,16 +602,14 @@ async function loadAdminData() {
             const up = toGB((s.netTraffic && (s.netTraffic.up ?? s.netTraffic.sent)) ?? s.netIO?.up);
             const total = (parseFloat(down) + parseFloat(up)).toFixed(2);
             try {
-                if (typeof gsap !== 'undefined') {
-                    gsap.to('#total-traffic', { innerHTML: total, duration: 1.5, snap: { innerHTML: 0.01 } });
-                    gsap.to('#dl-traffic', { innerHTML: down, duration: 1.5, snap: { innerHTML: 0.01 } });
-                    gsap.to('#up-traffic', { innerHTML: up, duration: 1.5, snap: { innerHTML: 0.01 } });
-                } else {
-                    document.getElementById('total-traffic').textContent = total;
-                    document.getElementById('dl-traffic').textContent = down;
-                    document.getElementById('up-traffic').textContent = up;
-                }
-            } catch(e) {}
+                animateNumber('#total-traffic', Number(total), { decimals: 2, duration: 900 });
+                animateNumber('#dl-traffic', Number(down), { decimals: 2, duration: 900 });
+                animateNumber('#up-traffic', Number(up), { decimals: 2, duration: 900 });
+            } catch(e) {
+                setTextSafe('#total-traffic', total);
+                setTextSafe('#dl-traffic', down);
+                setTextSafe('#up-traffic', up);
+            }
 
             const cpuNum = Number(s.cpu);
             const cpuPct = Number.isFinite(cpuNum) ? Math.max(0, Math.min(100, cpuNum)) : 0;
