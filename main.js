@@ -92,6 +92,16 @@ document.addEventListener('click', (e) => {
     if (e.target && (e.target.id === 'btn-logout' || e.target.closest('#btn-logout'))) {
         doLogout();
     }
+
+    // Micro interaction: button press
+    try {
+        const btn = e.target?.closest?.('button');
+        if (btn && typeof gsap !== 'undefined') {
+            gsap.fromTo(btn, { scale: 0.98 }, { scale: 1, duration: 0.14, ease: 'power2.out' });
+        } else if (btn && typeof anime !== 'undefined') {
+            anime({ targets: btn, scale: [0.98, 1], duration: 160, easing: 'easeOutCubic' });
+        }
+    } catch(err) {}
 });
 
 function showToast(msg, type="info") {
@@ -218,33 +228,43 @@ async function startAdminApp() {
     initAdminCharts();
     await loadAdminData();
 
-    // Animate cards in (admin) + scroll reveals
+    // Hero + cards intro + scroll reveals
     try {
-        if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
-            gsap.registerPlugin(ScrollTrigger);
+        const hero = document.querySelector('.data-card-hero');
+        if (typeof gsap !== 'undefined') {
+            if (hero) {
+                gsap.fromTo(hero, { opacity: 0, y: 18, scale: 0.98 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: 'power2.out' });
+                // subtle glow pulse
+                gsap.fromTo(hero, { boxShadow: '0 0 0 rgba(0,255,204,0)' }, { boxShadow: '0 0 34px rgba(0,255,204,0.14)', duration: 0.8, yoyo: true, repeat: 1, ease: 'sine.inOut' });
+            }
 
-            // Initial load: soft stagger
-            gsap.from('.card, .item-card', { opacity: 0, y: 12, duration: 0.35, stagger: 0.02, ease: 'power2.out' });
+            gsap.from('.resource-card, .card:not(.data-card-hero)', { opacity: 0, y: 12, duration: 0.35, stagger: 0.02, ease: 'power2.out', delay: 0.05 });
 
-            // Scroll reveal for long pages
-            gsap.utils.toArray('.card, .item-card').forEach((el) => {
-                gsap.fromTo(el,
-                    { opacity: 0, y: 18 },
-                    {
-                        opacity: 1,
-                        y: 0,
-                        duration: 0.5,
-                        ease: 'power2.out',
-                        scrollTrigger: {
-                            trigger: el,
-                            start: 'top 85%',
-                            toggleActions: 'play none none reverse'
+            if (typeof ScrollTrigger !== 'undefined') {
+                gsap.registerPlugin(ScrollTrigger);
+                gsap.utils.toArray('.card, .item-card').forEach((el) => {
+                    gsap.fromTo(el,
+                        { opacity: 0, y: 18 },
+                        {
+                            opacity: 1,
+                            y: 0,
+                            duration: 0.5,
+                            ease: 'power2.out',
+                            scrollTrigger: {
+                                trigger: el,
+                                start: 'top 85%',
+                                toggleActions: 'play none none reverse'
+                            }
                         }
-                    }
-                );
-            });
-        } else if (typeof gsap !== 'undefined') {
-            gsap.from('.card, .item-card', { opacity: 0, y: 12, duration: 0.35, stagger: 0.02, ease: 'power2.out' });
+                    );
+                });
+            }
+        } else if (typeof anime !== 'undefined') {
+            if (hero) {
+                anime({ targets: hero, opacity: [0,1], translateY: [18,0], scale: [0.98,1], duration: 520, easing: 'easeOutCubic' });
+            }
+            const cards = document.querySelectorAll('.card, .item-card');
+            anime({ targets: cards, opacity: [0,1], translateY: [14,0], delay: anime.stagger(20), duration: 380, easing: 'easeOutCubic' });
         }
     } catch(e) {}
 
@@ -409,19 +429,34 @@ try {
     });
 } catch(e) {}
 
-// Draggable modal (uses GSAP Draggable if available; fallback to basic pointer drag)
+// Modal: draggable bottom-sheet style (drag down to close). Uses GSAP Draggable if available; fallback to basic pointer drag.
 try {
     const overlay = document.getElementById('modal-overlay');
     const card = overlay?.querySelector('.modal-card');
+
+    const closeIfDragged = (dy) => {
+        if (dy > 140) {
+            closeModal();
+            try { card.style.transform = ''; } catch(e) {}
+            return true;
+        }
+        return false;
+    };
 
     if (card && typeof gsap !== 'undefined' && typeof Draggable !== 'undefined') {
         gsap.registerPlugin(Draggable);
         Draggable.create(card, {
             type: 'x,y',
-            inertia: false, // InertiaPlugin is paid; keep off.
+            inertia: false, // InertiaPlugin is paid.
             bounds: window,
             cursor: 'grab',
-            activeCursor: 'grabbing'
+            activeCursor: 'grabbing',
+            onDragEnd: function() {
+                const dy = this.y || 0;
+                if (!closeIfDragged(dy)) {
+                    gsap.to(card, { x: 0, y: 0, duration: 0.18, ease: 'power2.out' });
+                }
+            }
         });
     } else if (card) {
         // fallback
@@ -455,6 +490,12 @@ try {
             if (!dragging) return;
             dragging = false;
             card.style.cursor = '';
+            const tr = card.style.transform || '';
+            const m = tr.match(/translate\(([-0-9.]+)px,\s*([-0-9.]+)px\)/);
+            const dy = m ? Number(m[2]) : 0;
+            if (!closeIfDragged(dy)) {
+                card.style.transform = '';
+            }
         };
 
         card.addEventListener('pointerdown', onDown);
@@ -721,7 +762,23 @@ async function loadAdminData() {
             cpuChart.update(); ramChart.update();
         }
 
-    } catch(e) { console.error("Data Load Error"); }
+    } catch(e) {
+        console.error("Data Load Error", e);
+        try {
+            const dot = document.querySelector('.user-status .status-dot');
+            if (dot) {
+                dot.classList.remove('online');
+                dot.style.background = 'var(--red)';
+                dot.style.boxShadow = '0 0 10px var(--red)';
+                if (typeof gsap !== 'undefined') {
+                    gsap.fromTo(dot, { x: -2 }, { x: 2, duration: 0.06, repeat: 5, yoyo: true, clearProps: 'x' });
+                } else if (typeof anime !== 'undefined') {
+                    anime({ targets: dot, translateX: [-2,2], duration: 60, direction: 'alternate', loop: 5, easing: 'linear' });
+                }
+            }
+        } catch(e2) {}
+        try { showToast('Connection error while loading data', 'error'); } catch(e3) {}
+    }
 }
 
 function renderClientsList(list) {
@@ -1184,6 +1241,69 @@ try {
     const out = () => document.getElementById('addc-result');
     const getInboundId = () => Number(document.getElementById('addc-inbound')?.value);
     const getEmail = () => (document.getElementById('tool-email')?.value || '').trim();
+
+    // Draggable sliders for limit/days (GSAP Draggable -> anime.js fallback)
+    const wireDragSlider = ({ trackId, handleId, fillId, inputId, valId, max, step=1 }) => {
+        const track = document.getElementById(trackId);
+        const handle = document.getElementById(handleId);
+        const fill = document.getElementById(fillId);
+        const input = document.getElementById(inputId);
+        const outVal = document.getElementById(valId);
+        if (!track || !handle || !fill || !input || !outVal) return;
+
+        const setFromValue = (v) => {
+            const clamped = Math.max(0, Math.min(max, Math.round(Number(v)/step)*step));
+            input.value = String(clamped);
+            outVal.textContent = String(clamped);
+            const pct = (clamped / max) * 100;
+            fill.style.width = `${pct}%`;
+            handle.style.left = `${pct}%`;
+        };
+
+        // sync when user types
+        input.addEventListener('input', () => setFromValue(input.value));
+
+        // init
+        setFromValue(input.value || 0);
+
+        const pxToVal = (x) => {
+            const r = track.getBoundingClientRect();
+            const pct = Math.max(0, Math.min(1, (x - r.left) / r.width));
+            return pct * max;
+        };
+
+        // click on track
+        track.addEventListener('pointerdown', (e) => {
+            setFromValue(pxToVal(e.clientX));
+        });
+
+        if (typeof gsap !== 'undefined' && typeof Draggable !== 'undefined') {
+            gsap.registerPlugin(Draggable);
+            Draggable.create(handle, {
+                type: 'x',
+                bounds: track,
+                onDrag: function() {
+                    const r = track.getBoundingClientRect();
+                    const cx = r.left + (this.x + (handle.offsetWidth/2));
+                    setFromValue(pxToVal(cx));
+                },
+                onPress: function() { handle.style.cursor = 'grabbing'; },
+                onRelease: function() { handle.style.cursor = 'grab'; }
+            });
+        } else {
+            // basic drag fallback
+            let dragging=false;
+            const onDown = (e) => { dragging=true; handle.setPointerCapture?.(e.pointerId); handle.style.cursor='grabbing'; };
+            const onMove = (e) => { if(!dragging) return; setFromValue(pxToVal(e.clientX)); };
+            const onUp = () => { dragging=false; handle.style.cursor='grab'; };
+            handle.addEventListener('pointerdown', onDown);
+            window.addEventListener('pointermove', onMove);
+            window.addEventListener('pointerup', onUp);
+        }
+    };
+
+    wireDragSlider({ trackId:'limit-track', handleId:'limit-handle', fillId:'limit-fill', inputId:'addc-limit', valId:'limit-val', max: 500, step: 1 });
+    wireDragSlider({ trackId:'days-track', handleId:'days-handle', fillId:'days-fill', inputId:'addc-days', valId:'days-val', max: 365, step: 1 });
 
     document.getElementById('btn-add-client')?.addEventListener('click', addClientVless);
     document.getElementById('btn-add-client-refresh')?.addEventListener('click', loadAdminData);

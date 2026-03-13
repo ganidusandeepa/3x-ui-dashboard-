@@ -199,10 +199,25 @@
                     <div class="input-group">
                         <label>Traffic Limit (GB) - 0 = Unlimited</label>
                         <input id="addc-limit" type="number" value="0" min="0" step="1">
+                        <div class="drag-row" style="margin-top:10px;">
+                            <div class="drag-track" id="limit-track">
+                                <div class="drag-fill" id="limit-fill"></div>
+                                <div class="drag-handle" id="limit-handle" title="Drag"></div>
+                            </div>
+                            <div class="drag-val"><span id="limit-val">0</span> GB</div>
+                        </div>
+                        <p class="subtitle" style="margin-top:10px;">Drag the handle to set limit quickly.</p>
                     </div>
                     <div class="input-group">
                         <label>Expiry (days)</label>
                         <input id="addc-days" type="number" value="30" min="0" step="1">
+                        <div class="drag-row" style="margin-top:10px;">
+                            <div class="drag-track" id="days-track">
+                                <div class="drag-fill" id="days-fill"></div>
+                                <div class="drag-handle" id="days-handle" title="Drag"></div>
+                            </div>
+                            <div class="drag-val"><span id="days-val">30</span> days</div>
+                        </div>
                     </div>
                     <div class="sys-actions" style="grid-template-columns:1fr 1fr;">
                         <button class="sys-btn" id="btn-add-client"><i class="fa-solid fa-plus"></i> Create</button>
