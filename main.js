@@ -1,46 +1,3 @@
-// --- 3D Background Setup ---
-try {
-    const canvasContainer = document.getElementById('canvas-container');
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.z = 30;
-
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    canvasContainer.appendChild(renderer.domElement);
-
-    const particlesGeometry = new THREE.BufferGeometry();
-    const posArray = new Float32Array(1000 * 3);
-    for(let i = 0; i < 1000 * 3; i++) posArray[i] = (Math.random() - 0.5) * 100;
-    particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
-
-    const particlesMaterial = new THREE.PointsMaterial({
-        size: 0.1, color: 0x00ffcc, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending
-    });
-    const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
-    scene.add(particlesMesh);
-
-    let mouseX = 0, mouseY = 0;
-    document.addEventListener('mousemove', (e) => {
-        mouseX = (e.clientX - window.innerWidth / 2) * 0.005;
-        mouseY = (e.clientY - window.innerHeight / 2) * 0.005;
-    });
-
-    function animate() {
-        requestAnimationFrame(animate);
-        particlesMesh.rotation.y += 0.001 + mouseX * 0.01;
-        particlesMesh.rotation.x += 0.001 + mouseY * 0.01;
-        renderer.render(scene, camera);
-    }
-    animate();
-    window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-} catch(e) { console.warn("WebGL BG Init Failed"); }
-
 // --- Global Utils ---
 const toGB = (bytes) => {
     const n = typeof bytes === 'string' ? Number(bytes) : Number(bytes ?? 0);
@@ -60,8 +17,8 @@ function doLogout() {
 
     // Reset UI
     document.getElementById('login-overlay').style.display = 'flex';
-    document.querySelector('.desktop-nav').style.display = 'none';
-    document.querySelector('.mobile-nav').style.display = 'none';
+    try { document.querySelector('.desktop-nav')?.style && (document.querySelector('.desktop-nav').style.display = 'none'); } catch(e) {}
+    try { document.querySelector('.mobile-nav')?.style && (document.querySelector('.mobile-nav').style.display = 'none'); } catch(e) {}
     document.getElementById('main-fab').style.display = 'none';
 
     // restore default tab (client) UI
@@ -164,8 +121,9 @@ async function startAdminApp() {
     try { document.getElementById('btn-logout').style.display = 'inline-flex'; } catch(e) {}
     document.getElementById('tab-user-view').style.display = 'none';
 
-    document.querySelector('.desktop-nav').style.display = 'flex';
-    document.querySelector('.mobile-nav').style.display = 'flex';
+    // Admin top tabs removed (desktop-nav/mobile-nav)
+    try { document.querySelector('.desktop-nav')?.style && (document.querySelector('.desktop-nav').style.display = 'none'); } catch(e) {}
+    try { document.querySelector('.mobile-nav')?.style && (document.querySelector('.mobile-nav').style.display = 'none'); } catch(e) {}
     document.getElementById('main-fab').style.display = 'flex';
     
     switchTab('overview');
@@ -186,9 +144,9 @@ function startClientApp(client) {
     document.getElementById('login-overlay').style.display = 'none';
     // show logout
     try { document.getElementById('btn-logout').style.display = 'inline-flex'; } catch(e) {}
-    // Hide Admin Navigation completely
-    document.querySelector('.desktop-nav').style.visibility = 'hidden';
-    document.querySelector('.mobile-nav').style.display = 'none';
+    // Hide Admin Navigation completely (nav removed from HTML)
+    try { document.querySelector('.desktop-nav')?.style && (document.querySelector('.desktop-nav').style.display = 'none'); } catch(e) {}
+    try { document.querySelector('.mobile-nav')?.style && (document.querySelector('.mobile-nav').style.display = 'none'); } catch(e) {}
     document.getElementById('main-fab').style.display = 'none';
     document.querySelector('.user-status').innerHTML = '<span>Hi, <strong style="color:var(--accent)">'+client.email+'</strong></span>';
     

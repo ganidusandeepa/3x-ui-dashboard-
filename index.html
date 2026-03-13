@@ -7,12 +7,10 @@
     <link rel="stylesheet" href="styles.css?v=9">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" data-cfasync="false"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" data-cfasync="false"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js" data-cfasync="false"></script>
 </head>
 <body>
-    <div id="canvas-container"></div>
     <div id="toast-container"></div>
 
     <!-- Login Overlay -->
@@ -57,12 +55,6 @@
     <div class="dashboard-wrapper">
         <header>
             <div class="logo"><i class="fa-solid fa-server"></i> 3x-ui<span>.panel</span></div>
-            <nav class="desktop-nav">
-                <button class="nav-btn active" data-tab="overview"><i class="fa-solid fa-chart-pie"></i> Overview</button>
-                <button class="nav-btn" data-tab="inbounds"><i class="fa-solid fa-network-wired"></i> Inbounds</button>
-                <button class="nav-btn" data-tab="clients"><i class="fa-solid fa-users"></i> Clients</button>
-                <button class="nav-btn" data-tab="system"><i class="fa-solid fa-microchip"></i> System</button>
-            </nav>
             <div style="display:flex; align-items:center; gap:10px;">
                 <div class="user-status">
                     <div class="status-dot online"></div>
@@ -303,12 +295,6 @@
         </main>
 
         <!-- Mobile Bottom Nav -->
-        <nav class="mobile-nav">
-            <button class="m-nav-btn active" data-tab="overview"><i class="fa-solid fa-house"></i><span>Home</span></button>
-            <button class="m-nav-btn" data-tab="inbounds"><i class="fa-solid fa-link"></i><span>Nodes</span></button>
-            <button class="m-nav-btn" data-tab="clients"><i class="fa-solid fa-user-group"></i><span>Users</span></button>
-            <button class="m-nav-btn" data-tab="system"><i class="fa-solid fa-gears"></i><span>System</span></button>
-        </nav>
     </div>
 
     <!-- Admin API Tool Modal -->
