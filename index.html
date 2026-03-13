@@ -9,6 +9,10 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" data-cfasync="false"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js" data-cfasync="false"></script>
+
+    <!-- Vanta Globe background (WebGL) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" data-cfasync="false"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.globe.min.js" data-cfasync="false"></script>
     <!-- GSAP plugins (free) -->
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/ScrollTrigger.min.js" data-cfasync="false"></script>
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/Draggable.min.js" data-cfasync="false"></script>
@@ -17,6 +21,7 @@
 </head>
 <body>
     <div id="toast-container"></div>
+    <div id="vanta-bg" aria-hidden="true"></div>
 
     <!-- Login Overlay -->
     <div id="login-overlay" class="modal-overlay active" style="z-index: 9999; background: var(--bg-color); display: flex;">
@@ -72,6 +77,11 @@
                 <!-- Theme toggle -->
                 <button id="btn-theme" class="sys-btn" style="padding:10px 12px; display:flex; align-items:center; gap:8px;">
                     <i class="fa-solid fa-moon"></i> Theme
+                </button>
+
+                <!-- Background toggle -->
+                <button id="btn-bg" class="sys-btn" style="padding:10px 12px; display:flex; align-items:center; gap:8px;">
+                    <i class="fa-solid fa-earth-asia"></i> BG
                 </button>
 
                 <div class="user-status">

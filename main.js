@@ -66,6 +66,9 @@ let currentRole = null;
 let adminToken = null;
 let loopInterval = null;
 
+// Background (Vanta)
+let __vanta = null;
+
 // Client list cache (for search + drawer)
 let __clientsCache = [];
 let __clientSearchTerm = '';
@@ -269,7 +272,7 @@ async function startAdminApp() {
         }
     } catch(e) {}
 
-    loopInterval = setInterval(loadAdminData, 10000);
+    loopInterval = setInterval(loadAdminData, 30000);
 
     // load settings
     fetch('/api/settings').then(r=>r.json()).then(set=>{
@@ -407,6 +410,63 @@ document.getElementById('main-fab').addEventListener('click', () => {
     } catch(e) {}
 });
 
+function isMobileLike() {
+    try { return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 768; } catch(e) { return false; }
+}
+
+function prefersReducedMotion() {
+    try { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e) { return false; }
+}
+
+function startVantaGlobe() {
+    try {
+        const el = document.getElementById('vanta-bg');
+        if (!el) return;
+        if (prefersReducedMotion()) return;
+        if (typeof VANTA === 'undefined' || !VANTA.GLOBE) return;
+
+        // destroy previous
+        try { __vanta?.destroy?.(); } catch(e) {}
+
+        const mobile = isMobileLike();
+        __vanta = VANTA.GLOBE({
+            el,
+            mouseControls: !mobile,
+            touchControls: true,
+            gyroControls: false,
+            minHeight: 200.00,
+            minWidth: 200.00,
+            scale: mobile ? 0.8 : 1.0,
+            scaleMobile: 0.75,
+            color: 0x00ffcc,
+            color2: 0x0066ff,
+            backgroundColor: 0x000000,
+            size: mobile ? 0.55 : 0.75
+        });
+
+        el.classList.add('active');
+        try { localStorage.setItem('xui_bg', 'on'); } catch(e) {}
+    } catch(e) {
+        console.warn('Vanta init failed', e);
+    }
+}
+
+function stopVantaGlobe() {
+    try {
+        const el = document.getElementById('vanta-bg');
+        el?.classList.remove('active');
+        __vanta?.destroy?.();
+        __vanta = null;
+        try { localStorage.setItem('xui_bg', 'off'); } catch(e) {}
+    } catch(e) {}
+}
+
+function toggleVantaGlobe() {
+    const on = !!__vanta;
+    if (on) stopVantaGlobe();
+    else startVantaGlobe();
+}
+
 // Theme toggle (night mode / day mode)
 try {
     const btnTheme = document.getElementById('btn-theme');
@@ -427,6 +487,33 @@ try {
         const isLight = document.body.classList.contains('theme-light');
         applyTheme(isLight ? 'dark' : 'light');
         try { if (typeof gsap !== 'undefined') gsap.fromTo(btnTheme, { scale: 0.98 }, { scale: 1, duration: 0.12 }); } catch(e) {}
+    });
+} catch(e) {}
+
+// Background toggle
+try {
+    const btnBg = document.getElementById('btn-bg');
+    // restore
+    try {
+        const state = localStorage.getItem('xui_bg') || 'off';
+        if (state === 'on') startVantaGlobe();
+    } catch(e) {}
+
+    btnBg?.addEventListener('click', () => {
+        toggleVantaGlobe();
+        try { if (typeof gsap !== 'undefined') gsap.fromTo(btnBg, { scale: 0.98 }, { scale: 1, duration: 0.12 }); } catch(e) {}
+    });
+
+    // pause on tab hidden
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            // stop to save battery
+            stopVantaGlobe();
+        } else {
+            try {
+                if ((localStorage.getItem('xui_bg') || 'off') === 'on') startVantaGlobe();
+            } catch(e) {}
+        }
     });
 } catch(e) {}
 

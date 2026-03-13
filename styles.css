@@ -27,6 +27,10 @@ body.theme-light {
 html, body { width: 100%; overflow-x: hidden; }
 body { font-family: var(--font); background: var(--bg-color); color: var(--text); line-height: 1.5; padding-bottom: env(safe-area-inset-bottom); }
 
+/* Vanta background */
+#vanta-bg { position: fixed; inset: 0; z-index: -2; opacity: 0; transition: opacity 0.35s ease; }
+#vanta-bg.active { opacity: 1; }
+
 /* Drawer (client details) */
 .drawer { position: fixed; inset: 0; z-index: 9998; }
 .drawer-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); opacity: 0; }
