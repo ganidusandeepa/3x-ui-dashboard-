@@ -300,10 +300,11 @@ function startClientApp(client) {
     } catch(e) {}
 
 
-    gsap.to('#user-used', { innerHTML: totalUsed, duration: 1.5, snap: { innerHTML: 0.01 } });
-    gsap.to('#user-dl', { innerHTML: down, duration: 1, snap: { innerHTML: 0.01 } });
-    gsap.to('#user-up', { innerHTML: up, duration: 1, snap: { innerHTML: 0.01 } });
-    document.getElementById('user-total').innerText = remainDesc;
+    // Client counters animation (GSAP -> anime.js -> plain)
+    animateNumber('#user-used', Number(totalUsed), { decimals: 2, duration: 900 });
+    animateNumber('#user-dl', Number(down), { decimals: 2, duration: 700 });
+    animateNumber('#user-up', Number(up), { decimals: 2, duration: 700 });
+    setTextSafe('#user-total', remainDesc);
     
     if(!client.enable) {
         document.getElementById('user-status-text').innerText = "Disabled or Expired";
@@ -311,13 +312,30 @@ function startClientApp(client) {
         document.getElementById('user-status-text').style.color = "var(--red)";
     }
 
-    // Progress
+    // Progress (animate fill)
+    const bar = document.getElementById('user-progress');
     if(limit > 0) {
         let pct = (totalUsed / limit) * 100;
         if(pct > 100) pct = 100;
-        document.getElementById('user-progress').style.width = `${pct}%`;
+        try {
+            if (typeof gsap !== 'undefined') {
+                gsap.to(bar, { width: `${pct}%`, duration: 0.6, ease: 'power2.out' });
+            } else if (typeof anime !== 'undefined') {
+                anime({ targets: bar, width: `${pct}%`, duration: 600, easing: 'easeOutCubic' });
+            } else {
+                bar.style.width = `${pct}%`;
+            }
+        } catch(e) { bar.style.width = `${pct}%`; }
     } else {
-        document.getElementById('user-progress').style.width = `100%`;
+        try {
+            if (typeof gsap !== 'undefined') {
+                gsap.to(bar, { width: '100%', duration: 0.6, ease: 'power2.out' });
+            } else if (typeof anime !== 'undefined') {
+                anime({ targets: bar, width: '100%', duration: 600, easing: 'easeOutCubic' });
+            } else {
+                bar.style.width = '100%';
+            }
+        } catch(e) { bar.style.width = '100%'; }
     }
 
     // User Donut (optional)
@@ -613,14 +631,14 @@ async function loadAdminData() {
 
             const cpuNum = Number(s.cpu);
             const cpuPct = Number.isFinite(cpuNum) ? Math.max(0, Math.min(100, cpuNum)) : 0;
-            document.getElementById('cpu-percent').textContent = `${cpuPct.toFixed(1)}%`;
+            animateNumber('#cpu-percent', cpuPct, { decimals: 1, duration: 700, formatter: (v) => `${Number(v).toFixed(1)}%` });
 
             const memCur = Number(s.mem?.current);
             const memTot = Number(s.mem?.total);
             const ramPct = (Number.isFinite(memCur) && Number.isFinite(memTot) && memTot > 0)
                 ? Math.max(0, Math.min(100, (memCur / memTot) * 100))
                 : 0;
-            document.getElementById('ram-percent').textContent = `${ramPct.toFixed(1)}%`;
+            animateNumber('#ram-percent', ramPct, { decimals: 1, duration: 700, formatter: (v) => `${Number(v).toFixed(1)}%` });
 
             // IP info (from server status)
             try {
@@ -656,7 +674,7 @@ async function loadAdminData() {
             container.innerHTML = '';
             (inb.obj || []).forEach(node => {
                 container.innerHTML += `
-                    <div class="card item-card">
+                    <div class="card item-card reveal" style="opacity:0; transform: translateY(14px);">
                         <div class="item-header">
                             <div><strong style="font-size:1.1rem">${node.remark || ''}</strong><p class="subtitle" style="margin:0">${(node.protocol||'').toUpperCase()} • Port ${node.port}</p></div>
                             <div class="status-badge ${node.enable ? 'active' : ''}">${node.enable ? 'Online' : 'Off'}</div>
@@ -668,6 +686,18 @@ async function loadAdminData() {
                         </div>
                     </div>`;
             });
+
+            // Stagger reveal (Inbounds)
+            try {
+                const els = container.querySelectorAll('.reveal');
+                if (typeof gsap !== 'undefined') {
+                    gsap.to(els, { opacity: 1, y: 0, duration: 0.35, stagger: 0.03, ease: 'power2.out' });
+                } else if (typeof anime !== 'undefined') {
+                    anime({ targets: els, opacity: [0,1], translateY: [14,0], delay: anime.stagger(30), duration: 350, easing: 'easeOutCubic' });
+                } else {
+                    els.forEach(el => { el.style.opacity = '1'; el.style.transform = 'translateY(0)'; });
+                }
+            } catch(e) {}
         }
 
         if (cli.success) {
@@ -675,7 +705,7 @@ async function loadAdminData() {
             container.innerHTML = '';
             cli.obj.forEach(user => {
                 container.innerHTML += `
-                    <div class="card item-card" style="margin-bottom:10px">
+                    <div class="card item-card reveal" style="margin-bottom:10px; opacity:0; transform: translateY(14px);">
                         <div class="item-header" style="margin:0">
                             <div style="display:flex; align-items:center; gap:12px">
                                 <i class="fa-solid fa-circle-user" style="font-size:1.5rem; color:var(--blue)"></i>
@@ -685,6 +715,18 @@ async function loadAdminData() {
                         </div>
                     </div>`;
             });
+
+            // Stagger reveal (Clients)
+            try {
+                const els = container.querySelectorAll('.reveal');
+                if (typeof gsap !== 'undefined') {
+                    gsap.to(els, { opacity: 1, y: 0, duration: 0.35, stagger: 0.02, ease: 'power2.out' });
+                } else if (typeof anime !== 'undefined') {
+                    anime({ targets: els, opacity: [0,1], translateY: [14,0], delay: anime.stagger(20), duration: 320, easing: 'easeOutCubic' });
+                } else {
+                    els.forEach(el => { el.style.opacity = '1'; el.style.transform = 'translateY(0)'; });
+                }
+            } catch(e) {}
         }
 
         if (sys.success) {
