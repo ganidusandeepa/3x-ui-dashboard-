@@ -40,14 +40,34 @@ function showToast(msg, type="info") {
     toast.innerHTML = `<i class="fa-solid fa-bell"></i> <span>${msg}</span>`;
     container.appendChild(toast);
 
+    // Prefer anime.js if present, else GSAP, else CSS
     try {
-        if (typeof gsap !== 'undefined') {
+        if (typeof anime !== 'undefined') {
+            anime({
+                targets: toast,
+                translateY: [10, 0],
+                opacity: [0, 1],
+                duration: 220,
+                easing: 'easeOutCubic'
+            });
+        } else if (typeof gsap !== 'undefined') {
             gsap.fromTo(toast, { y: 8, opacity: 0 }, { y: 0, opacity: 1, duration: 0.18, ease: 'power2.out' });
         }
     } catch(e) {}
 
     setTimeout(() => {
         try {
+            if (typeof anime !== 'undefined') {
+                anime({
+                    targets: toast,
+                    translateY: [0, -8],
+                    opacity: [1, 0],
+                    duration: 180,
+                    easing: 'easeInCubic',
+                    complete: () => toast.remove()
+                });
+                return;
+            }
             if (typeof gsap !== 'undefined') {
                 gsap.to(toast, { opacity: 0, y: -6, duration: 0.18, onComplete: () => toast.remove() });
                 return;
@@ -273,9 +293,20 @@ document.getElementById('main-fab').addEventListener('click', () => {
     const m = document.getElementById('modal-overlay');
     m.classList.add('active');
     try {
-        if (typeof gsap !== 'undefined') {
-            const card = m.querySelector('.modal-card');
-            if (card) gsap.fromTo(card, { opacity: 0, y: 18, scale: 0.98 }, { opacity: 1, y: 0, scale: 1, duration: 0.22, ease: 'power2.out' });
+        const card = m.querySelector('.modal-card');
+        if (!card) return;
+
+        if (typeof anime !== 'undefined') {
+            anime({
+                targets: card,
+                opacity: [0, 1],
+                translateY: [22, 0],
+                scale: [0.98, 1],
+                duration: 260,
+                easing: 'easeOutExpo'
+            });
+        } else if (typeof gsap !== 'undefined') {
+            gsap.fromTo(card, { opacity: 0, y: 18, scale: 0.98 }, { opacity: 1, y: 0, scale: 1, duration: 0.22, ease: 'power2.out' });
         }
     } catch(e) {}
 });
