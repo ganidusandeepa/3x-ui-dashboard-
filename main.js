@@ -109,9 +109,15 @@ document.getElementById('btn-login-admin').addEventListener('click', async () =>
 });
 
 document.getElementById('btn-login-client').addEventListener('click', async () => {
-    const id = document.getElementById('login-email').value;
+    const id = (document.getElementById('login-email').value || '').trim();
     const btn = document.getElementById('btn-login-client');
     btn.textContent = "Checking...";
+
+    if (!id) {
+        showToast('Enter your email/ID', 'error');
+        btn.textContent = "Check Traffic";
+        return;
+    }
 
     // cache last client id + last tab
     try {
@@ -121,17 +127,32 @@ document.getElementById('btn-login-client').addEventListener('click', async () =
 
     try {
         const res = await fetch('/public/auth', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ type: 'client', id })
         });
+
+        const ct = res.headers.get('Content-Type') || '';
+        if (!ct.includes('application/json')) {
+            // This happens sometimes when Cloudflare/edge returns HTML (blocked/expired) or a 502 page.
+            const txt = await res.text().catch(()=> '');
+            console.warn('Client auth non-JSON response:', res.status, txt.slice(0, 200));
+            showToast(res.status === 401 ? 'Session expired. Refresh and try again.' : 'Server temporary issue. Try again.', 'error');
+            btn.textContent = "Check Traffic";
+            return;
+        }
+
         const data = await res.json();
-        if(data.success) {
+        if (data && data.success) {
             currentRole = 'client';
             startClientApp(data.clientData);
         } else {
-            showToast(data.msg || "User not found", "error");
+            showToast((data && data.msg) || 'User not found', 'error');
         }
-    } catch(e) { showToast("Connection Error", "error"); }
+    } catch(e) {
+        console.warn('Client auth error:', e);
+        showToast('Network/Server error. Try again.', 'error');
+    }
     btn.textContent = "Check Traffic";
 });
 
@@ -188,9 +209,6 @@ function startClientApp(client) {
         return new Date(n).toLocaleString();
     };
 
-    // keep links for buttons
-    let currentSubLink = client.subLink || null;
-    let currentVlessLink = client.vlessLink || null;
 
     try {
         document.getElementById('user-email').textContent = client.email || '-';
@@ -203,57 +221,6 @@ function startClientApp(client) {
         document.getElementById('user-ips').textContent = ips || '-';
     } catch(e) {}
 
-    // Buttons: copy + QR
-    const copyText = async (text) => {
-        if (!text) return false;
-        try {
-            await navigator.clipboard.writeText(text);
-            return true;
-        } catch (e) {
-            // fallback
-            try {
-                const ta = document.createElement('textarea');
-                ta.value = text;
-                ta.style.position = 'fixed';
-                ta.style.opacity = '0';
-                document.body.appendChild(ta);
-                ta.select();
-                document.execCommand('copy');
-                ta.remove();
-                return true;
-            } catch (e2) {
-                return false;
-            }
-        }
-    };
-
-    try {
-        document.getElementById('btn-copy-sub')?.addEventListener('click', async () => {
-            const ok = await copyText(currentSubLink);
-            showToast(ok ? 'Subscription link copied' : 'No subscription link available', ok ? 'info' : 'error');
-        }, { once: true });
-
-        document.getElementById('btn-copy-vless')?.addEventListener('click', async () => {
-            const ok = await copyText(currentVlessLink);
-            showToast(ok ? 'VLESS link copied' : 'No VLESS link available', ok ? 'info' : 'error');
-        }, { once: true });
-
-        const qrModal = document.getElementById('qr-modal');
-        const qrBox = document.getElementById('qr-box');
-        const closeBtn = document.getElementById('btn-close-qr');
-
-        document.getElementById('btn-show-qr')?.addEventListener('click', () => {
-            if (!currentVlessLink) { showToast('No VLESS link available', 'error'); return; }
-            qrBox.innerHTML = '';
-            // eslint-disable-next-line no-undef
-            new QRCode(qrBox, { text: currentVlessLink, width: 240, height: 240, correctLevel: QRCode.CorrectLevel.M });
-            qrModal.style.display = 'flex';
-        }, { once: true });
-
-        closeBtn?.addEventListener('click', () => { qrModal.style.display = 'none'; }, { once: true });
-        qrModal?.addEventListener('click', (e) => { if (e.target === qrModal) qrModal.style.display = 'none'; }, { once: true });
-
-    } catch(e) {}
 
     gsap.to('#user-used', { innerHTML: totalUsed, duration: 1.5, snap: { innerHTML: 0.01 } });
     gsap.to('#user-dl', { innerHTML: down, duration: 1, snap: { innerHTML: 0.01 } });
@@ -558,8 +525,13 @@ function wireServerTools() {
     });
 
     byId('btn-new-uuid')?.addEventListener('click', async () => {
-        const r = await callXui('server/getNewUUID', 'GET');
-        setServerOutput(r);
+        try {
+            const r = await callXui('server/getNewUUID', 'GET');
+            const u = extractUuid(r) || uuidFallback();
+            setServerOutput({ raw: r, uuid: u });
+        } catch(e) {
+            setServerOutput({ error: String(e), uuid: uuidFallback() });
+        }
     });
 
     byId('btn-new-x25519')?.addEventListener('click', async () => {
@@ -628,6 +600,39 @@ function buildLinksForClient(inbound, client) {
     }
 }
 
+function extractUuid(val) {
+    // Accept common 3x-ui responses + plain text.
+    try {
+        if (!val) return null;
+        if (typeof val === 'string') return val.trim();
+        // 3x-ui often returns: { success:true, obj:"uuid" }
+        const cand = val.obj || val.uuid || val.data || val.result;
+        if (typeof cand === 'string') return cand.trim();
+        if (cand && typeof cand === 'object') {
+            const nested = cand.uuid || cand.id;
+            if (typeof nested === 'string') return nested.trim();
+        }
+        return null;
+    } catch(e) {
+        return null;
+    }
+}
+
+function uuidFallback() {
+    // Browser-side fallback if x-ui UUID endpoint fails.
+    try {
+        if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
+            return globalThis.crypto.randomUUID();
+        }
+    } catch(e) {}
+    // RFC4122 v4 fallback
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
 async function addClientVless() {
     const out = document.getElementById('addc-result');
     const uiCard = document.getElementById('ui-result');
@@ -659,16 +664,18 @@ async function addClientVless() {
     addKV('Status','Working...');
     out.value = 'Creating client...';
 
-    // get uuid
-    const uuidRes = await callXui('server/getNewUUID', 'GET');
-    const uuid = (uuidRes && (uuidRes.obj || uuidRes.uuid || uuidRes.data)) ? (uuidRes.obj || uuidRes.uuid || uuidRes.data) : (typeof uuidRes === 'string' ? uuidRes : null);
-    const clientId = (typeof uuid === 'string') ? uuid.trim() : null;
-
+    // get uuid (prefer x-ui endpoint; fallback to browser UUID)
+    let clientId = null;
+    try {
+        const uuidRes = await callXui('server/getNewUUID', 'GET');
+        clientId = extractUuid(uuidRes);
+    } catch(e) {
+        clientId = null;
+    }
     if (!clientId) {
-        showToast('Failed to generate UUID','error');
-        out.value = 'Failed to generate UUID';
-        try { document.getElementById('ui-result-body').innerHTML = ''; } catch(e) {}
-        return;
+        // Don’t hard-fail: generate locally so the tool still works even if x-ui endpoint is flaky.
+        clientId = uuidFallback();
+        showToast('UUID endpoint failed — used local UUID', 'info');
     }
 
     const subId = Math.random().toString(36).slice(2, 18);
@@ -701,7 +708,7 @@ async function addClientVless() {
     const inb = (window.__inboundsCache || []).find(x => Number(x.id) === inboundId);
     const links = inb ? buildLinksForClient(inb, { id: clientId, email, subId }) : { vlessLink: null, subLink: null };
 
-    const payloadOut = { api: res, vless: links.vlessLink, sub: links.subLink };
+    const payloadOut = { api: res };
     out.value = JSON.stringify(payloadOut, null, 2);
 
     try {
@@ -727,8 +734,8 @@ async function addClientVless() {
                 uiBody.appendChild(wrap);
             };
 
-            if (links.subLink) addCopy('Subscription link', links.subLink);
-            if (links.vlessLink) addCopy('VLESS link', links.vlessLink);
+            // Intentionally not showing subscription/VLESS links in the dashboard UI
+            
         }
         const uiCard = document.getElementById('ui-result');
         if (uiCard) uiCard.style.display = 'block';
