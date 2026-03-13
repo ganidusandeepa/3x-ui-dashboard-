@@ -230,7 +230,8 @@ async function startAdminApp() {
 
     // Hero + cards intro + scroll reveals
     try {
-        const hero = document.querySelector('.data-card-hero');
+        // NOTE: there are two .data-card-hero cards (client + admin). Target the admin one.
+        const hero = document.querySelector('#tab-overview .data-card-hero');
         if (typeof gsap !== 'undefined') {
             if (hero) {
                 gsap.fromTo(hero, { opacity: 0, y: 18, scale: 0.98 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: 'power2.out' });
