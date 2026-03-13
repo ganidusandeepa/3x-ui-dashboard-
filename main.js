@@ -415,7 +415,7 @@ function startClientApp(client) {
         }
     } catch(e) { /* ignore chart failures */ }
 
-    // Auto-refresh client stats every 5s (to update speed + usage)
+    // Auto-refresh client stats every 60s (to update speed + usage)
     try { clearInterval(clientLoopInterval); } catch(e) {}
     clientLoopInterval = null;
     try {
@@ -430,7 +430,7 @@ function startClientApp(client) {
                 .then(r => r.json())
                 .then(d => { if (d && d.success) startClientApp(d.clientData); })
                 .catch(()=>{});
-            }, 5000);
+            }, 60000);
         }
     } catch(e) {}
 }
