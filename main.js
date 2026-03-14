@@ -65,8 +65,10 @@ function animateNumber(elOrSelector, to, opts = {}) {
 let currentRole = null;
 let adminToken = null;
 let loopInterval = null;
-let clientLoopInterval = null;
+let clientLoopInterval = null; // legacy polling (kept as fallback)
 let __clientLast = null; // { downBytes, upBytes, ts }
+let __clientEventSource = null;
+let __clientSseRetry = null;
 
 // Background (Vanta)
 let __vanta = null;
@@ -75,8 +77,50 @@ let __vanta = null;
 let __clientsCache = [];
 let __clientSearchTerm = '';
 
+function stopClientSSE() {
+    try { __clientEventSource?.close?.(); } catch(e) {}
+    __clientEventSource = null;
+    try { clearInterval(__clientSseRetry); } catch(e) {}
+    __clientSseRetry = null;
+}
+
+function startClientSSE(idToCheck) {
+    stopClientSSE();
+    if (!idToCheck) return;
+
+    const es = new EventSource(`/public/stream?id=${encodeURIComponent(idToCheck)}`);
+    __clientEventSource = es;
+
+    es.addEventListener('client', (ev) => {
+        try {
+            const c = JSON.parse(ev.data || '{}');
+            if (c && (c.email || c.down !== undefined)) {
+                applyClientDataToUI(c);
+            }
+        } catch(e) {}
+    });
+
+    es.addEventListener('notfound', () => {
+        // stop to avoid infinite reconnect spam
+        stopClientSSE();
+        showToast('User not found', 'error');
+    });
+
+    es.addEventListener('error', () => {
+        try { es.close(); } catch(e) {}
+        __clientEventSource = null;
+        if (__clientSseRetry) return;
+        __clientSseRetry = setInterval(() => {
+            try { clearInterval(__clientSseRetry); } catch(e) {}
+            __clientSseRetry = null;
+            startClientSSE(idToCheck);
+        }, 1500);
+    });
+}
+
 function doLogout() {
     try { stopAdminSSE(); } catch(e) {}
+    try { stopClientSSE(); } catch(e) {}
     try { clearInterval(loopInterval); } catch(e) {}
     try { clearInterval(clientLoopInterval); } catch(e) {}
     loopInterval = null;
@@ -319,6 +363,88 @@ function updateClientSpeedsFromDelta(nowDown, nowUp) {
     } catch(e) {}
 }
 
+function applyClientDataToUI(client) {
+    if (!client) return;
+
+    // compute speed (based on delta bytes between refreshes)
+    updateClientSpeedsFromDelta(client.down, client.up);
+
+    const down = parseFloat(toGB(client.down));
+    const up = parseFloat(toGB(client.up));
+    const totalUsed = (down + up).toFixed(2);
+    const limit = parseFloat(toGB(client.total));
+    const remainDesc = limit === 0 ? "Unlimited GB" : `${limit.toFixed(2)} GB`;
+
+    // Extra details (if present)
+    const fmtTime = (ms) => {
+        const n = Number(ms);
+        if (!Number.isFinite(n) || n <= 0) return '-';
+        return new Date(n).toLocaleString();
+    };
+
+    try {
+        if (client.email) document.querySelector('.user-status').innerHTML = '<span>Hi, <strong style="color:var(--accent)">'+client.email+'</strong></span>';
+        document.getElementById('user-email').textContent = client.email || document.getElementById('user-email').textContent || '-';
+        if (client.uuid !== undefined) document.getElementById('user-uuid').textContent = client.uuid || '-';
+        if (client.subId !== undefined) document.getElementById('user-subid').textContent = client.subId || '-';
+        if (client.lastOnline !== undefined) document.getElementById('user-last-online').textContent = fmtTime(client.lastOnline);
+    } catch(e) {}
+
+    // counters
+    animateNumber('#user-used', Number(totalUsed), { decimals: 2, duration: 500 });
+    animateNumber('#user-dl', Number(down), { decimals: 2, duration: 500 });
+    animateNumber('#user-up', Number(up), { decimals: 2, duration: 500 });
+    setTextSafe('#user-total', remainDesc);
+
+    try {
+        if (client.enable === false) {
+            document.getElementById('user-status-text').innerText = "Disabled or Expired";
+            document.getElementById('user-status-text').classList.remove('active');
+            document.getElementById('user-status-text').style.color = "var(--red)";
+        } else {
+            document.getElementById('user-status-text').innerText = "Active";
+            document.getElementById('user-status-text').classList.add('active');
+            document.getElementById('user-status-text').style.color = "";
+        }
+    } catch(e) {}
+
+    // Progress bar
+    try {
+        const bar = document.getElementById('user-progress');
+        if (bar) {
+            if (limit > 0) {
+                let pct = (Number(totalUsed) / limit) * 100;
+                if (pct > 100) pct = 100;
+                if (typeof gsap !== 'undefined') gsap.to(bar, { width: `${pct}%`, duration: 0.4, ease: 'power2.out' });
+                else if (typeof anime !== 'undefined') anime({ targets: bar, width: `${pct}%`, duration: 400, easing: 'easeOutCubic' });
+                else bar.style.width = `${pct}%`;
+            } else {
+                bar.style.width = '100%';
+            }
+        }
+    } catch(e) {}
+
+    // Donut update/create
+    try {
+        if (typeof Chart !== 'undefined') {
+            const donutCanvas = document.getElementById('userDonut');
+            const donutCtx = donutCanvas?.getContext?.('2d');
+            if (donutCtx) {
+                if (window.__userDonut && window.__userDonut.data?.datasets?.[0]) {
+                    window.__userDonut.data.datasets[0].data = [down, up];
+                    window.__userDonut.update();
+                } else {
+                    window.__userDonut = new Chart(donutCtx, {
+                        type: 'doughnut',
+                        data: { datasets: [{ data: [down, up], backgroundColor: ['#0066ff', '#00ffcc'], borderWidth: 0 }] },
+                        options: { cutout: '80%', plugins: { tooltip: { enabled: false } } }
+                    });
+                }
+            }
+        }
+    } catch(e) {}
+}
+
 function startClientApp(client) {
     document.getElementById('login-overlay').style.display = 'none';
     // show logout
@@ -331,96 +457,21 @@ function startClientApp(client) {
     try { document.querySelector('.desktop-nav')?.style && (document.querySelector('.desktop-nav').style.display = 'none'); } catch(e) {}
     try { document.querySelector('.mobile-nav')?.style && (document.querySelector('.mobile-nav').style.display = 'none'); } catch(e) {}
     document.getElementById('main-fab').style.display = 'none';
-    document.querySelector('.user-status').innerHTML = '<span>Hi, <strong style="color:var(--accent)">'+client.email+'</strong></span>';
-    
+
     // Hide all tabs except user view
     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
     document.getElementById('tab-user-view').classList.add('active');
 
-    // compute speed (based on delta bytes between refreshes)
-    updateClientSpeedsFromDelta(client.down, client.up);
+    // first paint
+    applyClientDataToUI(client);
 
-    const down = parseFloat(toGB(client.down));
-    const up = parseFloat(toGB(client.up));
-    const totalUsed = (down + up).toFixed(2);
-    const limit = parseFloat(toGB(client.total));
-    const remainDesc = limit === 0 ? "Unlimited GB" : `${limit.toFixed(2)} GB`;
-
-    // Extra details
-    const fmtTime = (ms) => {
-        const n = Number(ms);
-        if (!Number.isFinite(n) || n <= 0) return '-';
-        return new Date(n).toLocaleString();
-    };
-
-
+    // Start SSE for near-realtime updates (preferred)
     try {
-        document.getElementById('user-email').textContent = client.email || '-';
-        document.getElementById('user-uuid').textContent = client.uuid || '-';
-        document.getElementById('user-subid').textContent = client.subId || '-';
-        document.getElementById('user-last-online').textContent = fmtTime(client.lastOnline);
-        const onlineTxt = client.isOnline === true ? 'Online' : (client.isOnline === false ? 'Offline' : '-');
-        document.getElementById('user-online').textContent = onlineTxt;
-        const ips = Array.isArray(client.ips) ? client.ips.join(', ') : (client.ips || '-');
-        document.getElementById('user-ips').textContent = ips || '-';
+        const idToCheck = (localStorage.getItem('xui_client_id') || client.email || '').trim();
+        startClientSSE(idToCheck);
     } catch(e) {}
 
-
-    // Client counters animation (GSAP -> anime.js -> plain)
-    animateNumber('#user-used', Number(totalUsed), { decimals: 2, duration: 900 });
-    animateNumber('#user-dl', Number(down), { decimals: 2, duration: 700 });
-    animateNumber('#user-up', Number(up), { decimals: 2, duration: 700 });
-    setTextSafe('#user-total', remainDesc);
-    
-    if(!client.enable) {
-        document.getElementById('user-status-text').innerText = "Disabled or Expired";
-        document.getElementById('user-status-text').classList.remove('active');
-        document.getElementById('user-status-text').style.color = "var(--red)";
-    }
-
-    // Progress (animate fill)
-    const bar = document.getElementById('user-progress');
-    if(limit > 0) {
-        let pct = (totalUsed / limit) * 100;
-        if(pct > 100) pct = 100;
-        try {
-            if (typeof gsap !== 'undefined') {
-                gsap.to(bar, { width: `${pct}%`, duration: 0.6, ease: 'power2.out' });
-            } else if (typeof anime !== 'undefined') {
-                anime({ targets: bar, width: `${pct}%`, duration: 600, easing: 'easeOutCubic' });
-            } else {
-                bar.style.width = `${pct}%`;
-            }
-        } catch(e) { bar.style.width = `${pct}%`; }
-    } else {
-        try {
-            if (typeof gsap !== 'undefined') {
-                gsap.to(bar, { width: '100%', duration: 0.6, ease: 'power2.out' });
-            } else if (typeof anime !== 'undefined') {
-                anime({ targets: bar, width: '100%', duration: 600, easing: 'easeOutCubic' });
-            } else {
-                bar.style.width = '100%';
-            }
-        } catch(e) { bar.style.width = '100%'; }
-    }
-
-    // User Donut (optional)
-    try {
-        if (typeof Chart !== 'undefined') {
-            const donutCtx = document.getElementById('userDonut')?.getContext?.('2d');
-            if (donutCtx) {
-                // destroy existing chart to avoid stacking
-                try { window.__userDonut?.destroy?.(); } catch(e) {}
-                window.__userDonut = new Chart(donutCtx, {
-                    type: 'doughnut',
-                    data: { datasets: [{ data: [down, up], backgroundColor: ['#0066ff', '#00ffcc'], borderWidth: 0 }] },
-                    options: { cutout: '80%', plugins: { tooltip: { enabled: false } } }
-                });
-            }
-        }
-    } catch(e) { /* ignore chart failures */ }
-
-    // Auto-refresh client stats every 60s (to update speed + usage)
+    // Fallback polling (very slow) if SSE fails completely
     try { clearInterval(clientLoopInterval); } catch(e) {}
     clientLoopInterval = null;
     try {
@@ -433,9 +484,9 @@ function startClientApp(client) {
                     body: JSON.stringify({ type: 'client', id: idToCheck })
                 })
                 .then(r => r.json())
-                .then(d => { if (d && d.success) startClientApp(d.clientData); })
+                .then(d => { if (d && d.success) applyClientDataToUI(d.clientData); })
                 .catch(()=>{});
-            }, 60000);
+            }, 120000);
         }
     } catch(e) {}
 }
