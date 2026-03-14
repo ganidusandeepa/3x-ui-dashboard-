@@ -76,6 +76,7 @@ let __clientsCache = [];
 let __clientSearchTerm = '';
 
 function doLogout() {
+    try { stopAdminSSE(); } catch(e) {}
     try { clearInterval(loopInterval); } catch(e) {}
     try { clearInterval(clientLoopInterval); } catch(e) {}
     loopInterval = null;
@@ -277,7 +278,11 @@ async function startAdminApp() {
         }
     } catch(e) {}
 
-    loopInterval = setInterval(loadAdminData, 30000);
+    // Heavy refresh (inbounds/clients/history) stays slower to avoid hammering the panel.
+    loopInterval = setInterval(loadAdminData, 60000);
+
+    // Lightweight near-realtime updates via SSE (updates status/traffic/cpu/ram without 4x polling)
+    try { startAdminSSE(); } catch(e) {}
 
     // load settings
     fetch('/api/settings').then(r=>r.json()).then(set=>{
@@ -687,6 +692,52 @@ try {
     });
 } catch(e) {}
 
+let __adminEventSource = null;
+let __adminSseRetry = null;
+
+function startAdminSSE() {
+    try { __adminEventSource?.close?.(); } catch(e) {}
+    __adminEventSource = null;
+
+    // EventSource can't send custom headers. If you're using Bearer auth, SSE won't work.
+    // Best: protect admin via Cloudflare Access (identity headers/cookie), then SSE is authorized.
+    const es = new EventSource('/api/stream');
+    __adminEventSource = es;
+
+    es.addEventListener('hello', () => {
+        // optional: console.log('SSE connected');
+    });
+
+    es.addEventListener('metrics', (ev) => {
+        try {
+            const payload = JSON.parse(ev.data || '{}');
+            if (payload && payload.status) {
+                applyAdminStatusToUI(payload.status);
+            }
+        } catch(e) {}
+    });
+
+    es.addEventListener('error', () => {
+        // Auto retry with backoff
+        try { es.close(); } catch(e) {}
+        __adminEventSource = null;
+        if (__adminSseRetry) return;
+        let delay = 1500;
+        __adminSseRetry = setInterval(() => {
+            try { clearInterval(__adminSseRetry); } catch(e) {}
+            __adminSseRetry = null;
+            startAdminSSE();
+        }, delay);
+    });
+}
+
+function stopAdminSSE() {
+    try { __adminEventSource?.close?.(); } catch(e) {}
+    __adminEventSource = null;
+    try { clearInterval(__adminSseRetry); } catch(e) {}
+    __adminSseRetry = null;
+}
+
 function switchTab(tabId) {
     try {
         document.querySelectorAll('.nav-btn, .m-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
@@ -791,6 +842,51 @@ function initAdminCharts() {
 }
 
 // --- Admin Data Injection ---
+function applyAdminStatusToUI(stat) {
+    if (!stat || !stat.success) return;
+    const s = stat.obj;
+
+    // Prefer all-time traffic counters if available; netIO is often instantaneous IO and can be tiny.
+    const down = toGB((s.netTraffic && (s.netTraffic.down ?? s.netTraffic.recv)) ?? s.netIO?.down);
+    const up = toGB((s.netTraffic && (s.netTraffic.up ?? s.netTraffic.sent)) ?? s.netIO?.up);
+    const total = (parseFloat(down) + parseFloat(up)).toFixed(2);
+    try {
+        animateNumber('#total-traffic', Number(total), { decimals: 2, duration: 650 });
+        animateNumber('#dl-traffic', Number(down), { decimals: 2, duration: 650 });
+        animateNumber('#up-traffic', Number(up), { decimals: 2, duration: 650 });
+    } catch(e) {
+        setTextSafe('#total-traffic', total);
+        setTextSafe('#dl-traffic', down);
+        setTextSafe('#up-traffic', up);
+    }
+
+    const cpuNum = Number(s.cpu);
+    const cpuPct = Number.isFinite(cpuNum) ? Math.max(0, Math.min(100, cpuNum)) : 0;
+    animateNumber('#cpu-percent', cpuPct, { decimals: 1, duration: 500, formatter: (v) => `${Number(v).toFixed(1)}%` });
+
+    const memCur = Number(s.mem?.current);
+    const memTot = Number(s.mem?.total);
+    const ramPct = (Number.isFinite(memCur) && Number.isFinite(memTot) && memTot > 0)
+        ? Math.max(0, Math.min(100, (memCur / memTot) * 100))
+        : 0;
+    animateNumber('#ram-percent', ramPct, { decimals: 1, duration: 500, formatter: (v) => `${Number(v).toFixed(1)}%` });
+
+    // IP info (from server status)
+    try {
+        document.getElementById('node-ip').textContent = s.publicIP?.ipv4 || s.publicIP?.ipv6 || '-';
+        document.getElementById('node-region').textContent = s.publicIP?.country || '-';
+        document.getElementById('node-ping').textContent = '-';
+        document.getElementById('xray-version').textContent = s.xray?.version || '-';
+    } catch(e) {}
+
+    try {
+        if (typeof donutChart !== 'undefined' && donutChart?.data?.datasets?.[0]) {
+            donutChart.data.datasets[0].data = [Number(down), Number(up)];
+            donutChart.update();
+        }
+    } catch(e) {}
+}
+
 async function loadAdminData() {
     try {
         window.__lastAdminUpdate = Date.now();
@@ -806,43 +902,7 @@ async function loadAdminData() {
             fetch('/api/system-history', {headers: getAdminHeaders()}).then(r => r.json())
         ]);
 
-        if (stat.success) {
-            const s = stat.obj;
-            // Prefer all-time traffic counters if available; netIO is often instantaneous IO and can be tiny.
-            const down = toGB((s.netTraffic && (s.netTraffic.down ?? s.netTraffic.recv)) ?? s.netIO?.down);
-            const up = toGB((s.netTraffic && (s.netTraffic.up ?? s.netTraffic.sent)) ?? s.netIO?.up);
-            const total = (parseFloat(down) + parseFloat(up)).toFixed(2);
-            try {
-                animateNumber('#total-traffic', Number(total), { decimals: 2, duration: 900 });
-                animateNumber('#dl-traffic', Number(down), { decimals: 2, duration: 900 });
-                animateNumber('#up-traffic', Number(up), { decimals: 2, duration: 900 });
-            } catch(e) {
-                setTextSafe('#total-traffic', total);
-                setTextSafe('#dl-traffic', down);
-                setTextSafe('#up-traffic', up);
-            }
-
-            const cpuNum = Number(s.cpu);
-            const cpuPct = Number.isFinite(cpuNum) ? Math.max(0, Math.min(100, cpuNum)) : 0;
-            animateNumber('#cpu-percent', cpuPct, { decimals: 1, duration: 700, formatter: (v) => `${Number(v).toFixed(1)}%` });
-
-            const memCur = Number(s.mem?.current);
-            const memTot = Number(s.mem?.total);
-            const ramPct = (Number.isFinite(memCur) && Number.isFinite(memTot) && memTot > 0)
-                ? Math.max(0, Math.min(100, (memCur / memTot) * 100))
-                : 0;
-            animateNumber('#ram-percent', ramPct, { decimals: 1, duration: 700, formatter: (v) => `${Number(v).toFixed(1)}%` });
-
-            // IP info (from server status)
-            try {
-                document.getElementById('node-ip').textContent = s.publicIP?.ipv4 || s.publicIP?.ipv6 || '-';
-                document.getElementById('node-region').textContent = s.publicIP?.country || '-';
-                document.getElementById('node-ping').textContent = '-';
-                document.getElementById('xray-version').textContent = s.xray?.version || '-';
-            } catch(e) {}
-
-            donutChart.data.datasets[0].data = [down, up]; donutChart.update();
-        }
+        applyAdminStatusToUI(stat);
 
         if (inb.success) {
             // cache for add-client builder
@@ -899,9 +959,11 @@ async function loadAdminData() {
         }
 
         if (sys.success) {
-            cpuChart.data.datasets[0].data = sys.obj.map(p => p.cpu);
-            ramChart.data.datasets[0].data = sys.obj.map(p => p.ram);
-            cpuChart.update(); ramChart.update();
+            try {
+                cpuChart.data.datasets[0].data = sys.obj.map(p => p.cpu);
+                ramChart.data.datasets[0].data = sys.obj.map(p => p.ram);
+                cpuChart.update(); ramChart.update();
+            } catch(e) {}
         }
 
     } catch(e) {
