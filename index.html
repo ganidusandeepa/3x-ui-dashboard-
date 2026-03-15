@@ -170,30 +170,8 @@
                         </div>
                     </div>
 
-                    <div class="sub-snap-grid">
-                        <div class="sub-snap-main">
-                            <div class="sub-snap-kicker">Used Traffic</div>
-                            <div class="sub-snap-big"><span id="sub-used">0.00</span> <span class="sub-snap-unit" id="sub-used-unit">GB</span></div>
-                            <div class="sub-snap-mini">
-                                <div class="sub-snap-tile">
-                                    <div class="label">Remaining</div>
-                                    <div class="value" id="sub-remaining">-</div>
-                                </div>
-                                <div class="sub-snap-tile">
-                                    <div class="label">Total Limit</div>
-                                    <div class="value" id="sub-limit">-</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="sub-snap-gauge" id="sub-gauge" style="--p:0;">
-                            <div class="center">
-                                <div class="pct" id="sub-gauge-pct">0%</div>
-                                <div class="sub">USED</div>
-                            </div>
-                        </div>
-
-                        <div class="sub-snap-row sub-snap-row-span">
+                    <div class="sub-snap-grid" style="grid-template-columns: 1fr;">
+                        <div class="sub-snap-row sub-snap-row-span" style="margin-top:0;">
                             <div class="sub-snap-chip">
                                 <div class="chip-label">Expiry Date</div>
                                 <div class="chip-value" id="sub-expiry">-</div>

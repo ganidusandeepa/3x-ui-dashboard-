@@ -410,26 +410,17 @@ function applyClientDataToUI(client) {
     // Subscription Snapshot (unique UI)
     try {
         const usedGB = Number(totalUsed);
-        const limitGB = Number(limit);
-        const remainingGB = (limitGB > 0) ? Math.max(0, limitGB - usedGB) : NaN;
-
         const usedFmt = formatGB(usedGB);
-        const remainFmt = (limitGB > 0) ? formatGB(remainingGB) : null;
-        const limitFmt = (limitGB > 0) ? formatGB(limitGB) : null;
 
-        setTextSafe('#sub-used', usedFmt.value);
-        setTextSafe('#sub-used-unit', usedFmt.unit);
+        // Lifetime Traffic
         setTextSafe('#sub-lifetime', `${usedFmt.value} ${usedFmt.unit}`);
 
-        setTextSafe('#sub-remaining', (limitGB > 0 && remainFmt) ? `${remainFmt.value} ${remainFmt.unit}` : 'Unlimited');
-        setTextSafe('#sub-limit', (limitGB > 0 && limitFmt) ? `${limitFmt.value} ${limitFmt.unit}` : 'Unlimited');
-
-        // expiry
+        // Expiry
         const exp = Number(client.expiryTime ?? client.expiry ?? 0);
         const expText = (!Number.isFinite(exp) || exp <= 0) ? 'Never' : new Date(exp).toLocaleString();
         setTextSafe('#sub-expiry', expText);
 
-        // account status
+        // Account Status
         const active = client.enable !== false;
         setTextSafe('#sub-account', active ? 'Active' : 'Disabled/Expired');
 
@@ -468,12 +459,6 @@ function applyClientDataToUI(client) {
             }
         } catch(e) {}
 
-        // gauge
-        const frac = (limitGB > 0) ? Math.max(0, Math.min(1, usedGB / limitGB)) : 0;
-        const pct = (frac * 100);
-        const gauge = document.getElementById('sub-gauge');
-        if (gauge) gauge.style.setProperty('--p', String(frac));
-        setTextSafe('#sub-gauge-pct', limitGB > 0 ? `${pct.toFixed(1)}%` : '∞');
     } catch(e) {}
 
     try {
