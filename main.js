@@ -390,7 +390,11 @@ function applyClientDataToUI(client) {
     };
 
     try {
-        if (client.email) document.querySelector('.user-status').innerHTML = '<span>Hi, <strong style="color:var(--accent)">'+client.email+'</strong></span>';
+        // Keep the server pill intact; only replace content when in client mode
+        if (client.email) {
+            const us = document.querySelector('.user-status');
+            if (us) us.innerHTML = '<span>Hi, <strong style="color:var(--accent)">'+client.email+'</strong></span>';
+        }
         document.getElementById('user-email').textContent = client.email || document.getElementById('user-email').textContent || '-';
         if (client.uuid !== undefined) document.getElementById('user-uuid').textContent = client.uuid || '-';
         if (client.subId !== undefined) document.getElementById('user-subid').textContent = client.subId || '-';
@@ -429,7 +433,7 @@ function applyClientDataToUI(client) {
         const active = client.enable !== false;
         setTextSafe('#sub-account', active ? 'Active' : 'Disabled/Expired');
 
-        // status pill
+        // status pill (snapshot)
         const dot = document.getElementById('sub-status-dot');
         const pill = document.getElementById('sub-status-pill');
         const st = document.getElementById('sub-status-text');
@@ -444,6 +448,25 @@ function applyClientDataToUI(client) {
                 dot.style.boxShadow = '0 0 0 4px rgba(255,51,51,0.16)';
             }
         }
+
+        // status pill (top header)
+        try {
+            const top = document.getElementById('client-top-status');
+            const topDot = document.getElementById('client-top-dot');
+            const topText = document.getElementById('client-top-text');
+            if (top && topDot && topText) {
+                top.style.display = 'inline-flex';
+                if (active) {
+                    topText.textContent = 'ACTIVE';
+                    topDot.style.background = 'var(--green)';
+                    topDot.style.boxShadow = '0 0 0 4px rgba(0,255,102,0.15)';
+                } else {
+                    topText.textContent = 'INACTIVE';
+                    topDot.style.background = 'var(--red)';
+                    topDot.style.boxShadow = '0 0 0 4px rgba(255,51,51,0.16)';
+                }
+            }
+        } catch(e) {}
 
         // gauge
         const frac = (limitGB > 0) ? Math.max(0, Math.min(1, usedGB / limitGB)) : 0;
@@ -465,15 +488,21 @@ function applyClientDataToUI(client) {
         }
     } catch(e) {}
 
-    // Progress bar
+    // Progress bar (animated)
     try {
         const bar = document.getElementById('user-progress');
         if (bar) {
+            // restart CSS animation
+            bar.classList.remove('anim');
+            // force reflow
+            void bar.offsetWidth;
+            bar.classList.add('anim');
+
             if (limit > 0) {
                 let pct = (Number(totalUsed) / limit) * 100;
                 if (pct > 100) pct = 100;
-                if (typeof gsap !== 'undefined') gsap.to(bar, { width: `${pct}%`, duration: 0.4, ease: 'power2.out' });
-                else if (typeof anime !== 'undefined') anime({ targets: bar, width: `${pct}%`, duration: 400, easing: 'easeOutCubic' });
+                if (typeof gsap !== 'undefined') gsap.to(bar, { width: `${pct}%`, duration: 0.55, ease: 'power2.out' });
+                else if (typeof anime !== 'undefined') anime({ targets: bar, width: `${pct}%`, duration: 550, easing: 'easeOutCubic' });
                 else bar.style.width = `${pct}%`;
             } else {
                 bar.style.width = '100%';

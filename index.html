@@ -88,6 +88,12 @@
                     <div class="status-dot online"></div>
                     <span>Server: <strong style="color:var(--accent-color)">OK</strong></span>
                 </div>
+
+                <!-- Client status pill (shows in client mode) -->
+                <div id="client-top-status" class="client-top-status" style="display:none;">
+                    <span class="dot" id="client-top-dot"></span>
+                    <span id="client-top-text">ACTIVE</span>
+                </div>
                 <button id="btn-logout" class="nav-btn" style="padding:10px 12px; display:flex; align-items:center; gap:8px;">
                     <i class="fa-solid fa-right-from-bracket"></i> Logout
                 </button>
@@ -126,25 +132,6 @@
                             <canvas id="userDonut"></canvas>
                         </div>
                     </div>
-                </div>
-                <!-- Progress Line -->
-                <div class="card" style="margin-top:20px;">
-                    <h3>Consumption</h3>
-                    <div style="width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:4px; margin-top:15px; overflow:hidden;">
-                        <div id="user-progress" style="width: 0%; height:100%; background:linear-gradient(90deg, #0066ff, var(--accent)); transition:width 1s;"></div>
-                    </div>
-                </div>
-
-                <!-- Account Details -->
-                <div class="card" style="margin-top:20px;">
-                    <h3><i class="fa-solid fa-id-card"></i> Account Details</h3>
-                    <div class="info-row"><span>ID/Email:</span> <strong id="user-email">-</strong></div>
-                    <div class="info-row"><span>Status:</span> <strong id="user-online">-</strong></div>
-                    <div class="info-row"><span>Last Online:</span> <strong id="user-last-online">-</strong></div>
-                    <div class="info-row"><span>UUID:</span> <strong id="user-uuid">-</strong></div>
-                    <div class="info-row"><span>Subscription ID:</span> <strong id="user-subid">-</strong></div>
-                    <div class="info-row"><span>IPs:</span> <strong id="user-ips">-</strong></div>
-
                 </div>
 
                 <!-- Subscription Snapshot (unique UI) -->
@@ -198,6 +185,26 @@
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <!-- Progress Line -->
+                <div class="card" style="margin-top:20px;">
+                    <h3>Consumption</h3>
+                    <div style="width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:4px; margin-top:15px; overflow:hidden;">
+                        <div id="user-progress" class="consumption-bar" style="width: 0%; height:100%; transition:width 700ms;"></div>
+                    </div>
+                </div>
+
+                <!-- Account Details -->
+                <div class="card" style="margin-top:20px;">
+                    <h3><i class="fa-solid fa-id-card"></i> Account Details</h3>
+                    <div class="info-row"><span>ID/Email:</span> <strong id="user-email">-</strong></div>
+                    <div class="info-row"><span>Status:</span> <strong id="user-online">-</strong></div>
+                    <div class="info-row"><span>Last Online:</span> <strong id="user-last-online">-</strong></div>
+                    <div class="info-row"><span>UUID:</span> <strong id="user-uuid">-</strong></div>
+                    <div class="info-row"><span>Subscription ID:</span> <strong id="user-subid">-</strong></div>
+                    <div class="info-row"><span>IPs:</span> <strong id="user-ips">-</strong></div>
+
                 </div>
             </section>
 

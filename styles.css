@@ -90,6 +90,40 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .percent-val { position: absolute; top: 20px; right: 20px; font-size: 1.5rem; font-weight: 800; color: var(--accent); max-width: 7ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mini-chart-container { height: 100px; margin-top: 10px; }
 
+/* Consumption bar animation */
+.consumption-bar{
+    background: linear-gradient(90deg, var(--blue), var(--accent), var(--blue));
+    background-size: 200% 100%;
+    border-radius:4px;
+}
+.consumption-bar.anim{
+    animation: consumptionShift 1.6s linear infinite;
+}
+@keyframes consumptionShift{
+    0%{ background-position: 0% 50%; }
+    100%{ background-position: 200% 50%; }
+}
+
+/* Client top status pill */
+.client-top-status{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:8px 12px;
+    border-radius:999px;
+    border:1px solid var(--border);
+    background: rgba(255,255,255,0.06);
+    font-weight:900;
+    letter-spacing:.5px;
+    text-transform: uppercase;
+    font-size: 0.78rem;
+}
+.client-top-status .dot{
+    width:8px; height:8px; border-radius:50%;
+    background: var(--green);
+    box-shadow: 0 0 0 4px rgba(0,255,102,0.15);
+}
+
 /* Tabs */
 .tab-content { display: none; }
 .tab-content.active { display: block; animation: tabFade 0.5s ease; }
