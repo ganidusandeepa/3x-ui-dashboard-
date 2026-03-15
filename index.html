@@ -134,6 +134,29 @@
                     </div>
                 </div>
 
+                <!-- Progress Line -->
+                <div class="card" style="margin-top:20px;">
+                    <div class="consumption-head">
+                        <h3 style="margin-bottom:0;">Consumption</h3>
+                        <div class="consumption-pct" id="user-progress-pct" style="display:none;">0%</div>
+                    </div>
+
+                    <div class="consumption-track">
+                        <div id="user-progress" class="consumption-bar" style="width: 0%; height:100%; transition:width 700ms;"></div>
+                    </div>
+
+                    <div class="consumption-meta">
+                        <div class="consumption-line">
+                            <span class="lbl">Used</span>
+                            <strong id="user-progress-used">-</strong>
+                        </div>
+                        <div class="consumption-line">
+                            <span class="lbl">Remaining</span>
+                            <strong id="user-progress-remaining">-</strong>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Subscription Snapshot (unique UI) -->
                 <div class="card sub-snapshot" style="margin-top:20px;">
                     <div class="sub-snap-head">
@@ -183,29 +206,6 @@
                                 <div class="chip-label">Lifetime Traffic</div>
                                 <div class="chip-value" id="sub-lifetime">-</div>
                             </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Progress Line -->
-                <div class="card" style="margin-top:20px;">
-                    <div class="consumption-head">
-                        <h3 style="margin-bottom:0;">Consumption</h3>
-                        <div class="consumption-pct" id="user-progress-pct" style="display:none;">0%</div>
-                    </div>
-
-                    <div class="consumption-track">
-                        <div id="user-progress" class="consumption-bar" style="width: 0%; height:100%; transition:width 700ms;"></div>
-                    </div>
-
-                    <div class="consumption-meta">
-                        <div class="consumption-line">
-                            <span class="lbl">Used</span>
-                            <strong id="user-progress-used">-</strong>
-                        </div>
-                        <div class="consumption-line">
-                            <span class="lbl">Remaining</span>
-                            <strong id="user-progress-remaining">-</strong>
                         </div>
                     </div>
                 </div>
