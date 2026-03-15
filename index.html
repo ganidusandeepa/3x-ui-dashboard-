@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>3x-ui Admin Dashboard</title>
-    <link rel="stylesheet" href="styles.css?v=12">
+    <link rel="stylesheet" href="styles.css?v=13">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" data-cfasync="false"></script>
@@ -189,9 +189,24 @@
 
                 <!-- Progress Line -->
                 <div class="card" style="margin-top:20px;">
-                    <h3>Consumption</h3>
-                    <div style="width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:4px; margin-top:15px; overflow:hidden;">
+                    <div class="consumption-head">
+                        <h3 style="margin-bottom:0;">Consumption</h3>
+                        <div class="consumption-pct" id="user-progress-pct" style="display:none;">0%</div>
+                    </div>
+
+                    <div class="consumption-track">
                         <div id="user-progress" class="consumption-bar" style="width: 0%; height:100%; transition:width 700ms;"></div>
+                    </div>
+
+                    <div class="consumption-meta">
+                        <div class="consumption-line">
+                            <span class="lbl">Used</span>
+                            <strong id="user-progress-used">-</strong>
+                        </div>
+                        <div class="consumption-line">
+                            <span class="lbl">Remaining</span>
+                            <strong id="user-progress-remaining">-</strong>
+                        </div>
                     </div>
                 </div>
 
@@ -477,6 +492,6 @@
         </div>
     </div>
 
-    <script src="main.js?v=25" data-cfasync="false"></script>
+    <script src="main.js?v=26" data-cfasync="false"></script>
 </body>
 </html>

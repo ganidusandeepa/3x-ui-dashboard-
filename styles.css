@@ -90,18 +90,56 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .percent-val { position: absolute; top: 20px; right: 20px; font-size: 1.5rem; font-weight: 800; color: var(--accent); max-width: 7ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mini-chart-container { height: 100px; margin-top: 10px; }
 
-/* Consumption bar animation */
+/* Consumption bar (detailed) */
+.consumption-head{ display:flex; align-items:center; justify-content: space-between; gap:12px; }
+.consumption-pct{
+    padding:6px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.06);
+    font-weight: 950;
+    letter-spacing: .4px;
+    font-size: 0.82rem;
+}
+
+.consumption-track{
+    width:100%;
+    height:10px;
+    background: rgba(255,255,255,0.10);
+    border-radius:999px;
+    margin-top:14px;
+    overflow:hidden;
+    border: 1px solid rgba(255,255,255,0.06);
+}
+
 .consumption-bar{
+    height:100%;
     background: linear-gradient(90deg, var(--blue), var(--accent), var(--blue));
     background-size: 200% 100%;
-    border-radius:4px;
+    border-radius:999px;
 }
-.consumption-bar.anim{
-    animation: consumptionShift 1.6s linear infinite;
-}
+.consumption-bar.anim{ animation: consumptionShift 1.6s linear infinite; }
 @keyframes consumptionShift{
     0%{ background-position: 0% 50%; }
     100%{ background-position: 200% 50%; }
+}
+
+/* warning levels */
+.consumption-bar.level-warn{
+    background: linear-gradient(90deg, #ffb020, #ffd36b, #ffb020);
+    background-size: 200% 100%;
+}
+.consumption-bar.level-bad{
+    background: linear-gradient(90deg, #ff3333, #ff6b9a, #ff3333);
+    background-size: 200% 100%;
+}
+
+.consumption-meta{ display:grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.consumption-line{ display:flex; align-items:baseline; justify-content: space-between; gap:10px; padding:10px 12px; border-radius: 14px; border:1px solid var(--border); background: rgba(255,255,255,0.04); }
+.consumption-line .lbl{ color: var(--text-dim); font-size: 0.78rem; text-transform: uppercase; letter-spacing: .8px; }
+
+@media (max-width: 640px){
+    .consumption-meta{ grid-template-columns: 1fr; }
 }
 
 /* Client top status pill */

@@ -488,24 +488,54 @@ function applyClientDataToUI(client) {
         }
     } catch(e) {}
 
-    // Progress bar (animated)
+    // Progress bar (animated + detailed)
     try {
         const bar = document.getElementById('user-progress');
+        const pctEl = document.getElementById('user-progress-pct');
+        const usedEl = document.getElementById('user-progress-used');
+        const remEl = document.getElementById('user-progress-remaining');
+
+        if (usedEl) {
+            const usedFmt = formatGB(Number(totalUsed));
+            usedEl.textContent = `${usedFmt.value} ${usedFmt.unit}`;
+        }
+
         if (bar) {
             // restart CSS animation
-            bar.classList.remove('anim');
-            // force reflow
-            void bar.offsetWidth;
+            bar.classList.remove('anim', 'level-warn', 'level-bad');
+            void bar.offsetWidth; // force reflow
             bar.classList.add('anim');
 
             if (limit > 0) {
                 let pct = (Number(totalUsed) / limit) * 100;
                 if (pct > 100) pct = 100;
+
+                // level colors
+                if (pct >= 90) bar.classList.add('level-bad');
+                else if (pct >= 70) bar.classList.add('level-warn');
+
+                // width animation
                 if (typeof gsap !== 'undefined') gsap.to(bar, { width: `${pct}%`, duration: 0.55, ease: 'power2.out' });
                 else if (typeof anime !== 'undefined') anime({ targets: bar, width: `${pct}%`, duration: 550, easing: 'easeOutCubic' });
                 else bar.style.width = `${pct}%`;
+
+                // pct badge (right side)
+                if (pctEl) {
+                    pctEl.style.display = 'inline-flex';
+                    pctEl.textContent = `${pct.toFixed(1)}%`;
+                }
+
+                // remaining text
+                if (remEl) {
+                    const remainingGB = Math.max(0, Number(limit) - Number(totalUsed));
+                    const remFmt = formatGB(remainingGB);
+                    remEl.textContent = `${remFmt.value} ${remFmt.unit}`;
+                }
             } else {
+                // Unlimited
                 bar.style.width = '100%';
+                if (pctEl) pctEl.style.display = 'none';
+                if (remEl) remEl.textContent = 'Unlimited';
             }
         }
     } catch(e) {}
