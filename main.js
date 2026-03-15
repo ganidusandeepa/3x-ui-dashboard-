@@ -5,6 +5,13 @@ const toGB = (bytes) => {
     return (safe / (1024 ** 3)).toFixed(2);
 };
 
+function formatGB(gb) {
+    const n = Number(gb);
+    if (!Number.isFinite(n)) return { value: '0.00', unit: 'GB' };
+    if (n >= 1024) return { value: (n / 1024).toFixed(2), unit: 'TB' };
+    return { value: n.toFixed(2), unit: 'GB' };
+}
+
 function setTextSafe(selOrEl, text) {
     try {
         const el = typeof selOrEl === 'string' ? document.querySelector(selOrEl) : selOrEl;
@@ -395,6 +402,56 @@ function applyClientDataToUI(client) {
     animateNumber('#user-dl', Number(down), { decimals: 2, duration: 500 });
     animateNumber('#user-up', Number(up), { decimals: 2, duration: 500 });
     setTextSafe('#user-total', remainDesc);
+
+    // Subscription Snapshot (unique UI)
+    try {
+        const usedGB = Number(totalUsed);
+        const limitGB = Number(limit);
+        const remainingGB = (limitGB > 0) ? Math.max(0, limitGB - usedGB) : NaN;
+
+        const usedFmt = formatGB(usedGB);
+        const remainFmt = (limitGB > 0) ? formatGB(remainingGB) : null;
+        const limitFmt = (limitGB > 0) ? formatGB(limitGB) : null;
+
+        setTextSafe('#sub-used', usedFmt.value);
+        setTextSafe('#sub-used-unit', usedFmt.unit);
+        setTextSafe('#sub-lifetime', `${usedFmt.value} ${usedFmt.unit}`);
+
+        setTextSafe('#sub-remaining', (limitGB > 0 && remainFmt) ? `${remainFmt.value} ${remainFmt.unit}` : 'Unlimited');
+        setTextSafe('#sub-limit', (limitGB > 0 && limitFmt) ? `${limitFmt.value} ${limitFmt.unit}` : 'Unlimited');
+
+        // expiry
+        const exp = Number(client.expiryTime ?? client.expiry ?? 0);
+        const expText = (!Number.isFinite(exp) || exp <= 0) ? 'Never' : new Date(exp).toLocaleString();
+        setTextSafe('#sub-expiry', expText);
+
+        // account status
+        const active = client.enable !== false;
+        setTextSafe('#sub-account', active ? 'Active' : 'Disabled/Expired');
+
+        // status pill
+        const dot = document.getElementById('sub-status-dot');
+        const pill = document.getElementById('sub-status-pill');
+        const st = document.getElementById('sub-status-text');
+        if (dot && st && pill) {
+            if (active) {
+                st.textContent = 'ACTIVE';
+                dot.style.background = 'var(--green)';
+                dot.style.boxShadow = '0 0 0 4px rgba(0,255,102,0.15)';
+            } else {
+                st.textContent = 'INACTIVE';
+                dot.style.background = 'var(--red)';
+                dot.style.boxShadow = '0 0 0 4px rgba(255,51,51,0.16)';
+            }
+        }
+
+        // gauge
+        const frac = (limitGB > 0) ? Math.max(0, Math.min(1, usedGB / limitGB)) : 0;
+        const pct = (frac * 100);
+        const gauge = document.getElementById('sub-gauge');
+        if (gauge) gauge.style.setProperty('--p', String(frac));
+        setTextSafe('#sub-gauge-pct', limitGB > 0 ? `${pct.toFixed(1)}%` : '∞');
+    } catch(e) {}
 
     try {
         if (client.enable === false) {
