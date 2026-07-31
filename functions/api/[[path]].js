@@ -150,7 +150,7 @@ export async function onRequest(context) {
 
                   if (network === 'ws') {
                     const ws = stream.wsSettings || {};
-                    qs.set('path', encodeURIComponent(ws.path || '/'));
+                    qs.set('path', ws.path || '/');
                     qs.set('host', ws.headers?.Host || ws.host || host);
                   } else if (network === 'grpc') {
                     const grpc = stream.grpcSettings || {};
@@ -270,23 +270,6 @@ export async function onRequest(context) {
     });
   }
 
-  // Settings endpoint
-  if (path === "settings") {
-    if (request.method === "GET") {
-      return new Response(JSON.stringify({
-        panelUrl: PANEL_URL,
-        username: ADMIN_USER,
-        password: ""
-      }), { headers: { "Content-Type": "application/json" } });
-    }
-    if (request.method === "POST") {
-      return new Response(JSON.stringify({
-        success: false,
-        msg: "Read-only on Cloudflare Pages. Set PANEL_URL / PANEL_USERNAME / PANEL_PASSWORD in Pages environment variables."
-      }), { status: 400, headers: { "Content-Type": "application/json" } });
-    }
-  }
-
   // Admin auth check
   const authHeader = request.headers.get('Authorization');
   const hasEmailHeader = !!cfUserRecord;
@@ -298,6 +281,13 @@ export async function onRequest(context) {
   if (authHeader !== `Bearer ${ADMIN_PASS}` && !isZeroTrustAdmin) {
     return new Response(JSON.stringify({ success: false, msg: 'Unauthorized' }), {
       status: 401,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+
+  // Settings — read-only (returns env-backed values, no cookie needed)
+  if (path === "settings" && request.method === "GET") {
+    return new Response(JSON.stringify({ success: true, panelUrl: PANEL_URL, username: ADMIN_USER }), {
       headers: { "Content-Type": "application/json" }
     });
   }

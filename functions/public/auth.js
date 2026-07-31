@@ -46,10 +46,11 @@ export async function onRequestPost(context) {
     }
 
     let foundClient = null;
+    let foundInbound = null;
     data.obj.forEach(inb => {
       if (inb.clientStats) {
         const client = inb.clientStats.find(c => c.email === body.id);
-        if (client) foundClient = client;
+        if (client) { foundClient = client; foundInbound = inb; }
       }
     });
 
@@ -58,6 +59,16 @@ export async function onRequestPost(context) {
         status: 404,
         headers: { 'Content-Type': 'application/json' }
       });
+    }
+
+    // Resolve UUID from inbound settings.clients if missing in clientStats
+    let resolvedUuid = foundClient.uuid;
+    if (!resolvedUuid && foundInbound) {
+      try {
+        const inbSettings = JSON.parse(foundInbound.settings || '{}');
+        const clientConf = (inbSettings.clients || []).find(c => c.email === foundClient.email);
+        resolvedUuid = clientConf?.id || null;
+      } catch (e) {}
     }
 
     // Enrich: online status + IPs + links
@@ -92,14 +103,13 @@ export async function onRequestPost(context) {
 
     try {
       const host = new URL(PANEL_URL).hostname;
-      subLink = `https://${host}:7262/sub/nope/${foundClient.subId}`;
+      subLink = foundClient.subId ? `${PANEL_URL}/sub/${foundClient.subId}` : null;
 
-      const inbound = data.obj.find(x => Number(x.id) === Number(foundClient.inboundId));
-      if (inbound) {
-        const stream = JSON.parse(inbound.streamSettings || '{}');
-        const port = inbound.port;
-        const remark = inbound.remark || port;
-        const network = stream.network || 'ws';
+      if (foundInbound) {
+        const stream = JSON.parse(foundInbound.streamSettings || '{}');
+        const port = foundInbound.port;
+        const remark = foundInbound.remark || String(port);
+        const network = stream.network || 'tcp';
         const security = stream.security || 'none';
 
         let qs = new URLSearchParams();
@@ -109,29 +119,29 @@ export async function onRequestPost(context) {
         if (network === 'ws') {
           const ws = stream.wsSettings || {};
           qs.set('path', ws.path || '/');
-          const wsHost = ws.host || host;
-          qs.set('host', wsHost);
+          qs.set('host', ws.headers?.Host || ws.host || host);
         }
 
         if (security === 'tls') {
           qs.set('security', 'tls');
           const tls = stream.tlsSettings || {};
-          const sni = tls.serverName || host;
-          qs.set('sni', sni);
+          qs.set('sni', tls.serverName || host);
           const alpn = Array.isArray(tls.alpn) ? tls.alpn.join(',') : '';
           if (alpn) qs.set('alpn', alpn);
-          const fp = tls.settings?.fingerprint || 'chrome';
+          const fp = tls.settings?.fingerprint || '';
           if (fp) qs.set('fp', fp);
         }
 
-        vlessLink = `vless://${foundClient.uuid}@${host}:${port}?${qs.toString()}#${encodeURIComponent(`${remark}-${foundClient.email}`)}`;
+        if (resolvedUuid) {
+          vlessLink = `vless://${resolvedUuid}@${host}:${port}?${qs.toString()}#${encodeURIComponent(`${remark}-${foundClient.email}`)}`;
+        }
       }
     } catch (e) {}
 
     return new Response(JSON.stringify({
       success: true,
       role: 'client',
-      clientData: { ...foundClient, isOnline, ips, subLink, vlessLink }
+      clientData: { ...foundClient, uuid: resolvedUuid, isOnline, ips, subLink, vlessLink }
     }), {
       headers: { 'Content-Type': 'application/json' }
     });

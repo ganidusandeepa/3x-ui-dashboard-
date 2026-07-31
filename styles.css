@@ -1191,6 +1191,7 @@ body.theme-light .fab { color: #fff; background: #0a0a0a; }
     z-index: 1000;
 }
 body.theme-light .mobile-nav { background: rgba(245,245,245,0.9); }
+body.theme-light header { background: rgba(245,245,245,0.85); border-bottom: 1px solid rgba(0,0,0,0.06); }
 .m-nav-btn {
     background: none;
     border: none;
