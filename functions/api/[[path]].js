@@ -1,3 +1,26 @@
+// Module-level session cache (reused within the same worker instance lifecycle)
+let _session = { cookie: null, ts: 0 };
+const SESSION_TTL = 18 * 60 * 1000; // 18 min
+
+// Rolling system history buffer (CPU/RAM over time)
+let _sysHistory = [];
+const HISTORY_MAX = 24;
+
+function pushHistory(s) {
+  try {
+    const cpu = Number(s.cpu) || 0;
+    const memCur = Number(s.mem?.current) || 0;
+    const memTot = Number(s.mem?.total) || 1;
+    const ram = memTot > 0 ? Math.round((memCur / memTot) * 100) : 0;
+    _sysHistory.push({
+      time: new Date().toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+      cpu: Math.round(Math.min(100, Math.max(0, cpu))),
+      ram: Math.min(100, Math.max(0, ram))
+    });
+    if (_sysHistory.length > HISTORY_MAX) _sysHistory.shift();
+  } catch (e) {}
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
   const url = new URL(request.url);
@@ -10,18 +33,26 @@ export async function onRequest(context) {
   const path = url.pathname.replace('/api/', '');
 
   async function getSession() {
+    const now = Date.now();
+    if (_session.cookie && (now - _session.ts) < SESSION_TTL) {
+      return _session.cookie;
+    }
     const loginRes = await fetch(`${PANEL_URL}/login`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ username: ADMIN_USER, password: ADMIN_PASS }),
       redirect: 'follow'
     });
-    return loginRes.headers.get("set-cookie");
+    const cookie = loginRes.headers.get("set-cookie");
+    if (cookie) {
+      _session = { cookie, ts: now };
+    }
+    return cookie;
   }
 
   const cfUserRecord = request.headers.get('Cf-Access-Authenticated-User-Email');
 
-  // Handle Authentication Request
+  // Authentication endpoint
   if (request.method === "POST" && path === "auth") {
     const body = await request.json();
 
@@ -52,7 +83,6 @@ export async function onRequest(context) {
           });
         }
 
-        // Correct endpoint: /panel/api/inbounds/list
         const apiRes = await fetch(`${PANEL_URL}/panel/api/inbounds/list`, {
           headers: { "Cookie": cookie }
         });
@@ -60,15 +90,15 @@ export async function onRequest(context) {
 
         if (data && data.success && Array.isArray(data.obj)) {
           let foundClient = null;
+          let foundInbound = null;
           data.obj.forEach(inb => {
             if (inb.clientStats) {
               const client = inb.clientStats.find(c => c.email === body.id);
-              if (client) foundClient = client;
+              if (client) { foundClient = client; foundInbound = inb; }
             }
           });
 
           if (foundClient) {
-            // Enrich with online status + IP list (no admin token needed on client check)
             let isOnline = null;
             let ips = [];
 
@@ -96,54 +126,94 @@ export async function onRequest(context) {
               }
             } catch (e) {}
 
-            // Build subscription link + VLESS link
             let subLink = null;
             let vlessLink = null;
+            let vmessLink = null;
+            let trojanLink = null;
+            let protocol = 'vless';
+
             try {
               const host = new URL(PANEL_URL).hostname;
-              // default sub endpoint from your panel setup
-              subLink = `https://${host}:7262/sub/nope/${foundClient.subId}`;
+              subLink = foundClient.subId ? `${PANEL_URL}/sub/${foundClient.subId}` : null;
 
-              // find inbound to build vless
-              const inbound = data.obj.find(x => Number(x.id) === Number(foundClient.inboundId));
-              if (inbound) {
-                const stream = JSON.parse(inbound.streamSettings || '{}');
-                const port = inbound.port;
-                const remark = inbound.remark || port;
-                const network = stream.network || 'ws';
+              if (foundInbound) {
+                const stream = JSON.parse(foundInbound.streamSettings || '{}');
+                const port = foundInbound.port;
+                const remark = foundInbound.remark || String(port);
+                const network = stream.network || 'tcp';
                 const security = stream.security || 'none';
+                protocol = (foundInbound.protocol || 'vless').toLowerCase();
 
-                let qs = new URLSearchParams();
-                qs.set('type', network);
-                qs.set('encryption', 'none');
+                const buildQs = () => {
+                  let qs = new URLSearchParams();
+                  qs.set('type', network);
 
-                if (network === 'ws') {
-                  const ws = stream.wsSettings || {};
-                  qs.set('path', ws.path || '/');
-                  // host header for ws
-                  const wsHost = ws.host || inbound?.host || host;
-                  qs.set('host', wsHost);
+                  if (network === 'ws') {
+                    const ws = stream.wsSettings || {};
+                    qs.set('path', encodeURIComponent(ws.path || '/'));
+                    qs.set('host', ws.headers?.Host || ws.host || host);
+                  } else if (network === 'grpc') {
+                    const grpc = stream.grpcSettings || {};
+                    qs.set('serviceName', grpc.serviceName || '');
+                    qs.set('mode', grpc.multiMode ? 'multi' : 'gun');
+                  } else if (network === 'tcp') {
+                    const tcp = stream.tcpSettings || {};
+                    if (tcp.header?.type === 'http') {
+                      qs.set('headerType', 'http');
+                    }
+                  }
+
+                  if (security === 'tls') {
+                    qs.set('security', 'tls');
+                    const tls = stream.tlsSettings || {};
+                    qs.set('sni', tls.serverName || host);
+                    const alpn = Array.isArray(tls.alpn) ? tls.alpn.join(',') : '';
+                    if (alpn) qs.set('alpn', alpn);
+                    const fp = tls.settings?.fingerprint || '';
+                    if (fp) qs.set('fp', fp);
+                    if (tls.settings?.allowInsecure) qs.set('allowInsecure', '1');
+                  } else if (security === 'reality') {
+                    qs.set('security', 'reality');
+                    const reality = stream.realitySettings || {};
+                    qs.set('sni', (reality.serverNames || [])[0] || host);
+                    qs.set('pbk', reality.publicKey || '');
+                    if (reality.shortIds?.[0]) qs.set('sid', reality.shortIds[0]);
+                    const fp = reality.settings?.fingerprint || 'chrome';
+                    qs.set('fp', fp);
+                  }
+                  return qs;
+                };
+
+                if (protocol === 'vless') {
+                  const qs = buildQs();
+                  qs.set('encryption', 'none');
+                  const settings = JSON.parse(foundInbound.settings || '{}');
+                  const clientConf = (settings.clients || []).find(c => c.email === foundClient.email);
+                  if (clientConf?.flow) qs.set('flow', clientConf.flow);
+                  vlessLink = `vless://${foundClient.uuid}@${host}:${port}?${qs.toString()}#${encodeURIComponent(`${remark}-${foundClient.email}`)}`;
+                } else if (protocol === 'vmess') {
+                  const vmessObj = {
+                    v: '2', ps: `${remark}-${foundClient.email}`, add: host,
+                    port: String(port), id: foundClient.uuid, aid: '0',
+                    scy: 'auto', net: network, type: 'none',
+                    host: network === 'ws' ? (stream.wsSettings?.headers?.Host || host) : '',
+                    path: network === 'ws' ? (stream.wsSettings?.path || '/') : '',
+                    tls: security === 'tls' ? 'tls' : ''
+                  };
+                  vmessLink = `vmess://${btoa(JSON.stringify(vmessObj))}`;
+                } else if (protocol === 'trojan') {
+                  const qs = buildQs();
+                  trojanLink = `trojan://${foundClient.password || foundClient.uuid}@${host}:${port}?${qs.toString()}#${encodeURIComponent(`${remark}-${foundClient.email}`)}`;
                 }
-
-                if (security === 'tls') {
-                  qs.set('security', 'tls');
-                  const tls = stream.tlsSettings || {};
-                  const sni = tls.serverName || host;
-                  qs.set('sni', sni);
-                  const alpn = Array.isArray(tls.alpn) ? tls.alpn.join(',') : '';
-                  if (alpn) qs.set('alpn', alpn);
-                  const fp = tls.settings?.fingerprint || 'chrome';
-                  if (fp) qs.set('fp', fp);
-                }
-
-                vlessLink = `vless://${foundClient.uuid}@${host}:${port}?${qs.toString()}#${encodeURIComponent(`${remark}-${foundClient.email}`)}`;
               }
             } catch (e) {}
+
+            const configLink = vlessLink || vmessLink || trojanLink || null;
 
             return new Response(JSON.stringify({
               success: true,
               role: 'client',
-              clientData: { ...foundClient, isOnline, ips, subLink, vlessLink }
+              clientData: { ...foundClient, isOnline, ips, subLink, vlessLink, vmessLink, trojanLink, configLink, protocol }
             }), {
               headers: { "Content-Type": "application/json" }
             });
@@ -163,7 +233,7 @@ export async function onRequest(context) {
     }
   }
 
-  // Settings endpoint (Cloudflare Pages: env-var based, not writable)
+  // Settings endpoint
   if (path === "settings") {
     if (request.method === "GET") {
       return new Response(JSON.stringify({
@@ -180,18 +250,12 @@ export async function onRequest(context) {
     }
   }
 
-  // Require Admin Auth for other requests
+  // Admin auth check
   const authHeader = request.headers.get('Authorization');
-
-  // Cloudflare Access signals (UI changes across versions):
-  // - Cf-Access-Authenticated-User-Email (when identity headers are injected)
-  // - Cf-Access-Jwt-Assertion (JWT assertion header)
-  // - CF_Authorization cookie (browser cookie)
   const hasEmailHeader = !!cfUserRecord;
   const hasJwtAssertion = !!request.headers.get('Cf-Access-Jwt-Assertion');
   const cookieHdr = request.headers.get('Cookie') || '';
   const hasCfAuthCookie = /(?:^|;\s*)CF_Authorization=/.test(cookieHdr);
-
   const isZeroTrustAdmin = hasEmailHeader || hasJwtAssertion || hasCfAuthCookie;
 
   if (authHeader !== `Bearer ${ADMIN_PASS}` && !isZeroTrustAdmin) {
@@ -201,7 +265,6 @@ export async function onRequest(context) {
     });
   }
 
-  // Admin routes
   try {
     const cookie = await getSession();
     if (!cookie) {
@@ -211,9 +274,7 @@ export async function onRequest(context) {
       });
     }
 
-    // Generic proxy for ALL endpoints from the official API documentation.
-    // Usage: /api/xui/<path>  ->  ${PANEL_URL}/panel/api/<path>
-    // Example: /api/xui/server/status -> /panel/api/server/status
+    // Generic proxy for all 3x-ui API endpoints
     if (path.startsWith('xui/')) {
       const subPath = path.slice(4).replace(/^\/+/, '');
       const targetUrl = `${PANEL_URL}/panel/api/${subPath}`;
@@ -224,14 +285,18 @@ export async function onRequest(context) {
         "Referer": `${PANEL_URL}/`
       };
 
-      // Forward Content-Type if present
       const ct = request.headers.get('Content-Type');
       if (ct) headers['Content-Type'] = ct;
 
       let body;
       if (request.method !== 'GET' && request.method !== 'HEAD') {
-        // If it's JSON, keep it as text to forward cleanly.
-        body = await request.text();
+        const isBinary = ct && (ct.includes('multipart/form-data') || ct.includes('application/octet-stream'));
+        if (isBinary) {
+          body = await request.arrayBuffer();
+          // For multipart, DO NOT set Content-Type manually — keep the browser-set boundary
+        } else {
+          body = await request.text();
+        }
       }
 
       const proxied = await fetch(targetUrl, {
@@ -250,21 +315,53 @@ export async function onRequest(context) {
     const fetchInbounds = async () => {
       const apiRes = await fetch(`${PANEL_URL}/panel/api/inbounds/list`, {
         method: "GET",
-        headers: {
-          "Cookie": cookie,
-          "Accept": "application/json",
-          "Referer": `${PANEL_URL}/`
-        }
+        headers: { "Cookie": cookie, "Accept": "application/json", "Referer": `${PANEL_URL}/` }
       });
       return await apiRes.json();
     };
 
+    // Expiry alerts — clients expiring within 30 days
+    if (path === "expiry-alerts") {
+      const data = await fetchInbounds();
+      const alerts = [];
+      const now = Date.now();
+      const WARN_30 = 30 * 24 * 60 * 60 * 1000;
+
+      if (data && data.obj) {
+        data.obj.forEach(inb => {
+          if (inb.clientStats) {
+            inb.clientStats.forEach(c => {
+              const exp = Number(c.expiryTime);
+              if (exp > 0) {
+                const diff = exp - now;
+                if (diff <= WARN_30) {
+                  alerts.push({
+                    email: c.email,
+                    expiryTime: exp,
+                    daysLeft: Math.ceil(diff / (24 * 60 * 60 * 1000)),
+                    enable: c.enable,
+                    inboundId: inb.id,
+                    inboundRemark: inb.remark || String(inb.id)
+                  });
+                }
+              }
+            });
+          }
+        });
+      }
+      alerts.sort((a, b) => a.expiryTime - b.expiryTime);
+      return new Response(JSON.stringify({ success: true, obj: alerts }), {
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
+    // System history — rolling real data
     if (path === "system-history") {
-      const points = Array.from({ length: 10 }, (_, i) => ({
-        time: `${i}:00`,
-        cpu: 0,
-        ram: 0
-      }));
+      const points = [];
+      for (let i = 0; i < 10; i++) {
+        const idx = _sysHistory.length - 10 + i;
+        points.push(idx >= 0 ? _sysHistory[idx] : { time: '', cpu: 0, ram: 0 });
+      }
       return new Response(JSON.stringify({ success: true, obj: points }), {
         headers: { "Content-Type": "application/json" }
       });
@@ -276,7 +373,7 @@ export async function onRequest(context) {
       if (data && data.obj) {
         data.obj.forEach(inb => {
           if (inb.clientStats) {
-            inb.clientStats.forEach(c => clients.push({ ...c, inboundId: inb.id }));
+            inb.clientStats.forEach(c => clients.push({ ...c, inboundId: inb.id, inboundRemark: inb.remark || String(inb.id), protocol: inb.protocol }));
           }
         });
       }
@@ -302,17 +399,16 @@ export async function onRequest(context) {
 
     const apiRes = await fetch(targetUrl, {
       method: "GET",
-      headers: {
-        "Cookie": cookie,
-        "Accept": "application/json",
-        "Referer": `${PANEL_URL}/`
-      }
+      headers: { "Cookie": cookie, "Accept": "application/json", "Referer": `${PANEL_URL}/` }
     });
 
     const data = await apiRes.json();
 
-    // If request came from a browser navigation to /api/status, redirect back to UI
-    // so Access auth flow works smoothly.
+    // Feed status data into rolling history buffer
+    if (path === "status" && data && data.obj) {
+      pushHistory(data.obj);
+    }
+
     const accept = request.headers.get('Accept') || '';
     const secFetchDest = request.headers.get('Sec-Fetch-Dest') || '';
     const isNav = accept.includes('text/html') || secFetchDest === 'document';
@@ -324,6 +420,8 @@ export async function onRequest(context) {
       headers: { "Content-Type": "application/json" }
     });
   } catch (err) {
+    // Invalidate cached session on error so next request re-authenticates
+    _session = { cookie: null, ts: 0 };
     return new Response(JSON.stringify({ success: false, error: err.message }), {
       status: 500,
       headers: { "Content-Type": "application/json" }

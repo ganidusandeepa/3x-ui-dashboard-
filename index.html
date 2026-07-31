@@ -4,20 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>3x-ui Admin Dashboard</title>
-    <link rel="stylesheet" href="styles.css?v=13">
+    <link rel="stylesheet" href="styles.css?v=14">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" data-cfasync="false"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js" data-cfasync="false"></script>
-
     <!-- Vanta Globe background (WebGL) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" data-cfasync="false"></script>
     <script src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.globe.min.js" data-cfasync="false"></script>
     <!-- GSAP plugins (free) -->
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/ScrollTrigger.min.js" data-cfasync="false"></script>
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/Draggable.min.js" data-cfasync="false"></script>
-    <!-- anime.js fallback (when GSAP features/plugins are unavailable) -->
+    <!-- anime.js fallback -->
     <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js" data-cfasync="false"></script>
+    <!-- QR code generation -->
+    <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js" data-cfasync="false"></script>
 </head>
 <body>
     <div id="toast-container"></div>
@@ -33,14 +34,14 @@
                 <button id="tab-login-client" style="flex:1; padding:10px; background:none; border:none; color:var(--accent); border-bottom: 2px solid var(--accent); font-weight:bold; cursor:pointer;">Client Check</button>
                 <button id="tab-login-admin" style="flex:1; padding:10px; background:none; border:none; color:var(--text-dim); border-bottom: 2px solid transparent; font-weight:bold; cursor:pointer;">Admin (Google)</button>
             </div>
-            
+
             <div id="login-form-client">
                 <div class="input-group">
                     <input type="text" id="login-email" placeholder="Your Exact Email or ID">
                 </div>
                 <button class="accent-btn" style="width: 100%; margin-top: 10px;" id="btn-login-client">Check Traffic</button>
             </div>
-            
+
             <div id="login-form-admin" style="display:none;">
                 <div class="card" style="background: rgba(255,255,255,0.03); border-radius: 16px; padding: 14px; text-align:left;">
                     <div style="font-weight:800; margin-bottom:6px;"><i class="fa-solid fa-shield-halved" style="color:var(--accent)"></i> Admin access</div>
@@ -66,7 +67,6 @@
         <header>
             <div class="logo"><i class="fa-solid fa-server"></i> 3x-ui<span>.panel</span></div>
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
-                <!-- Admin quick nav (top tabs removed) -->
                 <select id="admin-tab-select" class="sys-btn" style="padding:10px 12px; display:none; min-width:170px;">
                     <option value="overview">Overview</option>
                     <option value="inbounds">Inbounds</option>
@@ -74,12 +74,10 @@
                     <option value="system">System</option>
                 </select>
 
-                <!-- Theme toggle -->
                 <button id="btn-theme" class="sys-btn" style="padding:10px 12px; display:flex; align-items:center; gap:8px;">
                     <i class="fa-solid fa-moon"></i> Theme
                 </button>
 
-                <!-- Background toggle -->
                 <button id="btn-bg" class="sys-btn" style="padding:10px 12px; display:flex; align-items:center; gap:8px;">
                     <i class="fa-solid fa-earth-asia"></i> BG
                 </button>
@@ -89,7 +87,6 @@
                     <span>Server: <strong style="color:var(--accent-color)">OK</strong></span>
                 </div>
 
-                <!-- Client status pill (shows in client mode) -->
                 <div id="client-top-status" class="client-top-status" style="display:none;">
                     <span class="dot" id="client-top-dot"></span>
                     <span id="client-top-text">ACTIVE</span>
@@ -99,9 +96,9 @@
                 </button>
             </div>
         </header>
-        
+
         <main>
-            <!-- USER VIEW TAB (Appears only for clients) -->
+            <!-- USER VIEW TAB -->
             <section id="tab-user-view" class="tab-content">
                 <div class="overview-grid">
                     <div class="card data-card-hero">
@@ -109,7 +106,7 @@
                             <h3><i class="fa-solid fa-user"></i> My Traffic Usage</h3>
                             <div class="main-value"><span id="user-used">0.00</span> <span class="unit">GB</span></div>
                             <p class="subtitle" style="font-size: 1.1rem; color:var(--text-dim);">Total Limit: <strong id="user-total" style="color:#fff;">0.00 GB</strong></p>
-                            
+
                             <div class="traffic-split" style="margin-top: 30px;">
                                 <div class="split-item down">
                                     <span class="label">DOWNLOAD</span>
@@ -122,7 +119,7 @@
                             </div>
                             <p style="margin-top: 20px; color: var(--text-dim);">Status: <strong id="user-status-text" class="status-badge active" style="margin-left:10px;">Active</strong></p>
                             <p style="margin-top: 10px; color: var(--text-dim);">
-                                Speed: 
+                                Speed:
                                 <strong style="color:var(--blue)">↓ <span id="user-dl-speed">0</span> Mbps</strong>
                                 &nbsp;&nbsp;
                                 <strong style="color:var(--accent)">↑ <span id="user-up-speed">0</span> Mbps</strong>
@@ -140,11 +137,9 @@
                         <h3 style="margin-bottom:0;">Consumption</h3>
                         <div class="consumption-pct" id="user-progress-pct" style="display:none;">0%</div>
                     </div>
-
                     <div class="consumption-track">
                         <div id="user-progress" class="consumption-bar" style="width: 0%; height:100%; transition:width 700ms;"></div>
                     </div>
-
                     <div class="consumption-meta">
                         <div class="consumption-line">
                             <span class="lbl">Used</span>
@@ -157,19 +152,18 @@
                     </div>
                 </div>
 
-                <!-- Subscription Snapshot (unique UI) -->
+                <!-- Subscription Snapshot -->
                 <div class="card sub-snapshot" style="margin-top:20px;">
                     <div class="sub-snap-head">
                         <div>
                             <h3 style="margin-bottom:6px;"><i class="fa-solid fa-sparkles"></i> Subscription Snapshot</h3>
-                            <div class="sub-snap-sub">A quick view of your plan usage & dates</div>
+                            <div class="sub-snap-sub">A quick view of your plan usage &amp; dates</div>
                         </div>
                         <div class="sub-snap-status" id="sub-status-pill">
                             <span class="sub-snap-dot" id="sub-status-dot"></span>
                             <span id="sub-status-text">ACTIVE</span>
                         </div>
                     </div>
-
                     <div class="sub-snap-grid" style="grid-template-columns: 1fr;">
                         <div class="sub-snap-row sub-snap-row-span" style="margin-top:0;">
                             <div class="sub-snap-chip">
@@ -186,6 +180,11 @@
                             </div>
                         </div>
                     </div>
+                    <!-- Expiry countdown -->
+                    <div id="expiry-countdown" style="display:none; margin-top:16px; padding:12px; background:rgba(255,165,0,0.08); border:1px solid rgba(255,165,0,0.25); border-radius:12px; text-align:center;">
+                        <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:4px;">TIME REMAINING</div>
+                        <div id="expiry-countdown-val" style="font-size:1.4rem; font-weight:800; color:var(--accent);"></div>
+                    </div>
                 </div>
 
                 <!-- Account Details -->
@@ -194,17 +193,50 @@
                     <div class="info-row"><span>ID/Email:</span> <strong id="user-email">-</strong></div>
                     <div class="info-row"><span>Status:</span> <strong id="user-online">-</strong></div>
                     <div class="info-row"><span>Last Online:</span> <strong id="user-last-online">-</strong></div>
-                    <div class="info-row"><span>UUID:</span> <strong id="user-uuid">-</strong></div>
+                    <div class="info-row"><span>UUID:</span> <strong id="user-uuid" style="word-break:break-all;font-size:0.85rem;">-</strong></div>
                     <div class="info-row"><span>Subscription ID:</span> <strong id="user-subid">-</strong></div>
                     <div class="info-row"><span>IPs:</span> <strong id="user-ips">-</strong></div>
+                </div>
 
+                <!-- Config Link & QR Code (client view) -->
+                <div id="client-config-card" class="card" style="margin-top:20px; display:none;">
+                    <h3><i class="fa-solid fa-qrcode"></i> Connection Config</h3>
+                    <p class="subtitle" style="margin-bottom:14px; font-size:0.85rem;">Scan the QR code or copy the config link to your proxy app.</p>
+
+                    <div style="display:flex; flex-direction:column; align-items:center; gap:16px;">
+                        <canvas id="client-qr-canvas" style="border-radius:12px; background:#fff; padding:10px;"></canvas>
+
+                        <div style="width:100%;">
+                            <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:6px;">Config Link</div>
+                            <div class="copy-row">
+                                <input id="client-config-link" type="text" readonly value="" style="font-size:0.78rem; word-break:break-all;">
+                                <button class="sys-btn" onclick="copyClientConfig()"><i class="fa-solid fa-copy"></i> Copy</button>
+                            </div>
+                        </div>
+
+                        <div id="client-sub-row" style="width:100%; display:none;">
+                            <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:6px;">Subscription URL</div>
+                            <div class="copy-row">
+                                <input id="client-sub-link" type="text" readonly value="">
+                                <button class="sys-btn" onclick="copyClientSub()"><i class="fa-solid fa-copy"></i> Copy</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
 
             <!-- OVERVIEW TAB -->
             <section id="tab-overview" class="tab-content active">
+                <!-- Expiry Alerts Widget -->
+                <div id="expiry-alerts-card" class="card" style="margin-bottom:20px; display:none;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+                        <h3 style="margin:0;"><i class="fa-solid fa-triangle-exclamation" style="color:orange;"></i> Expiry Alerts</h3>
+                        <span id="expiry-alert-count" class="status-badge" style="background:rgba(255,165,0,0.12); color:orange; border:1px solid rgba(255,165,0,0.3);">0 clients</span>
+                    </div>
+                    <div id="expiry-alerts-list" style="display:flex; flex-direction:column; gap:8px; max-height:220px; overflow-y:auto;"></div>
+                </div>
+
                 <div class="overview-grid">
-                    <!-- Premium Data Usage Card -->
                     <div class="card data-card-hero">
                         <div class="data-text">
                             <h3><i class="fa-solid fa-globe"></i> Global Traffic</h3>
@@ -225,7 +257,6 @@
                         </div>
                     </div>
 
-                    <!-- Compact Resource Stats -->
                     <div class="card resource-card">
                         <h3><i class="fa-solid fa-microchip"></i> CPU Usage</h3>
                         <div class="mini-chart-container">
@@ -255,8 +286,9 @@
 
             <!-- INBOUNDS TAB -->
             <section id="tab-inbounds" class="tab-content">
+                <!-- Add Client -->
                 <div class="card" style="margin-bottom:16px;">
-                    <h3><i class="fa-solid fa-user-plus"></i> Add Client (VLESS)</h3>
+                    <h3><i class="fa-solid fa-user-plus"></i> Add Client</h3>
                     <div class="input-group">
                         <label>Inbound</label>
                         <select id="addc-inbound"></select>
@@ -266,7 +298,7 @@
                         <input id="addc-email" type="text" placeholder="e.g., poorna">
                     </div>
                     <div class="input-group">
-                        <label>Traffic Limit (GB) - 0 = Unlimited</label>
+                        <label>Traffic Limit (GB) — 0 = Unlimited</label>
                         <input id="addc-limit" type="number" value="0" min="0" step="1">
                         <div class="drag-row" style="margin-top:10px;">
                             <div class="drag-track" id="limit-track">
@@ -275,10 +307,10 @@
                             </div>
                             <div class="drag-val"><span id="limit-val">0</span> GB</div>
                         </div>
-                        <p class="subtitle" style="margin-top:10px;">Drag the handle to set limit quickly.</p>
+                        <p class="subtitle" style="margin-top:10px;">Drag to set limit quickly.</p>
                     </div>
                     <div class="input-group">
-                        <label>Expiry (days)</label>
+                        <label>Expiry (days) — 0 = Never</label>
                         <input id="addc-days" type="number" value="30" min="0" step="1">
                         <div class="drag-row" style="margin-top:10px;">
                             <div class="drag-track" id="days-track">
@@ -288,17 +320,43 @@
                             <div class="drag-val"><span id="days-val">30</span> days</div>
                         </div>
                     </div>
+                    <div class="input-group">
+                        <label>IP Limit — 0 = Unlimited</label>
+                        <input id="addc-iplimit" type="number" value="0" min="0" step="1">
+                    </div>
                     <div class="sys-actions" style="grid-template-columns:1fr 1fr;">
                         <button class="sys-btn" id="btn-add-client"><i class="fa-solid fa-plus"></i> Create</button>
-                        <button class="sys-btn" id="btn-add-client-refresh"><i class="fa-solid fa-rotate"></i> Refresh Inbounds</button>
+                        <button class="sys-btn" id="btn-add-client-refresh"><i class="fa-solid fa-rotate"></i> Refresh</button>
                     </div>
+                </div>
 
-                    <h3 style="margin-top:18px;"><i class="fa-solid fa-screwdriver-wrench"></i> Inbound Tools</h3>
+                <!-- Add Inbound -->
+                <div class="card" style="margin-bottom:16px;">
+                    <h3><i class="fa-solid fa-network-wired"></i> Inbound Management</h3>
+                    <div class="sys-actions" style="grid-template-columns:1fr 1fr;">
+                        <button class="sys-btn" id="btn-add-inbound"><i class="fa-solid fa-plus"></i> Add Inbound</button>
+                        <button class="sys-btn warning" id="btn-del-inbound"><i class="fa-solid fa-trash-can"></i> Delete Inbound</button>
+                    </div>
+                    <div class="input-group" style="margin-top:12px; display:none;" id="del-inbound-row">
+                        <label>Select Inbound to Delete</label>
+                        <select id="del-inbound-sel"></select>
+                        <button class="sys-btn danger" id="btn-del-inbound-confirm" style="margin-top:8px; width:100%;"><i class="fa-solid fa-trash-can"></i> Confirm Delete</button>
+                    </div>
+                </div>
+
+                <!-- Inbound & Client Tools -->
+                <div class="card" style="margin-bottom:16px;">
+                    <h3><i class="fa-solid fa-screwdriver-wrench"></i> Inbound Tools</h3>
                     <div class="sys-actions" style="grid-template-columns:1fr 1fr;">
                         <button class="sys-btn" id="btn-inb-onlines"><i class="fa-solid fa-signal"></i> Onlines</button>
                         <button class="sys-btn" id="btn-inb-lastonline"><i class="fa-solid fa-clock"></i> Last Online</button>
                         <button class="sys-btn warning" id="btn-inb-reset"><i class="fa-solid fa-eraser"></i> Reset Inbound</button>
                         <button class="sys-btn danger" id="btn-all-reset"><i class="fa-solid fa-trash-can"></i> Reset ALL</button>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px; margin-top:14px; padding:10px 0; border-top:1px solid var(--border);">
+                        <label style="font-size:0.85rem; color:var(--text-dim); white-space:nowrap;">Auto-refresh onlines</label>
+                        <input type="checkbox" id="auto-refresh-onlines" style="width:18px;height:18px;cursor:pointer;">
+                        <span class="subtitle" style="font-size:0.8rem;">every 30s</span>
                     </div>
 
                     <h3 style="margin-top:18px;"><i class="fa-solid fa-user-gear"></i> Client Tools</h3>
@@ -311,6 +369,8 @@
                         <button class="sys-btn danger" id="btn-client-del"><i class="fa-solid fa-user-xmark"></i> Delete</button>
                         <button class="sys-btn" id="btn-client-ips"><i class="fa-solid fa-location-dot"></i> IPs</button>
                         <button class="sys-btn" id="btn-client-ips-clear"><i class="fa-solid fa-broom"></i> Clear IPs</button>
+                        <button class="sys-btn" id="btn-client-traffic-history"><i class="fa-solid fa-chart-bar"></i> Traffic History</button>
+                        <button class="sys-btn" id="btn-client-toggle-enable"><i class="fa-solid fa-toggle-on"></i> Toggle Enable</button>
                     </div>
 
                     <div class="card" id="ui-result" style="margin-top:12px; display:none;">
@@ -323,9 +383,7 @@
                     </div>
                 </div>
 
-                <div class="inbound-grid" id="inbound-cards-container">
-                    <!-- Cards injected here by JS for better mobile experience -->
-                </div>
+                <div class="inbound-grid" id="inbound-cards-container"></div>
             </section>
 
             <!-- CLIENTS TAB -->
@@ -336,12 +394,18 @@
                         <label>Search (email / id)</label>
                         <input id="client-search" type="text" placeholder="type to filter..." autocomplete="off">
                     </div>
-                    <p class="subtitle" style="margin-top:10px;">Tip: click a client card to open details.</p>
+                    <div style="display:flex; align-items:center; gap:10px; margin-top:12px; flex-wrap:wrap;">
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.9rem;">
+                            <input type="checkbox" id="bulk-select-all" style="width:16px;height:16px;"> Select All Visible
+                        </label>
+                        <button class="sys-btn warning" id="btn-bulk-reset" style="padding:8px 14px; font-size:0.85rem; display:none;"><i class="fa-solid fa-rotate"></i> Reset Selected</button>
+                        <button class="sys-btn danger" id="btn-bulk-delete" style="padding:8px 14px; font-size:0.85rem; display:none;"><i class="fa-solid fa-user-xmark"></i> Delete Selected</button>
+                        <span id="bulk-count" style="font-size:0.82rem; color:var(--text-dim); display:none;">0 selected</span>
+                    </div>
+                    <p class="subtitle" style="margin-top:8px;">Click a client card to open details &amp; edit.</p>
                 </div>
 
-                <div class="client-container" id="client-list">
-                    <!-- Client cards injected by JS -->
-                </div>
+                <div class="client-container" id="client-list"></div>
             </section>
 
             <!-- Client Detail Drawer -->
@@ -356,12 +420,12 @@
                         <button class="sys-btn" id="drawer-close" style="padding:10px 12px;"><i class="fa-solid fa-xmark"></i></button>
                     </div>
 
-                    <div class="drawer-body" id="drawer-body">
-                        <!-- filled by JS -->
-                    </div>
+                    <div class="drawer-body" id="drawer-body"></div>
 
-                    <div class="drawer-footer">
-                        <button class="sys-btn warning" id="drawer-reset"><i class="fa-solid fa-rotate"></i> Reset Traffic</button>
+                    <div class="drawer-footer" style="display:flex; flex-wrap:wrap; gap:8px;">
+                        <button class="sys-btn" id="drawer-edit"><i class="fa-solid fa-pen"></i> Edit</button>
+                        <button class="sys-btn" id="drawer-toggle-enable"><i class="fa-solid fa-toggle-on"></i> Toggle</button>
+                        <button class="sys-btn warning" id="drawer-reset"><i class="fa-solid fa-rotate"></i> Reset</button>
                         <button class="sys-btn danger" id="drawer-delete"><i class="fa-solid fa-user-xmark"></i> Delete</button>
                     </div>
                 </aside>
@@ -389,9 +453,17 @@
                         <h3 style="margin-top:20px; padding-top:20px; border-top:1px solid var(--border);"><i class="fa-solid fa-screwdriver-wrench"></i> Server Tools</h3>
                         <div class="sys-actions" style="grid-template-columns: 1fr 1fr;">
                             <button class="sys-btn" id="btn-dl-config"><i class="fa-solid fa-file-code"></i> Config.json</button>
-                            <button class="sys-btn" id="btn-dl-db"><i class="fa-solid fa-database"></i> DB</button>
+                            <button class="sys-btn" id="btn-dl-db"><i class="fa-solid fa-database"></i> Download DB</button>
                             <button class="sys-btn" id="btn-new-uuid"><i class="fa-solid fa-fingerprint"></i> New UUID</button>
                             <button class="sys-btn" id="btn-new-x25519"><i class="fa-solid fa-key"></i> X25519</button>
+                        </div>
+
+                        <!-- Import DB -->
+                        <div style="margin-top:14px; padding:14px; background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:12px;">
+                            <h4 style="margin-bottom:10px;"><i class="fa-solid fa-upload"></i> Import / Restore DB</h4>
+                            <p class="subtitle" style="margin-bottom:10px; font-size:0.82rem;">Upload an <code>x-ui.db</code> backup file to restore.</p>
+                            <input type="file" id="import-db-file" accept=".db" style="width:100%; padding:8px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:8px; color:var(--text-color); font-size:0.85rem; cursor:pointer;">
+                            <button class="sys-btn" id="btn-import-db" style="width:100%; margin-top:8px;"><i class="fa-solid fa-upload"></i> Restore Database</button>
                         </div>
 
                         <div class="input-group" style="margin-top:14px;">
@@ -408,8 +480,7 @@
                         </div>
 
                         <h3 style="margin-top:20px; padding-top:20px; border-top:1px solid var(--border);"><i class="fa-solid fa-link"></i> Panel Config</h3>
-                        <p class="subtitle" style="margin-bottom:15px; font-size:0.8rem;">This dashboard is managed via Cloudflare Pages env vars.</p>
-                        
+                        <p class="subtitle" style="margin-bottom:15px; font-size:0.8rem;">Managed via Cloudflare Pages env vars.</p>
                         <div class="input-group">
                             <label>Panel API URL</label>
                             <input type="text" id="setting-url" placeholder="http://192.168.1.1:2053" disabled>
@@ -427,8 +498,6 @@
                 </div>
             </section>
         </main>
-
-        <!-- Mobile Bottom Nav -->
     </div>
 
     <!-- Admin API Tool Modal -->
@@ -437,12 +506,11 @@
             <h3><i class="fa-solid fa-wrench"></i> Admin API Tool</h3>
             <p class="subtitle" style="margin: 6px 0 14px; font-size:0.85rem; color:var(--text-dim);">
                 Send requests to <code>/panel/api/*</code> via the dashboard proxy <code>/api/xui/*</code>.
-                This supports all options in the official API documentation.
             </p>
 
             <div class="input-group">
                 <label>Endpoint (after /panel/api/)</label>
-                <input type="text" id="api-path" placeholder="e.g., inbounds/addClient or server/restartXrayService" value="inbounds/list">
+                <input type="text" id="api-path" placeholder="e.g., inbounds/list" value="inbounds/list">
             </div>
 
             <div class="input-group">
@@ -455,7 +523,7 @@
 
             <div class="input-group">
                 <label>JSON Body (for POST)</label>
-                <textarea id="api-body" rows="6" style="width:100%; background:#1a1a1a; border:1px solid var(--border); padding:12px; border-radius:12px; color:#fff; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;" placeholder='{"id":2, "email":"poorna"}'></textarea>
+                <textarea id="api-body" rows="6" style="width:100%; background:#1a1a1a; border:1px solid var(--border); padding:12px; border-radius:12px; color:#fff; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;" placeholder='{"id":2}'></textarea>
             </div>
 
             <div class="modal-footer">
@@ -470,6 +538,86 @@
         </div>
     </div>
 
-    <script src="main.js?v=26" data-cfasync="false"></script>
+    <!-- Edit Client Modal -->
+    <div id="edit-client-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-card" style="max-width:480px;">
+            <h3><i class="fa-solid fa-pen"></i> Edit Client</h3>
+            <input type="hidden" id="edit-client-uuid">
+            <input type="hidden" id="edit-client-inbound-id">
+            <div class="input-group">
+                <label>Email / ID</label>
+                <input type="text" id="edit-client-email" placeholder="client@email">
+            </div>
+            <div class="input-group">
+                <label>Traffic Limit (GB) — 0 = Unlimited</label>
+                <input type="number" id="edit-client-limit" value="0" min="0" step="1">
+            </div>
+            <div class="input-group">
+                <label>Expiry Date (leave blank = never)</label>
+                <input type="datetime-local" id="edit-client-expiry">
+            </div>
+            <div class="input-group">
+                <label>IP Limit — 0 = Unlimited</label>
+                <input type="number" id="edit-client-iplimit" value="0" min="0" step="1">
+            </div>
+            <div class="input-group" style="display:flex; align-items:center; gap:10px;">
+                <label style="margin:0;">Enabled</label>
+                <input type="checkbox" id="edit-client-enable" checked style="width:20px;height:20px;cursor:pointer;">
+            </div>
+            <div class="modal-footer" style="margin-top:14px;">
+                <button class="accent-btn" id="btn-edit-client-save"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+                <button class="close-btn" onclick="closeEditClientModal()">Cancel</button>
+            </div>
+            <div id="edit-client-result" style="margin-top:10px; font-size:0.88rem; color:var(--text-dim);"></div>
+        </div>
+    </div>
+
+    <!-- Add Inbound Modal -->
+    <div id="add-inbound-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-card" style="max-width:520px;">
+            <h3><i class="fa-solid fa-network-wired"></i> Add Inbound</h3>
+            <p class="subtitle" style="margin-bottom:14px; font-size:0.85rem;">Creates a new inbound with basic settings. Edit advanced settings inside your 3x-ui panel after creation.</p>
+            <div class="input-group">
+                <label>Remark (name)</label>
+                <input type="text" id="new-inbound-remark" placeholder="e.g., vless-users">
+            </div>
+            <div class="input-group">
+                <label>Protocol</label>
+                <select id="new-inbound-protocol">
+                    <option value="vless">VLESS</option>
+                    <option value="vmess">VMess</option>
+                    <option value="trojan">Trojan</option>
+                    <option value="shadowsocks">Shadowsocks</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label>Port</label>
+                <input type="number" id="new-inbound-port" placeholder="e.g., 443" min="1" max="65535">
+            </div>
+            <div class="input-group">
+                <label>Network</label>
+                <select id="new-inbound-network">
+                    <option value="tcp">TCP</option>
+                    <option value="ws">WebSocket</option>
+                    <option value="grpc">gRPC</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label>Security</label>
+                <select id="new-inbound-security">
+                    <option value="none">None</option>
+                    <option value="tls">TLS</option>
+                    <option value="reality">Reality</option>
+                </select>
+            </div>
+            <div class="modal-footer" style="margin-top:14px;">
+                <button class="accent-btn" id="btn-add-inbound-save"><i class="fa-solid fa-plus"></i> Create</button>
+                <button class="close-btn" onclick="closeAddInboundModal()">Cancel</button>
+            </div>
+            <div id="add-inbound-result" style="margin-top:10px; font-size:0.88rem; color:var(--text-dim);"></div>
+        </div>
+    </div>
+
+    <script src="main.js?v=27" data-cfasync="false"></script>
 </body>
 </html>
