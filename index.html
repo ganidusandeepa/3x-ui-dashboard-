@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20">
+    <link rel="stylesheet" href="styles.css?v=21">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" data-cfasync="false"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js" data-cfasync="false"></script>
@@ -29,10 +29,18 @@
     <!-- Login Overlay -->
     <div id="login-overlay">
         <div class="login-card">
+
             <div class="login-logo">
-                <i class="fa-solid fa-server"></i>
-                <span>3x-ui<span class="dim">.panel</span></span>
+                <div class="login-logo-icon">
+                    <i class="fa-solid fa-server"></i>
+                </div>
+                <div class="login-logo-text">
+                    <span class="login-logo-name">3x-ui</span>
+                    <span class="login-logo-sub">Panel Dashboard</span>
+                </div>
             </div>
+
+            <div class="login-divider"></div>
 
             <div class="login-seg">
                 <button id="tab-login-client" class="login-seg-btn active">Client</button>
@@ -40,27 +48,37 @@
             </div>
 
             <div id="login-form-client">
-                <div class="input-group">
-                    <label>Email or Client ID</label>
-                    <input type="text" id="login-email" placeholder="your@email.com" autocomplete="off">
+                <div class="login-field">
+                    <label class="login-field-label">Email or Client ID</label>
+                    <div class="login-field-wrap">
+                        <i class="fa-regular fa-envelope login-field-icon"></i>
+                        <input type="text" id="login-email" class="login-field-input" placeholder="your@email.com" autocomplete="off">
+                    </div>
                 </div>
-                <button class="accent-btn" style="width:100%;" id="btn-login-client">Check Traffic</button>
+                <button class="login-btn" id="btn-login-client">Check Traffic</button>
             </div>
 
             <div id="login-form-admin" style="display:none;">
-                <div class="input-group">
-                    <label>Panel Username</label>
-                    <input type="text" id="admin-login-user" placeholder="admin" autocomplete="username">
+                <div class="login-field">
+                    <label class="login-field-label">Panel Username</label>
+                    <div class="login-field-wrap">
+                        <i class="fa-regular fa-user login-field-icon"></i>
+                        <input type="text" id="admin-login-user" class="login-field-input" placeholder="admin" autocomplete="username">
+                    </div>
                 </div>
-                <div class="input-group">
-                    <label>Panel Password</label>
-                    <input type="password" id="admin-login-pass" placeholder="••••••••" autocomplete="current-password">
+                <div class="login-field">
+                    <label class="login-field-label">Panel Password</label>
+                    <div class="login-field-wrap">
+                        <i class="fa-solid fa-lock login-field-icon"></i>
+                        <input type="password" id="admin-login-pass" class="login-field-input" placeholder="••••••••" autocomplete="current-password">
+                    </div>
                 </div>
-                <button class="accent-btn" style="width:100%;" id="btn-login-admin">Sign In</button>
-                <p style="margin-top:12px; font-size:0.78rem; color:var(--on-dim); line-height:1.6;">
-                    If sign-in fails, update <code style="background:var(--surface-2);padding:1px 5px;border-radius:4px;">PANEL_USERNAME</code> &amp; <code style="background:var(--surface-2);padding:1px 5px;border-radius:4px;">PANEL_PASSWORD</code> in Cloudflare Pages env vars.
+                <button class="login-btn" id="btn-login-admin">Sign In</button>
+                <p class="login-hint">
+                    If sign-in fails, update <code>PANEL_USERNAME</code> &amp; <code>PANEL_PASSWORD</code> in Cloudflare Pages env vars.
                 </p>
             </div>
+
         </div>
     </div>
 
