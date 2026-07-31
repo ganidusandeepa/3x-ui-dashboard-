@@ -67,6 +67,12 @@ function initHackInput(input) {
     });
 
     input.addEventListener('focus', () => {
+        // Sync display if value was set programmatically (e.g. from localStorage)
+        const currentVal = input.value;
+        if (currentVal !== settled.join('')) {
+            settled = currentVal.split('');
+            rebuildStatic();
+        }
         cursor.style.opacity = '1';
         const line = document.createElement('div');
         line.className = 'scan-line';
@@ -370,7 +376,8 @@ document.getElementById('btn-login-admin').addEventListener('click', async () =>
         const data = await res.json();
         if (data && data.success) {
             currentRole = 'admin';
-            adminToken = 'password-auth';
+            adminToken = password;
+            try { sessionStorage.setItem('xui_admin_token', password); } catch(e) {}
             startAdminApp();
         } else {
             const msg = data && data.msg;
@@ -388,8 +395,8 @@ document.getElementById('btn-login-admin').addEventListener('click', async () =>
 document.getElementById('btn-login-client').addEventListener('click', async () => {
     const id = (document.getElementById('login-email').value || '').trim();
     const btn = document.getElementById('btn-login-client');
+    if (!id) { showToast('Enter your email/ID', 'error'); return; }
     scrambleButtonText(btn, 'Checking…');
-    if (!id) { showToast('Enter your email/ID', 'error'); btn.textContent = "Check Traffic"; return; }
     try { localStorage.setItem('xui_last_tab', 'client'); localStorage.setItem('xui_client_id', id || ''); } catch(e) {}
     try {
         const res = await fetch('/public/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'client', id }) });
