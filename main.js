@@ -212,7 +212,7 @@ function setTextSafe(selOrEl, text) {
 function animateNumber(elOrSelector, to, opts = {}) {
     const duration = Number(opts.duration ?? 800);
     const decimals = Number(opts.decimals ?? 2);
-    const from = Number(opts.from ?? null);
+    const fromRaw = (opts.from !== undefined && opts.from !== null) ? Number(opts.from) : null;
     const formatter = typeof opts.formatter === 'function'
         ? opts.formatter
         : (v) => Number(v).toFixed(decimals);
@@ -220,7 +220,7 @@ function animateNumber(elOrSelector, to, opts = {}) {
     const el = typeof elOrSelector === 'string' ? document.querySelector(elOrSelector) : elOrSelector;
     if (!el) return;
 
-    let startVal = Number.isFinite(from) ? from : Number(el.textContent);
+    let startVal = (fromRaw !== null && Number.isFinite(fromRaw)) ? fromRaw : Number(el.textContent);
     if (!Number.isFinite(startVal)) startVal = 0;
     const endVal = Number(to);
     if (!Number.isFinite(endVal)) { el.textContent = formatter(0); return; }
@@ -397,6 +397,7 @@ document.getElementById('btn-login-client').addEventListener('click', async () =
     const btn = document.getElementById('btn-login-client');
     if (!id) { showToast('Enter your email/ID', 'error'); return; }
     scrambleButtonText(btn, 'Checking…');
+    btn.disabled = true;
     try { localStorage.setItem('xui_last_tab', 'client'); localStorage.setItem('xui_client_id', id || ''); } catch(e) {}
     try {
         const res = await fetch('/public/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'client', id }) });
@@ -418,6 +419,7 @@ document.getElementById('btn-login-client').addEventListener('click', async () =
         }
     } catch(e) { showToast('Network/Server error. Try again.', 'error'); }
     btn.textContent = 'Check Traffic';
+    btn.disabled = false;
 });
 
 // --- Admin App Start ---
@@ -627,6 +629,7 @@ function applyClientDataToUI(client) {
                 pill.classList.add('online');
                 lbl.textContent = 'CONNECTED';
             } else {
+                pill.classList.add('away');
                 lbl.textContent = 'AWAY';
             }
             // M3 spring pop-in
@@ -1326,7 +1329,7 @@ function openClientDrawer(user) {
                 <div class="info-row"><span>UUID:</span><strong style="font-size:0.78rem;word-break:break-all;">${uuid}</strong></div>
                 <div class="info-row"><span>Status:</span><strong style="color:${user.enable === false ? 'var(--red)' : 'var(--green)'}">${user.enable === false ? 'Disabled' : 'Enabled'}</strong></div>
             </div>
-            <div id="drawer-traffic-history" style="display:none;" class="card" style="padding:14px; margin-top:8px;"></div>`;
+            <div id="drawer-traffic-history" style="display:none; padding:14px; margin-top:8px;" class="card"></div>`;
     }
 
     // Wire buttons
@@ -1874,7 +1877,7 @@ try {
         try {
             const r = await callXui(`inbounds/getClientTrafficsByEmail/${encodeURIComponent(email)}`, 'GET');
             if (r && r.success !== false) showResultUI(`Traffic history: ${email}`, r);
-            else showResultUI(`Traffic history: ${email}`, r);
+            else showToast(r?.msg || 'Traffic history failed', 'error');
         } catch(e) { showToast('Traffic history not available on this panel version', 'error'); }
     });
 
@@ -2031,8 +2034,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     } catch(e) {}
 
-    document.querySelector('.desktop-nav').style.display = 'none';
-    document.querySelector('.mobile-nav').style.display = 'none';
+    try { const dn = document.querySelector('.desktop-nav'); if (dn) dn.style.display = 'none'; } catch(e) {}
+    try { const mn = document.querySelector('.mobile-nav'); if (mn) mn.style.display = 'none'; } catch(e) {}
     document.getElementById('main-fab').style.display = 'none';
 
     try {
