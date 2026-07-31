@@ -2,8 +2,8 @@
    M3 Design Token System — B&W Minimal
    ============================================================ */
 
-/* @property for animatable custom prop (progress bar) */
-@property --bar-fill {
+/* @property — browser-native width animation on progress bar */
+@property --bar-w {
     syntax: '<percentage>';
     inherits: false;
     initial-value: 0%;
@@ -322,10 +322,12 @@ body.theme-light .consumption-track { background: rgba(0,0,0,0.07); }
 
 .consumption-bar {
     height: 100%;
+    width: var(--bar-w);          /* driven by @property, animated by CSS */
     background: var(--on-bg);
     border-radius: var(--shape-full);
     position: relative;
     overflow: hidden;
+    transition: --bar-w var(--m3-std-default);  /* native @property interpolation */
 }
 /* shimmer */
 .consumption-bar.anim::after {
@@ -379,13 +381,16 @@ body.theme-light .consumption-line { background: rgba(0,0,0,0.03); }
     transition: color var(--m3-effects);
     letter-spacing: -1px;
 }
+.flip-unit { perspective: 280px; }
 .flip-digit.tick {
-    animation: digit-tick 180ms var(--m3-effects) both;
+    animation: digit-flip 280ms var(--m3-effects) both;
+    transform-style: preserve-3d;
 }
-@keyframes digit-tick {
-    0% { transform: scaleY(1); }
-    40% { transform: scaleY(0.82); opacity: 0.6; }
-    100% { transform: scaleY(1); opacity: 1; }
+@keyframes digit-flip {
+    0%  { transform: rotateX(0deg);   opacity: 1; }
+    35% { transform: rotateX(-90deg); opacity: 0; }
+    36% { transform: rotateX(90deg);  opacity: 0; }
+    100%{ transform: rotateX(0deg);   opacity: 1; }
 }
 .flip-label { font-size: 0.62rem; letter-spacing: 1.8px; color: var(--on-dim); text-transform: uppercase; font-weight: 600; }
 .flip-sep { font-size: 1.4rem; color: var(--on-dim); margin-bottom: 18px; font-weight: 300; user-select: none; }
@@ -718,6 +723,30 @@ body.theme-light .accent-btn { color: #fff; background: #0a0a0a; }
     to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 .item-card { animation: card-in var(--m3-spatial-fast) both; }
+
+/* ============================================================
+   Inbound Traffic Bars — scaleX(0→1) per-inbound
+   ============================================================ */
+.inb-bars { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.inb-bar-row { display: flex; align-items: center; gap: 8px; }
+.inb-bar-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.9px; color: var(--on-dim); font-weight: 600; min-width: 18px; }
+.inb-bar-track {
+    flex: 1;
+    height: 5px;
+    background: rgba(255,255,255,0.07);
+    border-radius: var(--shape-full);
+    overflow: hidden;
+}
+body.theme-light .inb-bar-track { background: rgba(0,0,0,0.07); }
+.inb-bar-fill {
+    height: 100%;
+    background: var(--on-bg);
+    border-radius: var(--shape-full);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform var(--m3-std-slow);
+}
+.inb-bar-val { font-family: var(--font-mono); font-size: 0.68rem; color: var(--on-mid); min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ============================================================
    Drag Controls

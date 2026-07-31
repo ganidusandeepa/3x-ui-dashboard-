@@ -434,16 +434,15 @@ function applyClientDataToUI(client) {
             void bar.offsetWidth;
             bar.classList.add('anim');
             if (limit > 0) {
-                let pct = Math.min(100, (Number(totalUsed) / limit) * 100);
+                const pct = Math.min(100, (Number(totalUsed) / limit) * 100);
                 if (pct >= 90) bar.classList.add('level-bad');
                 else if (pct >= 70) bar.classList.add('level-warn');
-                if (typeof gsap !== 'undefined') gsap.to(bar, { width: `${pct}%`, duration: 0.55, ease: 'power2.out' });
-                else if (typeof anime !== 'undefined') anime({ targets: bar, width: `${pct}%`, duration: 550, easing: 'easeOutCubic' });
-                else bar.style.width = `${pct}%`;
+                // CSS @property --bar-w drives the width — no JS animation needed
+                requestAnimationFrame(() => bar.style.setProperty('--bar-w', `${pct}%`));
                 if (pctEl) { pctEl.style.display = 'inline-flex'; pctEl.textContent = `${pct.toFixed(1)}%`; }
                 if (remEl) { const r = formatGB(Math.max(0, Number(limit) - Number(totalUsed))); remEl.textContent = `${r.value} ${r.unit}`; }
             } else {
-                bar.style.width = '100%';
+                bar.style.setProperty('--bar-w', '100%');
                 if (pctEl) pctEl.style.display = 'none';
                 if (remEl) remEl.textContent = 'Unlimited';
             }
@@ -776,18 +775,53 @@ async function loadAdminData() {
             const container = document.getElementById('inbound-cards-container');
             container.innerHTML = '';
             (inb.obj || []).forEach(node => {
+                const dlGB = parseFloat(toGB(node.down));
+                const upGB = parseFloat(toGB(node.up));
+                const tot = dlGB + upGB;
+                const dlPct = tot > 0 ? (dlGB / tot) * 100 : 50;
+                const upPct = tot > 0 ? (upGB / tot) * 100 : 50;
                 const div = document.createElement('div');
                 div.className = 'card item-card reveal';
                 div.style.cssText = 'opacity:0;transform:translateY(14px);';
-                div.innerHTML = `<div class="item-header"><div><strong style="font-size:1.1rem">${node.remark || ''}</strong><p class="subtitle" style="margin:0">${(node.protocol||'').toUpperCase()} • Port ${node.port}</p></div><div class="status-badge ${node.enable ? 'active' : ''}">${node.enable ? 'Online' : 'Off'}</div></div><div class="item-stats"><div class="stat-box"><span class="label">DOWN</span><span class="val">${toGB(node.down)} GB</span></div><div class="stat-box"><span class="label">UP</span><span class="val">${toGB(node.up)} GB</span></div><div class="stat-box"><span class="label">USERS</span><span class="val">${node.clientStats?.length ?? 0}</span></div></div>`;
+                div.innerHTML = `
+                    <div class="item-header">
+                        <div>
+                            <strong style="font-size:1rem;">${node.remark || ''}</strong>
+                            <p class="subtitle" style="margin:0;font-size:0.75rem;">${(node.protocol||'').toUpperCase()} · Port ${node.port}</p>
+                        </div>
+                        <div class="status-badge ${node.enable ? 'active' : ''}">${node.enable ? 'Online' : 'Off'}</div>
+                    </div>
+                    <div class="inb-bars">
+                        <div class="inb-bar-row">
+                            <span class="inb-bar-label">↓</span>
+                            <div class="inb-bar-track"><div class="inb-bar-fill" data-pct="${dlPct}"></div></div>
+                            <span class="inb-bar-val">${toGB(node.down)} GB</span>
+                        </div>
+                        <div class="inb-bar-row">
+                            <span class="inb-bar-label">↑</span>
+                            <div class="inb-bar-track"><div class="inb-bar-fill" data-pct="${upPct}" style="opacity:0.5;"></div></div>
+                            <span class="inb-bar-val">${toGB(node.up)} GB</span>
+                        </div>
+                    </div>
+                    <div class="item-stats" style="margin-top:12px;">
+                        <div class="stat-box"><span class="label">Down</span><span class="val">${toGB(node.down)} GB</span></div>
+                        <div class="stat-box"><span class="label">Up</span><span class="val">${toGB(node.up)} GB</span></div>
+                        <div class="stat-box"><span class="label">Users</span><span class="val">${node.clientStats?.length ?? 0}</span></div>
+                    </div>`;
                 container.appendChild(div);
             });
 
             try {
                 const els = container.querySelectorAll('.reveal');
-                if (typeof gsap !== 'undefined') gsap.to(els, { opacity: 1, y: 0, duration: 0.35, stagger: 0.03, ease: 'power2.out' });
-                else if (typeof anime !== 'undefined') anime({ targets: els, opacity: [0,1], translateY: [14,0], delay: anime.stagger(30), duration: 350, easing: 'easeOutCubic' });
+                if (typeof gsap !== 'undefined') gsap.to(els, { opacity: 1, y: 0, duration: 0.35, stagger: 0.05, ease: 'power2.out' });
+                else if (typeof anime !== 'undefined') anime({ targets: els, opacity: [0,1], translateY: [14,0], delay: anime.stagger(50), duration: 350, easing: 'easeOutCubic' });
                 else els.forEach(el => { el.style.opacity = '1'; el.style.transform = 'translateY(0)'; });
+                // animate inbound bars with 150ms stagger (M3 Standard Slow)
+                const bars = container.querySelectorAll('.inb-bar-fill');
+                bars.forEach((bar, i) => {
+                    const pct = parseFloat(bar.dataset.pct) || 0;
+                    setTimeout(() => { bar.style.transform = `scaleX(${pct / 100})`; }, 80 + i * 150);
+                });
             } catch(e) {}
         }
 
