@@ -4,8 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>3x-ui Admin Dashboard</title>
-    <link rel="stylesheet" href="styles.css?v=14">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css?v=20">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" data-cfasync="false"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js" data-cfasync="false"></script>
@@ -25,35 +27,39 @@
     <div id="vanta-bg" aria-hidden="true"></div>
 
     <!-- Login Overlay -->
-    <div id="login-overlay" class="modal-overlay active" style="z-index: 9999; background: var(--bg-color); display: flex;">
-        <div class="modal-card" style="text-align: center; max-width: 400px;">
-            <h2 style="margin-bottom: 20px; font-weight:800; font-size:1.8rem;">
-                <i class="fa-solid fa-server" style="color:var(--accent)"></i> 3x-ui Access
-            </h2>
-            <div class="tabs" style="display:flex; margin-bottom: 20px; border-bottom: 1px solid var(--border);">
-                <button id="tab-login-client" style="flex:1; padding:10px; background:none; border:none; color:var(--accent); border-bottom: 2px solid var(--accent); font-weight:bold; cursor:pointer;">Client Check</button>
-                <button id="tab-login-admin" style="flex:1; padding:10px; background:none; border:none; color:var(--text-dim); border-bottom: 2px solid transparent; font-weight:bold; cursor:pointer;">Admin</button>
+    <div id="login-overlay">
+        <div class="login-card">
+            <div class="login-logo">
+                <i class="fa-solid fa-server"></i>
+                <span>3x-ui<span class="dim">.panel</span></span>
+            </div>
+
+            <div class="login-seg">
+                <button id="tab-login-client" class="login-seg-btn active">Client</button>
+                <button id="tab-login-admin" class="login-seg-btn">Admin</button>
             </div>
 
             <div id="login-form-client">
                 <div class="input-group">
-                    <input type="text" id="login-email" placeholder="Your Exact Email or ID">
+                    <label>Email or Client ID</label>
+                    <input type="text" id="login-email" placeholder="your@email.com" autocomplete="off">
                 </div>
-                <button class="accent-btn" style="width: 100%; margin-top: 10px;" id="btn-login-client">Check Traffic</button>
+                <button class="accent-btn" style="width:100%;" id="btn-login-client">Check Traffic</button>
             </div>
 
             <div id="login-form-admin" style="display:none;">
                 <div class="input-group">
-                    <input type="text" id="admin-login-user" placeholder="Panel Username" autocomplete="username">
+                    <label>Panel Username</label>
+                    <input type="text" id="admin-login-user" placeholder="admin" autocomplete="username">
                 </div>
-                <div class="input-group" style="margin-top:10px;">
-                    <input type="password" id="admin-login-pass" placeholder="Panel Password" autocomplete="current-password">
+                <div class="input-group">
+                    <label>Panel Password</label>
+                    <input type="password" id="admin-login-pass" placeholder="••••••••" autocomplete="current-password">
                 </div>
-                <button class="accent-btn" style="width: 100%; margin-top: 14px;" id="btn-login-admin">Login as Admin</button>
-                <div style="margin-top: 12px; font-size:0.82rem; color:var(--text-dim); line-height:1.5;">
-                    Use your 3x-ui panel credentials.<br>
-                    <span style="color:var(--accent);">Tip:</span> If you get "Panel Auth Failed", update <code>PANEL_USERNAME</code> and <code>PANEL_PASSWORD</code> in your Cloudflare Pages environment variables.
-                </div>
+                <button class="accent-btn" style="width:100%;" id="btn-login-admin">Sign In</button>
+                <p style="margin-top:12px; font-size:0.78rem; color:var(--on-dim); line-height:1.6;">
+                    If sign-in fails, update <code style="background:var(--surface-2);padding:1px 5px;border-radius:4px;">PANEL_USERNAME</code> &amp; <code style="background:var(--surface-2);padding:1px 5px;border-radius:4px;">PANEL_PASSWORD</code> in Cloudflare Pages env vars.
+                </p>
             </div>
         </div>
     </div>
@@ -66,6 +72,7 @@
     <div class="dashboard-wrapper">
         <header>
             <div class="logo"><i class="fa-solid fa-server"></i> 3x-ui<span>.panel</span></div>
+
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
                 <select id="admin-tab-select" class="sys-btn" style="padding:10px 12px; display:none; min-width:170px;">
                     <option value="overview">Overview</option>
@@ -125,8 +132,13 @@
                                 <strong style="color:var(--accent)">↑ <span id="user-up-speed">0</span> Mbps</strong>
                             </p>
                         </div>
-                        <div class="donut-wrapper" style="width: 180px; height: 180px;">
-                            <canvas id="userDonut"></canvas>
+                        <div class="usage-ring-wrap" style="width:160px;height:160px;">
+                            <svg id="user-ring" class="usage-ring" viewBox="0 0 120 120" aria-hidden="true">
+                                <circle class="ring-track" cx="60" cy="60" r="52"/>
+                                <circle class="ring-fill" cx="60" cy="60" r="52" id="user-ring-fill"/>
+                                <text class="ring-pct-text" x="60" y="57" id="user-ring-pct">0%</text>
+                                <text class="ring-sub-text" x="60" y="71" id="user-ring-sub">USED</text>
+                            </svg>
                         </div>
                     </div>
                 </div>
@@ -180,10 +192,31 @@
                             </div>
                         </div>
                     </div>
-                    <!-- Expiry countdown -->
-                    <div id="expiry-countdown" style="display:none; margin-top:16px; padding:12px; background:rgba(255,165,0,0.08); border:1px solid rgba(255,165,0,0.25); border-radius:12px; text-align:center;">
-                        <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:4px;">TIME REMAINING</div>
-                        <div id="expiry-countdown-val" style="font-size:1.4rem; font-weight:800; color:var(--accent);"></div>
+                    <!-- Expiry countdown (flip-clock) -->
+                    <div id="expiry-countdown" style="display:none; margin-top:16px;">
+                        <div style="font-size:0.7rem;color:var(--on-dim);letter-spacing:1.4px;text-align:center;margin-bottom:12px;text-transform:uppercase;font-weight:600;">Time Remaining</div>
+                        <div class="flip-clock">
+                            <div class="flip-unit">
+                                <div class="flip-digit" id="flip-d">00</div>
+                                <div class="flip-label">Days</div>
+                            </div>
+                            <div class="flip-sep">:</div>
+                            <div class="flip-unit">
+                                <div class="flip-digit" id="flip-h">00</div>
+                                <div class="flip-label">Hours</div>
+                            </div>
+                            <div class="flip-sep">:</div>
+                            <div class="flip-unit">
+                                <div class="flip-digit" id="flip-m">00</div>
+                                <div class="flip-label">Mins</div>
+                            </div>
+                            <div class="flip-sep">:</div>
+                            <div class="flip-unit">
+                                <div class="flip-digit" id="flip-s">00</div>
+                                <div class="flip-label">Secs</div>
+                            </div>
+                        </div>
+                        <div id="expiry-countdown-val" style="display:none;"></div>
                     </div>
                 </div>
 
@@ -252,8 +285,13 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="donut-wrapper">
-                            <canvas id="usageDonut"></canvas>
+                        <div class="usage-ring-wrap">
+                            <svg id="usage-ring" class="usage-ring" viewBox="0 0 120 120" aria-hidden="true">
+                                <circle class="ring-track" cx="60" cy="60" r="52"/>
+                                <circle class="ring-fill" cx="60" cy="60" r="52" id="usage-ring-fill"/>
+                                <text class="ring-pct-text" x="60" y="57" id="usage-ring-pct">—</text>
+                                <text class="ring-sub-text" x="60" y="71">TRAFFIC</text>
+                            </svg>
                         </div>
                     </div>
 
@@ -618,6 +656,6 @@
         </div>
     </div>
 
-    <script src="main.js?v=27" data-cfasync="false"></script>
+    <script src="main.js?v=30" data-cfasync="false"></script>
 </body>
 </html>

@@ -129,33 +129,28 @@ document.addEventListener('click', (e) => {
 function showToast(msg, type="info") {
     const container = document.getElementById('toast-container');
     const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.style.borderColor = type === 'error' ? 'var(--red)' : 'var(--accent)';
-    toast.innerHTML = `<i class="fa-solid fa-bell"></i> <span>${msg}</span>`;
+    toast.className = 'toast' + (type === 'error' ? ' err' : '');
+    const icon = type === 'error' ? 'fa-circle-xmark' : 'fa-circle-check';
+    toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${msg}</span>`;
     container.appendChild(toast);
-    try { if (typeof gsap !== 'undefined') gsap.fromTo(toast, { y: 10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.2, ease: 'power2.out' }); } catch(e) {}
     setTimeout(() => {
-        try {
-            if (typeof gsap !== 'undefined') { gsap.to(toast, { opacity: 0, y: -8, duration: 0.18, ease: 'power2.in', onComplete: () => toast.remove() }); return; }
-        } catch(e) {}
+        toast.style.transition = 'opacity 200ms, transform 200ms';
         toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
+        toast.style.transform = 'translateY(-8px) scale(0.96)';
+        setTimeout(() => toast.remove(), 220);
+    }, 3200);
 }
 
-// --- Login UI ---
-document.getElementById('tab-login-admin').addEventListener('click', (e) => {
-    e.target.style.color = 'var(--accent)'; e.target.style.borderBottomColor = 'var(--accent)';
-    document.getElementById('tab-login-client').style.color = 'var(--text-dim)'; document.getElementById('tab-login-client').style.borderBottomColor = 'transparent';
-    document.getElementById('login-form-admin').style.display = 'block';
-    document.getElementById('login-form-client').style.display = 'none';
-});
-document.getElementById('tab-login-client').addEventListener('click', (e) => {
-    e.target.style.color = 'var(--accent)'; e.target.style.borderBottomColor = 'var(--accent)';
-    document.getElementById('tab-login-admin').style.color = 'var(--text-dim)'; document.getElementById('tab-login-admin').style.borderBottomColor = 'transparent';
-    document.getElementById('login-form-admin').style.display = 'none';
-    document.getElementById('login-form-client').style.display = 'block';
-});
+// --- Login UI (segmented control) ---
+function setLoginTab(tab) {
+    const isAdmin = tab === 'admin';
+    document.getElementById('tab-login-admin').classList.toggle('active', isAdmin);
+    document.getElementById('tab-login-client').classList.toggle('active', !isAdmin);
+    document.getElementById('login-form-admin').style.display = isAdmin ? 'block' : 'none';
+    document.getElementById('login-form-client').style.display = isAdmin ? 'none' : 'block';
+}
+document.getElementById('tab-login-admin').addEventListener('click', () => setLoginTab('admin'));
+document.getElementById('tab-login-client').addEventListener('click', () => setLoginTab('client'));
 
 document.getElementById('btn-login-admin').addEventListener('click', async () => {
     const username = (document.getElementById('admin-login-user').value || '').trim();
@@ -309,30 +304,54 @@ function showClientConfig(configLink, subLink) {
     else if (subRow) subRow.style.display = 'none';
 }
 
-// --- Expiry Countdown ---
+// --- SVG Ring Updater ---
+function updateRing(ringFillId, pctElId, pct) {
+    const CIRC = 326.73; // 2π×52
+    const clampedPct = Math.min(100, Math.max(0, pct));
+    const offset = CIRC - (clampedPct / 100) * CIRC;
+    const fill = document.getElementById(ringFillId);
+    const pctEl = document.getElementById(pctElId);
+    if (fill) fill.style.strokeDashoffset = offset;
+    if (pctEl) pctEl.textContent = Math.round(clampedPct) + '%';
+}
+
+// --- Expiry Countdown (flip-clock) ---
+function setFlipDigit(id, val) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const str = String(val).padStart(2, '0');
+    if (el.textContent !== str) {
+        el.textContent = str;
+        el.classList.remove('tick');
+        void el.offsetWidth; // reflow to restart animation
+        el.classList.add('tick');
+    }
+}
+
 function startExpiryCountdown(expiryTime) {
     try { clearInterval(__expiryCountdownTimer); } catch(e) {}
     const el = document.getElementById('expiry-countdown');
-    const val = document.getElementById('expiry-countdown-val');
-    if (!el || !val) return;
+    if (!el) return;
     const exp = Number(expiryTime);
     if (!exp || exp <= 0) { el.style.display = 'none'; return; }
+    const urgent = exp - Date.now() < 7 * 86400000;
     const tick = () => {
         const diff = exp - Date.now();
         if (diff <= 0) {
             el.style.display = 'block';
-            val.textContent = 'Expired';
-            val.style.color = 'var(--red)';
+            ['flip-d','flip-h','flip-m','flip-s'].forEach(id => setFlipDigit(id, 0));
             clearInterval(__expiryCountdownTimer);
             return;
         }
         el.style.display = 'block';
-        const d = Math.floor(diff / 86400000);
-        const h = Math.floor((diff % 86400000) / 3600000);
-        const m = Math.floor((diff % 3600000) / 60000);
-        const s = Math.floor((diff % 60000) / 1000);
-        val.textContent = d > 0 ? `${d}d ${h}h ${m}m` : `${h}h ${m}m ${s}s`;
-        val.style.color = diff < 7 * 86400000 ? 'orange' : 'var(--accent)';
+        setFlipDigit('flip-d', Math.floor(diff / 86400000));
+        setFlipDigit('flip-h', Math.floor((diff % 86400000) / 3600000));
+        setFlipDigit('flip-m', Math.floor((diff % 3600000) / 60000));
+        setFlipDigit('flip-s', Math.floor((diff % 60000) / 1000));
+        ['flip-d','flip-h','flip-m','flip-s'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.color = urgent ? 'var(--warn)' : '';
+        });
     };
     tick();
     __expiryCountdownTimer = setInterval(tick, 1000);
@@ -380,8 +399,8 @@ function applyClientDataToUI(client) {
         const st = document.getElementById('sub-status-text');
         if (dot && st) {
             st.textContent = active ? 'ACTIVE' : 'INACTIVE';
-            dot.style.background = active ? 'var(--green)' : 'var(--red)';
-            dot.style.boxShadow = active ? '0 0 0 4px rgba(0,255,102,0.15)' : '0 0 0 4px rgba(255,51,51,0.16)';
+            dot.style.background = active ? 'var(--good)' : 'var(--bad)';
+            dot.style.boxShadow = 'none';
         }
         try {
             const top = document.getElementById('client-top-status');
@@ -431,22 +450,15 @@ function applyClientDataToUI(client) {
         }
     } catch(e) {}
 
+    // SVG usage ring
     try {
-        if (typeof Chart !== 'undefined') {
-            const donutCanvas = document.getElementById('userDonut');
-            const donutCtx = donutCanvas?.getContext?.('2d');
-            if (donutCtx) {
-                if (window.__userDonut && window.__userDonut.data?.datasets?.[0]) {
-                    window.__userDonut.data.datasets[0].data = [down, up];
-                    window.__userDonut.update();
-                } else {
-                    window.__userDonut = new Chart(donutCtx, {
-                        type: 'doughnut',
-                        data: { datasets: [{ data: [down, up], backgroundColor: ['#0066ff', '#00ffcc'], borderWidth: 0 }] },
-                        options: { cutout: '80%', plugins: { tooltip: { enabled: false } } }
-                    });
-                }
-            }
+        if (limit > 0) {
+            const pct = Math.min(100, (Number(totalUsed) / limit) * 100);
+            updateRing('user-ring-fill', 'user-ring-pct', pct);
+        } else {
+            updateRing('user-ring-fill', 'user-ring-pct', 100);
+            const pctEl = document.getElementById('user-ring-pct');
+            if (pctEl) pctEl.textContent = '∞';
         }
     } catch(e) {}
 
@@ -649,19 +661,25 @@ function switchTab(tabId) {
 try { document.querySelectorAll('.nav-btn, .m-nav-btn').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab))); } catch(e) {}
 try { const sel = document.getElementById('admin-tab-select'); sel?.addEventListener('change', () => switchTab(sel.value)); } catch(e) {}
 
-// --- Admin Charts ---
+// --- Admin Charts (B&W M3 palette) ---
 let trafficChart, donutChart, cpuChart, ramChart;
 function initAdminCharts() {
     try { if (typeof Chart === 'undefined') return; } catch(e) { return; }
+    const isDark = !document.body.classList.contains('theme-light');
+    const lineClr = isDark ? 'rgba(240,240,240,0.9)' : 'rgba(10,10,10,0.85)';
+    const lineClr2 = isDark ? 'rgba(170,170,170,0.7)' : 'rgba(80,80,80,0.7)';
+    const fillClr = isDark ? 'rgba(240,240,240,0.04)' : 'rgba(0,0,0,0.04)';
+    const gridClr = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.05)';
+    const tickClr = isDark ? '#444' : '#aaa';
     const trafficCtx = document.getElementById('trafficChart')?.getContext?.('2d');
     if (!trafficCtx) return;
-    trafficChart = new Chart(trafficCtx, { type: 'line', data: { labels: ['M','T','W','T','F','S','S'], datasets: [{ label: 'Down', data: [5,8,4,7,9,12,10], borderColor: '#0066ff', tension: 0.4, fill: true, backgroundColor: 'rgba(0,102,255,0.05)' }, { label: 'Up', data: [2,3,2,4,3,5,4], borderColor: '#00ffcc', tension: 0.4, fill: true, backgroundColor: 'rgba(0,255,204,0.05)' }]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#555' } } } }});
-    const donutCtx = document.getElementById('usageDonut')?.getContext?.('2d');
-    if (donutCtx) donutChart = new Chart(donutCtx, { type: 'doughnut', data: { datasets: [{ data: [70,30], backgroundColor: ['#0066ff','#00ffcc'], borderWidth: 0 }] }, options: { cutout: '80%', plugins: { tooltip: { enabled: false } } }});
+    trafficChart = new Chart(trafficCtx, { type: 'line', data: { labels: ['M','T','W','T','F','S','S'], datasets: [{ label: 'Down', data: [5,8,4,7,9,12,10], borderColor: lineClr, tension: 0.4, fill: true, backgroundColor: fillClr, borderWidth: 1.5 }, { label: 'Up', data: [2,3,2,4,3,5,4], borderColor: lineClr2, tension: 0.4, fill: true, backgroundColor: fillClr, borderWidth: 1.5 }]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { grid: { color: gridClr }, ticks: { color: tickClr } } } }});
+    // donutChart replaced by SVG ring — kept as null for compat
+    donutChart = null;
     const cpuCtx = document.getElementById('cpuChart')?.getContext?.('2d');
-    if (cpuCtx) cpuChart = new Chart(cpuCtx, { type: 'line', data: { labels: Array(10).fill(''), datasets: [{ data: Array(10).fill(0), borderColor: '#00ffcc', borderWidth: 2, pointRadius: 0, tension: 0.4 }]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }});
+    if (cpuCtx) cpuChart = new Chart(cpuCtx, { type: 'line', data: { labels: Array(10).fill(''), datasets: [{ data: Array(10).fill(0), borderColor: lineClr, borderWidth: 1.5, pointRadius: 0, tension: 0.4, fill: true, backgroundColor: fillClr }]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }});
     const ramCtx = document.getElementById('ramChart')?.getContext?.('2d');
-    if (ramCtx) ramChart = new Chart(ramCtx, { type: 'line', data: { labels: Array(10).fill(''), datasets: [{ data: Array(10).fill(0), borderColor: '#0066ff', borderWidth: 2, pointRadius: 0, tension: 0.4 }]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }});
+    if (ramCtx) ramChart = new Chart(ramCtx, { type: 'line', data: { labels: Array(10).fill(''), datasets: [{ data: Array(10).fill(0), borderColor: lineClr2, borderWidth: 1.5, pointRadius: 0, tension: 0.4, fill: true, backgroundColor: fillClr }]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }});
 }
 
 function applyAdminStatusToUI(stat) {
@@ -677,7 +695,12 @@ function applyAdminStatusToUI(stat) {
     const ramPct = (Number.isFinite(memCur) && Number.isFinite(memTot) && memTot > 0) ? Math.max(0, Math.min(100, (memCur / memTot) * 100)) : 0;
     animateNumber('#ram-percent', ramPct, { decimals: 1, duration: 500, formatter: (v) => `${Number(v).toFixed(1)}%` });
     try { document.getElementById('node-ip').textContent = s.publicIP?.ipv4 || s.publicIP?.ipv6 || '-'; document.getElementById('node-region').textContent = s.publicIP?.country || '-'; document.getElementById('xray-version').textContent = s.xray?.version || '-'; } catch(e) {}
-    try { if (donutChart?.data?.datasets?.[0]) { donutChart.data.datasets[0].data = [Number(down), Number(up)]; donutChart.update(); } } catch(e) {}
+    // SVG usage ring for global traffic (show download % of total)
+    try {
+        const dlNum = parseFloat(down), upNum = parseFloat(up), tot = dlNum + upNum;
+        if (tot > 0) updateRing('usage-ring-fill', 'usage-ring-pct', (dlNum / tot) * 100);
+        else { const fill = document.getElementById('usage-ring-fill'); if (fill) fill.style.strokeDashoffset = 326.73; }
+    } catch(e) {}
 }
 
 // --- Expiry Alerts ---
@@ -781,7 +804,7 @@ async function loadAdminData() {
         console.error("Data Load Error", e);
         try {
             const dot = document.querySelector('.user-status .status-dot');
-            if (dot) { dot.classList.remove('online'); dot.style.background = 'var(--red)'; dot.style.boxShadow = '0 0 10px var(--red)'; }
+            if (dot) { dot.classList.remove('online'); dot.style.background = 'var(--bad)'; dot.style.animation = 'none'; }
         } catch(e2) {}
         try { showToast('Connection error while loading data', 'error'); } catch(e3) {}
     }
@@ -810,14 +833,14 @@ function renderClientsList(list) {
         div.innerHTML = `
             <div class="item-header" style="margin:0">
                 <div style="display:flex;align-items:center;gap:10px;">
-                    <input type="checkbox" class="bulk-check" data-email="${emailSafe}" ${isSelected ? 'checked' : ''} style="width:17px;height:17px;cursor:pointer;flex-shrink:0;" onclick="event.stopPropagation()">
-                    <i class="fa-solid fa-circle-user" style="font-size:1.4rem;color:var(--blue)"></i>
+                    <input type="checkbox" class="bulk-check" data-email="${emailSafe}" ${isSelected ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer;flex-shrink:0;accent-color:var(--on-bg);" onclick="event.stopPropagation()">
+                    <i class="fa-solid fa-circle-user" style="font-size:1.35rem;color:var(--on-mid)"></i>
                     <div>
-                        <strong>${user.email}</strong>
-                        <p class="subtitle" style="margin:0;font-size:0.78rem;">Limit: ${limitTxt} ${user.enable === false ? '• <span style="color:var(--red)">Disabled</span>' : ''}</p>
+                        <strong style="font-size:0.92rem;">${user.email}</strong>
+                        <p class="subtitle" style="margin:0;font-size:0.75rem;">Limit: ${limitTxt} ${user.enable === false ? '· <span style="color:var(--bad)">Disabled</span>' : ''}</p>
                     </div>
                 </div>
-                <div class="stat-box" style="text-align:right"><span class="label">USED</span><span class="val" style="color:var(--accent)">${used} GB</span></div>
+                <div class="stat-box" style="text-align:right"><span class="label">USED</span><span class="val">${used} GB</span></div>
             </div>`;
         container.appendChild(div);
     });
