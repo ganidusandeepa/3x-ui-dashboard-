@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=21">
+    <link rel="stylesheet" href="styles.css?v=24">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" data-cfasync="false"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js" data-cfasync="false"></script>
@@ -89,36 +89,43 @@
 
     <div class="dashboard-wrapper">
         <header>
-            <div class="logo"><i class="fa-solid fa-server"></i> 3x-ui<span>.panel</span></div>
+            <div class="logo">
+                <div class="logo-icon"><i class="fa-solid fa-server"></i></div>
+                <span class="logo-name">3x-ui<span class="logo-ext">.panel</span></span>
+            </div>
 
-            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
-                <select id="admin-tab-select" class="sys-btn" style="padding:10px 12px; display:none; min-width:170px;">
+            <div class="hdr-right">
+                <select id="admin-tab-select" class="hdr-select" style="display:none;">
                     <option value="overview">Overview</option>
                     <option value="inbounds">Inbounds</option>
                     <option value="clients">Clients</option>
                     <option value="system">System</option>
                 </select>
 
-                <button id="btn-theme" class="sys-btn" style="padding:10px 12px; display:flex; align-items:center; gap:8px;">
-                    <i class="fa-solid fa-moon"></i> Theme
-                </button>
-
-                <button id="btn-bg" class="sys-btn" style="padding:10px 12px; display:flex; align-items:center; gap:8px;">
-                    <i class="fa-solid fa-earth-asia"></i> BG
-                </button>
-
-                <div class="user-status">
-                    <div class="status-dot online"></div>
-                    <span>Server: <strong style="color:var(--accent-color)">OK</strong></span>
-                </div>
-
                 <div id="client-top-status" class="client-top-status" style="display:none;">
                     <span class="dot" id="client-top-dot"></span>
                     <span id="client-top-text">ACTIVE</span>
                 </div>
-                <button id="btn-logout" class="nav-btn" style="padding:10px 12px; display:flex; align-items:center; gap:8px;">
-                    <i class="fa-solid fa-right-from-bracket"></i> Logout
-                </button>
+
+                <div class="user-status">
+                    <div class="status-dot online"></div>
+                    <span class="status-label">Server <strong>OK</strong></span>
+                </div>
+
+                <div class="hdr-actions">
+                    <button id="btn-theme" class="hdr-btn" title="Toggle theme">
+                        <i class="fa-solid fa-moon"></i>
+                        <span class="hdr-label">Theme</span>
+                    </button>
+                    <button id="btn-bg" class="hdr-btn" title="Toggle background">
+                        <i class="fa-solid fa-earth-asia"></i>
+                        <span class="hdr-label">BG</span>
+                    </button>
+                    <button id="btn-logout" class="hdr-btn hdr-logout" title="Logout">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                        <span class="hdr-label">Logout</span>
+                    </button>
+                </div>
             </div>
         </header>
 
@@ -182,57 +189,61 @@
                     </div>
                 </div>
 
-                <!-- Subscription Snapshot -->
-                <div class="card sub-snapshot" style="margin-top:20px;">
-                    <div class="sub-snap-head">
-                        <div>
-                            <h3 style="margin-bottom:6px;"><i class="fa-solid fa-sparkles"></i> Subscription Snapshot</h3>
-                            <div class="sub-snap-sub">A quick view of your plan usage &amp; dates</div>
+                <!-- M3 Live Plan Status -->
+                <div class="card m3-plan-card" id="plan-status-card" style="margin-top:20px;">
+
+                    <div class="plan-head">
+                        <div class="plan-status-pill" id="plan-status-pill">
+                            <span class="plan-dot" id="plan-dot"></span>
+                            <span class="plan-status-lbl" id="plan-status-lbl">Checking…</span>
                         </div>
-                        <div class="sub-snap-status" id="sub-status-pill">
-                            <span class="sub-snap-dot" id="sub-status-dot"></span>
-                            <span id="sub-status-text">ACTIVE</span>
+                        <button class="plan-refresh" id="btn-refresh-sub" title="Refresh live data">
+                            <i class="fa-solid fa-rotate-right"></i>
+                        </button>
+                    </div>
+
+                    <!-- Period usage bar -->
+                    <div class="plan-usage">
+                        <div class="plan-usage-top">
+                            <span class="plan-usage-lbl">This Period</span>
+                            <span class="plan-usage-pct" id="plan-pct">—</span>
+                        </div>
+                        <div class="plan-bar-track">
+                            <div class="plan-bar-fill" id="plan-bar-fill"></div>
+                        </div>
+                        <div class="plan-usage-nums">
+                            <span><span id="plan-used-num">—</span> <span class="plan-unit">used</span></span>
+                            <span><span id="plan-rem-num">—</span> <span class="plan-unit">remaining</span></span>
                         </div>
                     </div>
-                    <div class="sub-snap-grid" style="grid-template-columns: 1fr;">
-                        <div class="sub-snap-row sub-snap-row-span" style="margin-top:0;">
-                            <div class="sub-snap-chip">
-                                <div class="chip-label">Expiry Date</div>
-                                <div class="chip-value" id="sub-expiry">-</div>
-                            </div>
-                            <div class="sub-snap-chip">
-                                <div class="chip-label">Account Status</div>
-                                <div class="chip-value" id="sub-account">-</div>
-                            </div>
-                            <div class="sub-snap-chip">
-                                <div class="chip-label">Lifetime Traffic</div>
-                                <div class="chip-value" id="sub-lifetime">-</div>
-                            </div>
+
+                    <!-- Stats trio -->
+                    <div class="plan-stats">
+                        <div class="plan-stat-item">
+                            <div class="plan-stat-lbl">Plan Limit</div>
+                            <div class="plan-stat-val" id="plan-limit-val">—</div>
+                        </div>
+                        <div class="plan-stat-item">
+                            <div class="plan-stat-lbl">Expiry</div>
+                            <div class="plan-stat-val" id="plan-expiry-val">—</div>
+                        </div>
+                        <div class="plan-stat-item">
+                            <div class="plan-stat-lbl">Days Left</div>
+                            <div class="plan-stat-val" id="plan-days-val">—</div>
                         </div>
                     </div>
-                    <!-- Expiry countdown (flip-clock) -->
-                    <div id="expiry-countdown" style="display:none; margin-top:16px;">
-                        <div style="font-size:0.7rem;color:var(--on-dim);letter-spacing:1.4px;text-align:center;margin-bottom:12px;text-transform:uppercase;font-weight:600;">Time Remaining</div>
+
+                    <!-- Flip-clock countdown -->
+                    <div id="expiry-countdown" style="display:none; margin-top:20px; padding-top:20px; border-top:1px solid var(--border);">
+                        <div style="font-size:0.68rem;color:var(--on-dim);letter-spacing:1.4px;text-align:center;margin-bottom:12px;text-transform:uppercase;font-weight:600;">Time Remaining</div>
                         <div class="flip-clock">
-                            <div class="flip-unit">
-                                <div class="flip-digit" id="flip-d">00</div>
-                                <div class="flip-label">Days</div>
-                            </div>
+                            <div class="flip-unit"><div class="flip-digit" id="flip-d">00</div><div class="flip-label">Days</div></div>
                             <div class="flip-sep">:</div>
-                            <div class="flip-unit">
-                                <div class="flip-digit" id="flip-h">00</div>
-                                <div class="flip-label">Hours</div>
-                            </div>
+                            <div class="flip-unit"><div class="flip-digit" id="flip-h">00</div><div class="flip-label">Hours</div></div>
                             <div class="flip-sep">:</div>
-                            <div class="flip-unit">
-                                <div class="flip-digit" id="flip-m">00</div>
-                                <div class="flip-label">Mins</div>
-                            </div>
+                            <div class="flip-unit"><div class="flip-digit" id="flip-m">00</div><div class="flip-label">Mins</div></div>
                             <div class="flip-sep">:</div>
-                            <div class="flip-unit">
-                                <div class="flip-digit" id="flip-s">00</div>
-                                <div class="flip-label">Secs</div>
-                            </div>
+                            <div class="flip-unit"><div class="flip-digit" id="flip-s">00</div><div class="flip-label">Secs</div></div>
                         </div>
                         <div id="expiry-countdown-val" style="display:none;"></div>
                     </div>
@@ -247,6 +258,36 @@
                     <div class="info-row"><span>UUID:</span> <strong id="user-uuid" style="word-break:break-all;font-size:0.85rem;">-</strong></div>
                     <div class="info-row"><span>Subscription ID:</span> <strong id="user-subid">-</strong></div>
                     <div class="info-row"><span>IPs:</span> <strong id="user-ips">-</strong></div>
+                </div>
+
+                <!-- Server Ping Card -->
+                <div class="card ping-card" id="ping-card" style="margin-top:20px;">
+                    <div class="ping-head">
+                        <div>
+                            <div class="ping-eyebrow">Server Latency</div>
+                            <div class="ping-val-row">
+                                <span class="ping-ms" id="ping-ms">—</span>
+                                <span class="ping-unit" id="ping-unit">ms</span>
+                            </div>
+                        </div>
+                        <button class="ping-btn" id="btn-ping" title="Ping server">
+                            <i class="fa-solid fa-signal"></i>
+                        </button>
+                    </div>
+                    <div class="ping-bars" id="ping-bars">
+                        <div class="ping-bar" style="--h:15%"></div>
+                        <div class="ping-bar" style="--h:15%"></div>
+                        <div class="ping-bar" style="--h:15%"></div>
+                        <div class="ping-bar" style="--h:15%"></div>
+                        <div class="ping-bar" style="--h:15%"></div>
+                        <div class="ping-bar" style="--h:15%"></div>
+                        <div class="ping-bar" style="--h:15%"></div>
+                        <div class="ping-bar" style="--h:15%"></div>
+                    </div>
+                    <div class="ping-footer">
+                        <span class="ping-status" id="ping-status">Tap to measure latency</span>
+                        <span class="ping-quality" id="ping-quality"></span>
+                    </div>
                 </div>
 
                 <!-- Config Link & QR Code (client view) -->
@@ -674,6 +715,6 @@
         </div>
     </div>
 
-    <script src="main.js?v=30" data-cfasync="false"></script>
+    <script src="main.js?v=32" data-cfasync="false"></script>
 </body>
 </html>
