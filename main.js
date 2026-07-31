@@ -392,35 +392,36 @@ document.getElementById('btn-login-admin').addEventListener('click', async () =>
     btn.disabled = false;
 });
 
-document.getElementById('btn-login-client').addEventListener('click', async () => {
+async function doClientLogin() {
     const id = (document.getElementById('login-email').value || '').trim();
     const btn = document.getElementById('btn-login-client');
     if (!id) { showToast('Enter your email/ID', 'error'); return; }
     scrambleButtonText(btn, 'Checking…');
     btn.disabled = true;
-    try { localStorage.setItem('xui_last_tab', 'client'); localStorage.setItem('xui_client_id', id || ''); } catch(e) {}
+    try { localStorage.setItem('xui_last_tab', 'client'); localStorage.setItem('xui_client_id', id); } catch(e) {}
     try {
-        const res = await fetch('/public/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'client', id }) });
+        const res = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'client', id }) });
         const ct = res.headers.get('Content-Type') || '';
         if (!ct.includes('application/json')) {
-            const txt = await res.text().catch(()=> '');
             showToast(res.status === 401 ? 'Session expired. Refresh and try again.' : 'Server temporary issue. Try again.', 'error');
-            btn.textContent = "Check Traffic"; return;
-        }
-        const data = await res.json();
-        if (data && data.success) { currentRole = 'client'; startClientApp(data.clientData); }
-        else {
-            const msg = data && data.msg;
-            if (msg === 'Panel Auth Failed') {
-                showToast('Panel credentials wrong — update PANEL_USERNAME/PANEL_PASSWORD env vars in Cloudflare Pages.', 'error');
-            } else {
-                showToast(msg || 'User not found', 'error');
+        } else {
+            const data = await res.json();
+            if (data && data.success) { currentRole = 'client'; startClientApp(data.clientData); return; }
+            else {
+                const msg = data && data.msg;
+                if (msg === 'Panel Auth Failed') {
+                    showToast('Panel credentials wrong — update PANEL_USERNAME/PANEL_PASSWORD env vars in Cloudflare Pages.', 'error');
+                } else {
+                    showToast(msg || 'User not found. Check your email/ID.', 'error');
+                }
             }
         }
     } catch(e) { showToast('Network/Server error. Try again.', 'error'); }
     btn.textContent = 'Check Traffic';
     btn.disabled = false;
-});
+}
+document.getElementById('btn-login-client').addEventListener('click', doClientLogin);
+document.getElementById('login-email').addEventListener('keydown', e => { if (e.key === 'Enter') doClientLogin(); });
 
 // --- Admin App Start ---
 async function startAdminApp() {
@@ -794,7 +795,7 @@ function startClientApp(client) {
         const idToCheck = (localStorage.getItem('xui_client_id') || client.email || '').trim();
         if (idToCheck) {
             clientLoopInterval = setInterval(() => {
-                fetch('/public/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'client', id: idToCheck }) })
+                fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'client', id: idToCheck }) })
                 .then(r => r.json()).then(d => { if (d && d.success) applyClientDataToUI(d.clientData); }).catch(()=>{});
             }, 120000);
         }
@@ -818,7 +819,7 @@ try {
         const id = (localStorage.getItem('xui_client_id') || '').trim();
         if (!id || !__currentClientData) { btn._refreshing = false; return; }
         try {
-            const res = await fetch('/public/auth', {
+            const res = await fetch('/api/auth', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ type: 'client', id })
@@ -2025,7 +2026,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         } else if ((lastTab === 'client' && cachedClient) || directAuto) {
             const idToCheck = (directClient || cachedClient || '').trim();
             if (idToCheck) {
-                fetch('/public/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'client', id: idToCheck }) })
+                fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'client', id: idToCheck }) })
                 .then(r => r.json()).then(d => {
                     if (d && d.success) { currentRole = 'client'; startClientApp(d.clientData); }
                     else if (directAuto) showToast((d && d.msg) || 'User not found', 'error');
