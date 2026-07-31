@@ -210,10 +210,35 @@ export async function onRequest(context) {
 
             const configLink = vlessLink || vmessLink || trojanLink || null;
 
+            // Fetch subscription ?format=info for period usage + live status
+            let subInfo = null;
+            if (subLink) {
+              try {
+                const siRes = await fetch(`${subLink}?format=info`, {
+                  headers: { Cookie: cookie, 'User-Agent': 'ClashforWindows/0.20.0' }
+                });
+                const sct = siRes.headers.get('content-type') || '';
+                if (sct.includes('json')) {
+                  const sj = await siRes.json().catch(() => null);
+                  if (sj && (sj.upload !== undefined || sj.download !== undefined)) subInfo = sj;
+                }
+                if (!subInfo) {
+                  const hdr = siRes.headers.get('Subscription-Userinfo') || '';
+                  if (hdr) {
+                    subInfo = {};
+                    hdr.split(';').forEach(p => {
+                      const [k, v] = p.trim().split('=');
+                      if (k && v !== undefined) subInfo[k.trim()] = Number(v.trim());
+                    });
+                  }
+                }
+              } catch (e) {}
+            }
+
             return new Response(JSON.stringify({
               success: true,
               role: 'client',
-              clientData: { ...foundClient, isOnline, ips, subLink, vlessLink, vmessLink, trojanLink, configLink, protocol }
+              clientData: { ...foundClient, isOnline, ips, subLink, vlessLink, vmessLink, trojanLink, configLink, protocol, subInfo }
             }), {
               headers: { "Content-Type": "application/json" }
             });
@@ -231,6 +256,18 @@ export async function onRequest(context) {
         });
       }
     }
+  }
+
+  // Public ping endpoint — measures worker→panel latency
+  if (path === "ping" && request.method === "GET") {
+    const t0 = Date.now();
+    try {
+      await fetch(`${PANEL_URL}/`, { method: 'HEAD', signal: AbortSignal.timeout(6000) });
+    } catch (e) {}
+    const latency = Date.now() - t0;
+    return new Response(JSON.stringify({ latency, ts: t0 }), {
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }
+    });
   }
 
   // Settings endpoint
