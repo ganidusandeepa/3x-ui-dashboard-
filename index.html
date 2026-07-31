@@ -32,7 +32,7 @@
             </h2>
             <div class="tabs" style="display:flex; margin-bottom: 20px; border-bottom: 1px solid var(--border);">
                 <button id="tab-login-client" style="flex:1; padding:10px; background:none; border:none; color:var(--accent); border-bottom: 2px solid var(--accent); font-weight:bold; cursor:pointer;">Client Check</button>
-                <button id="tab-login-admin" style="flex:1; padding:10px; background:none; border:none; color:var(--text-dim); border-bottom: 2px solid transparent; font-weight:bold; cursor:pointer;">Admin (Google)</button>
+                <button id="tab-login-admin" style="flex:1; padding:10px; background:none; border:none; color:var(--text-dim); border-bottom: 2px solid transparent; font-weight:bold; cursor:pointer;">Admin</button>
             </div>
 
             <div id="login-form-client">
@@ -43,16 +43,16 @@
             </div>
 
             <div id="login-form-admin" style="display:none;">
-                <div class="card" style="background: rgba(255,255,255,0.03); border-radius: 16px; padding: 14px; text-align:left;">
-                    <div style="font-weight:800; margin-bottom:6px;"><i class="fa-solid fa-shield-halved" style="color:var(--accent)"></i> Admin access</div>
-                    <div style="font-size:0.9rem; color:var(--text-dim); line-height:1.4;">
-                        Admin login is handled by <strong>Google (Cloudflare Access)</strong>.
-                        Tap continue and complete Google login.
-                    </div>
+                <div class="input-group">
+                    <input type="text" id="admin-login-user" placeholder="Panel Username" autocomplete="username">
                 </div>
-                <button class="accent-btn" style="width: 100%; margin-top: 14px;" id="btn-login-admin">Continue with Google</button>
-                <div style="margin-top: 12px; font-size:0.85rem; color:var(--text-dim);">
-                    If you see <strong>Unauthorized</strong>, enable <em>Identity headers</em> in Cloudflare Access.
+                <div class="input-group" style="margin-top:10px;">
+                    <input type="password" id="admin-login-pass" placeholder="Panel Password" autocomplete="current-password">
+                </div>
+                <button class="accent-btn" style="width: 100%; margin-top: 14px;" id="btn-login-admin">Login as Admin</button>
+                <div style="margin-top: 12px; font-size:0.82rem; color:var(--text-dim); line-height:1.5;">
+                    Use your 3x-ui panel credentials.<br>
+                    <span style="color:var(--accent);">Tip:</span> If you get "Panel Auth Failed", update <code>PANEL_USERNAME</code> and <code>PANEL_PASSWORD</code> in your Cloudflare Pages environment variables.
                 </div>
             </div>
         </div>

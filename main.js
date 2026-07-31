@@ -158,8 +158,35 @@ document.getElementById('tab-login-client').addEventListener('click', (e) => {
 });
 
 document.getElementById('btn-login-admin').addEventListener('click', async () => {
+    const username = (document.getElementById('admin-login-user').value || '').trim();
+    const password = (document.getElementById('admin-login-pass').value || '').trim();
+    const btn = document.getElementById('btn-login-admin');
+    if (!username || !password) { showToast('Enter panel username and password', 'error'); return; }
+    btn.textContent = 'Logging in...';
+    btn.disabled = true;
     try { localStorage.setItem('xui_last_tab', 'admin'); } catch(e) {}
-    window.location.href = '/api/status';
+    try {
+        const res = await fetch('/api/auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'admin', username, password })
+        });
+        const data = await res.json();
+        if (data && data.success) {
+            currentRole = 'admin';
+            adminToken = 'password-auth';
+            startAdminApp();
+        } else {
+            const msg = data && data.msg;
+            if (msg === 'Panel Auth Failed' || msg === 'Invalid admin credentials') {
+                showToast('Wrong username or password. Check your 3x-ui panel credentials.', 'error');
+            } else {
+                showToast(msg || 'Login failed', 'error');
+            }
+        }
+    } catch(e) { showToast('Network/Server error. Try again.', 'error'); }
+    btn.textContent = 'Login as Admin';
+    btn.disabled = false;
 });
 
 document.getElementById('btn-login-client').addEventListener('click', async () => {
@@ -178,7 +205,14 @@ document.getElementById('btn-login-client').addEventListener('click', async () =
         }
         const data = await res.json();
         if (data && data.success) { currentRole = 'client'; startClientApp(data.clientData); }
-        else showToast((data && data.msg) || 'User not found', 'error');
+        else {
+            const msg = data && data.msg;
+            if (msg === 'Panel Auth Failed') {
+                showToast('Panel credentials wrong — update PANEL_USERNAME/PANEL_PASSWORD env vars in Cloudflare Pages.', 'error');
+            } else {
+                showToast(msg || 'User not found', 'error');
+            }
+        }
     } catch(e) { showToast('Network/Server error. Try again.', 'error'); }
     btn.textContent = "Check Traffic";
 });
