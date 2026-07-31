@@ -33,21 +33,12 @@ function animateNumber(elOrSelector, to, opts = {}) {
     let startVal = Number.isFinite(from) ? from : Number(el.textContent);
     if (!Number.isFinite(startVal)) startVal = 0;
     const endVal = Number(to);
-    if (!Number.isFinite(endVal)) {
-        el.textContent = formatter(0);
-        return;
-    }
+    if (!Number.isFinite(endVal)) { el.textContent = formatter(0); return; }
 
-    // Prefer GSAP core, else anime.js
     try {
         if (typeof gsap !== 'undefined') {
             const obj = { v: startVal };
-            gsap.to(obj, {
-                v: endVal,
-                duration: duration / 1000,
-                ease: 'power2.out',
-                onUpdate: () => { el.textContent = formatter(obj.v); }
-            });
+            gsap.to(obj, { v: endVal, duration: duration / 1000, ease: 'power2.out', onUpdate: () => { el.textContent = formatter(obj.v); } });
             return;
         }
     } catch(e) {}
@@ -55,13 +46,7 @@ function animateNumber(elOrSelector, to, opts = {}) {
     try {
         if (typeof anime !== 'undefined') {
             const obj = { v: startVal };
-            anime({
-                targets: obj,
-                v: endVal,
-                duration,
-                easing: 'easeOutCubic',
-                update: () => { el.textContent = formatter(obj.v); }
-            });
+            anime({ targets: obj, v: endVal, duration, easing: 'easeOutCubic', update: () => { el.textContent = formatter(obj.v); } });
             return;
         }
     } catch(e) {}
@@ -69,21 +54,23 @@ function animateNumber(elOrSelector, to, opts = {}) {
     el.textContent = formatter(endVal);
 }
 
+// --- Global State ---
 let currentRole = null;
 let adminToken = null;
 let loopInterval = null;
-let clientLoopInterval = null; // legacy polling (kept as fallback)
-let __clientLast = null; // { downBytes, upBytes, ts }
+let clientLoopInterval = null;
+let __clientLast = null;
 let __clientEventSource = null;
 let __clientSseRetry = null;
-
-// Background (Vanta)
 let __vanta = null;
-
-// Client list cache (for search + drawer)
 let __clientsCache = [];
 let __clientSearchTerm = '';
+let __bulkSelected = new Set();
+let __autoRefreshOntimer = null;
+let __expiryCountdownTimer = null;
+let __currentClientData = null; // last client data for QR / countdown
 
+// --- Client SSE ---
 function stopClientSSE() {
     try { __clientEventSource?.close?.(); } catch(e) {}
     __clientEventSource = null;
@@ -94,25 +81,12 @@ function stopClientSSE() {
 function startClientSSE(idToCheck) {
     stopClientSSE();
     if (!idToCheck) return;
-
     const es = new EventSource(`/public/stream?id=${encodeURIComponent(idToCheck)}`);
     __clientEventSource = es;
-
     es.addEventListener('client', (ev) => {
-        try {
-            const c = JSON.parse(ev.data || '{}');
-            if (c && (c.email || c.down !== undefined)) {
-                applyClientDataToUI(c);
-            }
-        } catch(e) {}
+        try { const c = JSON.parse(ev.data || '{}'); if (c && (c.email || c.down !== undefined)) applyClientDataToUI(c); } catch(e) {}
     });
-
-    es.addEventListener('notfound', () => {
-        // stop to avoid infinite reconnect spam
-        stopClientSSE();
-        showToast('User not found', 'error');
-    });
-
+    es.addEventListener('notfound', () => { stopClientSSE(); showToast('User not found', 'error'); });
     es.addEventListener('error', () => {
         try { es.close(); } catch(e) {}
         __clientEventSource = null;
@@ -130,38 +104,26 @@ function doLogout() {
     try { stopClientSSE(); } catch(e) {}
     try { clearInterval(loopInterval); } catch(e) {}
     try { clearInterval(clientLoopInterval); } catch(e) {}
-    loopInterval = null;
-    clientLoopInterval = null;
-    __clientLast = null;
-    currentRole = null;
-    adminToken = null;
+    try { clearInterval(__autoRefreshOntimer); } catch(e) {}
+    try { clearInterval(__expiryCountdownTimer); } catch(e) {}
+    loopInterval = null; clientLoopInterval = null; __autoRefreshOntimer = null;
+    __expiryCountdownTimer = null; __currentClientData = null;
+    currentRole = null; adminToken = null;
     try { sessionStorage.removeItem('xui_admin_token'); } catch(e) {}
-
-    // Reset UI
     document.getElementById('login-overlay').style.display = 'flex';
     try { document.querySelector('.desktop-nav')?.style && (document.querySelector('.desktop-nav').style.display = 'none'); } catch(e) {}
     try { document.querySelector('.mobile-nav')?.style && (document.querySelector('.mobile-nav').style.display = 'none'); } catch(e) {}
     document.getElementById('main-fab').style.display = 'none';
-
-    // restore default tab (client) UI
     try { document.getElementById('tab-login-client').click(); } catch(e) {}
 }
 
-// Logout button (header)
 document.addEventListener('click', (e) => {
-    if (e.target && (e.target.id === 'btn-logout' || e.target.closest('#btn-logout'))) {
-        doLogout();
-    }
-
-    // Micro interaction: button press
+    if (e.target && (e.target.id === 'btn-logout' || e.target.closest('#btn-logout'))) doLogout();
     try {
         const btn = e.target?.closest?.('button');
-        if (btn && typeof gsap !== 'undefined') {
-            gsap.fromTo(btn, { scale: 0.98 }, { scale: 1, duration: 0.14, ease: 'power2.out' });
-        } else if (btn && typeof anime !== 'undefined') {
-            anime({ targets: btn, scale: [0.98, 1], duration: 160, easing: 'easeOutCubic' });
-        }
-    } catch(err) {}
+        if (btn && typeof gsap !== 'undefined') gsap.fromTo(btn, { scale: 0.98 }, { scale: 1, duration: 0.14, ease: 'power2.out' });
+        else if (btn && typeof anime !== 'undefined') anime({ targets: btn, scale: [0.98, 1], duration: 160, easing: 'easeOutCubic' });
+    } catch(e) {}
 });
 
 function showToast(msg, type="info") {
@@ -171,27 +133,17 @@ function showToast(msg, type="info") {
     toast.style.borderColor = type === 'error' ? 'var(--red)' : 'var(--accent)';
     toast.innerHTML = `<i class="fa-solid fa-bell"></i> <span>${msg}</span>`;
     container.appendChild(toast);
-
-    // GSAP toast animation (fallback to CSS)
-    try {
-        if (typeof gsap !== 'undefined') {
-            gsap.fromTo(toast, { y: 10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.2, ease: 'power2.out' });
-        }
-    } catch(e) {}
-
+    try { if (typeof gsap !== 'undefined') gsap.fromTo(toast, { y: 10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.2, ease: 'power2.out' }); } catch(e) {}
     setTimeout(() => {
         try {
-            if (typeof gsap !== 'undefined') {
-                gsap.to(toast, { opacity: 0, y: -8, duration: 0.18, ease: 'power2.in', onComplete: () => toast.remove() });
-                return;
-            }
+            if (typeof gsap !== 'undefined') { gsap.to(toast, { opacity: 0, y: -8, duration: 0.18, ease: 'power2.in', onComplete: () => toast.remove() }); return; }
         } catch(e) {}
         toast.style.opacity = '0';
         setTimeout(() => toast.remove(), 300);
     }, 3000);
 }
 
-// --- Login / Auth UI Logic ---
+// --- Login UI ---
 document.getElementById('tab-login-admin').addEventListener('click', (e) => {
     e.target.style.color = 'var(--accent)'; e.target.style.borderBottomColor = 'var(--accent)';
     document.getElementById('tab-login-client').style.color = 'var(--text-dim)'; document.getElementById('tab-login-client').style.borderBottomColor = 'transparent';
@@ -205,11 +157,7 @@ document.getElementById('tab-login-client').addEventListener('click', (e) => {
     document.getElementById('login-form-client').style.display = 'block';
 });
 
-// Default tab selection is handled on DOMContentLoaded using cached last tab.
-
 document.getElementById('btn-login-admin').addEventListener('click', async () => {
-    // Cloudflare Access needs a top-level navigation to perform the Google redirect.
-    // A fetch() will not show the login UI.
     try { localStorage.setItem('xui_last_tab', 'admin'); } catch(e) {}
     window.location.href = '/api/status';
 });
@@ -218,162 +166,148 @@ document.getElementById('btn-login-client').addEventListener('click', async () =
     const id = (document.getElementById('login-email').value || '').trim();
     const btn = document.getElementById('btn-login-client');
     btn.textContent = "Checking...";
-
-    if (!id) {
-        showToast('Enter your email/ID', 'error');
-        btn.textContent = "Check Traffic";
-        return;
-    }
-
-    // cache last client id + last tab
+    if (!id) { showToast('Enter your email/ID', 'error'); btn.textContent = "Check Traffic"; return; }
+    try { localStorage.setItem('xui_last_tab', 'client'); localStorage.setItem('xui_client_id', id || ''); } catch(e) {}
     try {
-        localStorage.setItem('xui_last_tab', 'client');
-        localStorage.setItem('xui_client_id', id || '');
-    } catch(e) {}
-
-    try {
-        const res = await fetch('/public/auth', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'client', id })
-        });
-
+        const res = await fetch('/public/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'client', id }) });
         const ct = res.headers.get('Content-Type') || '';
         if (!ct.includes('application/json')) {
-            // This happens sometimes when Cloudflare/edge returns HTML (blocked/expired) or a 502 page.
             const txt = await res.text().catch(()=> '');
-            console.warn('Client auth non-JSON response:', res.status, txt.slice(0, 200));
             showToast(res.status === 401 ? 'Session expired. Refresh and try again.' : 'Server temporary issue. Try again.', 'error');
-            btn.textContent = "Check Traffic";
-            return;
+            btn.textContent = "Check Traffic"; return;
         }
-
         const data = await res.json();
-        if (data && data.success) {
-            currentRole = 'client';
-            startClientApp(data.clientData);
-        } else {
-            showToast((data && data.msg) || 'User not found', 'error');
-        }
-    } catch(e) {
-        console.warn('Client auth error:', e);
-        showToast('Network/Server error. Try again.', 'error');
-    }
+        if (data && data.success) { currentRole = 'client'; startClientApp(data.clientData); }
+        else showToast((data && data.msg) || 'User not found', 'error');
+    } catch(e) { showToast('Network/Server error. Try again.', 'error'); }
     btn.textContent = "Check Traffic";
 });
 
-
-// Activate specific Dashboard
+// --- Admin App Start ---
 async function startAdminApp() {
     document.getElementById('login-overlay').style.display = 'none';
-    // show logout
     try { document.getElementById('btn-logout').style.display = 'inline-flex'; } catch(e) {}
     document.getElementById('tab-user-view').style.display = 'none';
-
-    // Admin top tabs removed (desktop-nav/mobile-nav)
     try { document.querySelector('.desktop-nav')?.style && (document.querySelector('.desktop-nav').style.display = 'none'); } catch(e) {}
     try { document.querySelector('.mobile-nav')?.style && (document.querySelector('.mobile-nav').style.display = 'none'); } catch(e) {}
     document.getElementById('main-fab').style.display = 'flex';
 
-    // Show admin select nav
     try {
         const sel = document.getElementById('admin-tab-select');
         if (sel) sel.style.display = 'inline-flex';
         if (sel && sel.value) switchTab(sel.value);
         else switchTab('overview');
-    } catch(e) {
-        switchTab('overview');
-    }
+    } catch(e) { switchTab('overview'); }
 
     initAdminCharts();
     await loadAdminData();
 
-    // Hero + cards intro + scroll reveals
     try {
-        // NOTE: there are two .data-card-hero cards (client + admin). Target the admin one.
         const hero = document.querySelector('#tab-overview .data-card-hero');
         if (typeof gsap !== 'undefined') {
-            if (hero) {
-                gsap.fromTo(hero, { opacity: 0, y: 18, scale: 0.98 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: 'power2.out' });
-                // subtle glow pulse
-                gsap.fromTo(hero, { boxShadow: '0 0 0 rgba(0,255,204,0)' }, { boxShadow: '0 0 34px rgba(0,255,204,0.14)', duration: 0.8, yoyo: true, repeat: 1, ease: 'sine.inOut' });
-            }
-
+            if (hero) { gsap.fromTo(hero, { opacity: 0, y: 18, scale: 0.98 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: 'power2.out' }); }
             gsap.from('.resource-card, .card:not(.data-card-hero)', { opacity: 0, y: 12, duration: 0.35, stagger: 0.02, ease: 'power2.out', delay: 0.05 });
-
-            if (typeof ScrollTrigger !== 'undefined') {
-                gsap.registerPlugin(ScrollTrigger);
-                gsap.utils.toArray('.card, .item-card').forEach((el) => {
-                    gsap.fromTo(el,
-                        { opacity: 0, y: 18 },
-                        {
-                            opacity: 1,
-                            y: 0,
-                            duration: 0.5,
-                            ease: 'power2.out',
-                            scrollTrigger: {
-                                trigger: el,
-                                start: 'top 85%',
-                                toggleActions: 'play none none reverse'
-                            }
-                        }
-                    );
-                });
-            }
         } else if (typeof anime !== 'undefined') {
-            if (hero) {
-                anime({ targets: hero, opacity: [0,1], translateY: [18,0], scale: [0.98,1], duration: 520, easing: 'easeOutCubic' });
-            }
-            const cards = document.querySelectorAll('.card, .item-card');
-            anime({ targets: cards, opacity: [0,1], translateY: [14,0], delay: anime.stagger(20), duration: 380, easing: 'easeOutCubic' });
+            if (hero) anime({ targets: hero, opacity: [0,1], translateY: [18,0], scale: [0.98,1], duration: 520, easing: 'easeOutCubic' });
+            anime({ targets: document.querySelectorAll('.card, .item-card'), opacity: [0,1], translateY: [14,0], delay: anime.stagger(20), duration: 380, easing: 'easeOutCubic' });
         }
     } catch(e) {}
 
-    // Heavy refresh (inbounds/clients/history) stays slower to avoid hammering the panel.
     loopInterval = setInterval(loadAdminData, 60000);
-
-    // Lightweight near-realtime updates via SSE (updates status/traffic/cpu/ram without 4x polling)
     try { startAdminSSE(); } catch(e) {}
 
-    // load settings
     fetch('/api/settings').then(r=>r.json()).then(set=>{
         if(set && set.panelUrl) {
             document.getElementById("setting-url").value = set.panelUrl;
             document.getElementById("setting-user").value = set.username || "";
-            document.getElementById("setting-pass").value = set.password || "";
         }
     }).catch(()=>{});
 }
 
+// --- Client Speed ---
 function updateClientSpeedsFromDelta(nowDown, nowUp) {
     try {
         const now = Date.now();
         if (!__clientLast) {
             __clientLast = { downBytes: Number(nowDown)||0, upBytes: Number(nowUp)||0, ts: now };
-            setTextSafe('#user-dl-speed', '0');
-            setTextSafe('#user-up-speed', '0');
-            return;
+            setTextSafe('#user-dl-speed', '0'); setTextSafe('#user-up-speed', '0'); return;
         }
         const dt = (now - __clientLast.ts) / 1000;
         if (dt <= 0) return;
         const dDown = (Number(nowDown)||0) - (__clientLast.downBytes||0);
         const dUp = (Number(nowUp)||0) - (__clientLast.upBytes||0);
-
-        // Mbps
-        const downMbps = Math.max(0, (dDown * 8) / (dt * 1e6));
-        const upMbps = Math.max(0, (dUp * 8) / (dt * 1e6));
-
-        animateNumber('#user-dl-speed', downMbps, { decimals: 2, duration: 500 });
-        animateNumber('#user-up-speed', upMbps, { decimals: 2, duration: 500 });
-
+        animateNumber('#user-dl-speed', Math.max(0, (dDown * 8) / (dt * 1e6)), { decimals: 2, duration: 500 });
+        animateNumber('#user-up-speed', Math.max(0, (dUp * 8) / (dt * 1e6)), { decimals: 2, duration: 500 });
         __clientLast = { downBytes: Number(nowDown)||0, upBytes: Number(nowUp)||0, ts: now };
     } catch(e) {}
 }
 
+// --- QR Code & Config Links ---
+function generateQR(text, canvasEl, size) {
+    try {
+        if (typeof QRious === 'undefined' || !canvasEl || !text) return;
+        new QRious({ element: canvasEl, value: text, size: size || 200, background: '#ffffff', foreground: '#000000' });
+    } catch(e) {}
+}
+
+window.copyClientConfig = async function() {
+    const val = document.getElementById('client-config-link')?.value || '';
+    try { await navigator.clipboard.writeText(val); showToast('Config link copied'); } catch(e) { showToast('Copy failed', 'error'); }
+};
+
+window.copyClientSub = async function() {
+    const val = document.getElementById('client-sub-link')?.value || '';
+    try { await navigator.clipboard.writeText(val); showToast('Subscription URL copied'); } catch(e) { showToast('Copy failed', 'error'); }
+};
+
+function showClientConfig(configLink, subLink) {
+    const card = document.getElementById('client-config-card');
+    if (!card) return;
+    if (!configLink) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+    const inp = document.getElementById('client-config-link');
+    if (inp) inp.value = configLink;
+    const canvas = document.getElementById('client-qr-canvas');
+    if (canvas) generateQR(configLink, canvas, 200);
+    const subRow = document.getElementById('client-sub-row');
+    const subInp = document.getElementById('client-sub-link');
+    if (subLink && subRow && subInp) { subRow.style.display = 'block'; subInp.value = subLink; }
+    else if (subRow) subRow.style.display = 'none';
+}
+
+// --- Expiry Countdown ---
+function startExpiryCountdown(expiryTime) {
+    try { clearInterval(__expiryCountdownTimer); } catch(e) {}
+    const el = document.getElementById('expiry-countdown');
+    const val = document.getElementById('expiry-countdown-val');
+    if (!el || !val) return;
+    const exp = Number(expiryTime);
+    if (!exp || exp <= 0) { el.style.display = 'none'; return; }
+    const tick = () => {
+        const diff = exp - Date.now();
+        if (diff <= 0) {
+            el.style.display = 'block';
+            val.textContent = 'Expired';
+            val.style.color = 'var(--red)';
+            clearInterval(__expiryCountdownTimer);
+            return;
+        }
+        el.style.display = 'block';
+        const d = Math.floor(diff / 86400000);
+        const h = Math.floor((diff % 86400000) / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        const s = Math.floor((diff % 60000) / 1000);
+        val.textContent = d > 0 ? `${d}d ${h}h ${m}m` : `${h}h ${m}m ${s}s`;
+        val.style.color = diff < 7 * 86400000 ? 'orange' : 'var(--accent)';
+    };
+    tick();
+    __expiryCountdownTimer = setInterval(tick, 1000);
+}
+
+// --- Apply Client Data to UI ---
 function applyClientDataToUI(client) {
     if (!client) return;
-
-    // compute speed (based on delta bytes between refreshes)
+    __currentClientData = client;
     updateClientSpeedsFromDelta(client.down, client.up);
 
     const down = parseFloat(toGB(client.down));
@@ -382,142 +316,80 @@ function applyClientDataToUI(client) {
     const limit = parseFloat(toGB(client.total));
     const remainDesc = limit === 0 ? "Unlimited GB" : `${limit.toFixed(2)} GB`;
 
-    // Extra details (if present)
-    const fmtTime = (ms) => {
-        const n = Number(ms);
-        if (!Number.isFinite(n) || n <= 0) return '-';
-        return new Date(n).toLocaleString();
-    };
+    const fmtTime = (ms) => { const n = Number(ms); if (!Number.isFinite(n) || n <= 0) return '-'; return new Date(n).toLocaleString(); };
 
     try {
-        // Keep the server pill intact; only replace content when in client mode
         if (client.email) {
             const us = document.querySelector('.user-status');
-            if (us) us.innerHTML = '<span>Hi, <strong style="color:var(--accent)">'+client.email+'</strong></span>';
+            if (us) us.innerHTML = '<span>Hi, <strong style="color:var(--accent)">' + client.email + '</strong></span>';
         }
-        document.getElementById('user-email').textContent = client.email || document.getElementById('user-email').textContent || '-';
+        document.getElementById('user-email').textContent = client.email || '-';
         if (client.uuid !== undefined) document.getElementById('user-uuid').textContent = client.uuid || '-';
         if (client.subId !== undefined) document.getElementById('user-subid').textContent = client.subId || '-';
         if (client.lastOnline !== undefined) document.getElementById('user-last-online').textContent = fmtTime(client.lastOnline);
+        if (client.ips !== undefined) document.getElementById('user-ips').textContent = Array.isArray(client.ips) ? (client.ips.join(', ') || 'None') : '-';
     } catch(e) {}
 
-    // counters
     animateNumber('#user-used', Number(totalUsed), { decimals: 2, duration: 500 });
     animateNumber('#user-dl', Number(down), { decimals: 2, duration: 500 });
     animateNumber('#user-up', Number(up), { decimals: 2, duration: 500 });
     setTextSafe('#user-total', remainDesc);
 
-    // Subscription Snapshot (unique UI)
     try {
-        const usedGB = Number(totalUsed);
-        const usedFmt = formatGB(usedGB);
-
-        // Lifetime Traffic
+        const usedFmt = formatGB(Number(totalUsed));
         setTextSafe('#sub-lifetime', `${usedFmt.value} ${usedFmt.unit}`);
-
-        // Expiry
         const exp = Number(client.expiryTime ?? client.expiry ?? 0);
-        const expText = (!Number.isFinite(exp) || exp <= 0) ? 'Never' : new Date(exp).toLocaleString();
-        setTextSafe('#sub-expiry', expText);
-
-        // Account Status
+        setTextSafe('#sub-expiry', (!Number.isFinite(exp) || exp <= 0) ? 'Never' : new Date(exp).toLocaleString());
         const active = client.enable !== false;
         setTextSafe('#sub-account', active ? 'Active' : 'Disabled/Expired');
-
-        // status pill (snapshot)
         const dot = document.getElementById('sub-status-dot');
-        const pill = document.getElementById('sub-status-pill');
         const st = document.getElementById('sub-status-text');
-        if (dot && st && pill) {
-            if (active) {
-                st.textContent = 'ACTIVE';
-                dot.style.background = 'var(--green)';
-                dot.style.boxShadow = '0 0 0 4px rgba(0,255,102,0.15)';
-            } else {
-                st.textContent = 'INACTIVE';
-                dot.style.background = 'var(--red)';
-                dot.style.boxShadow = '0 0 0 4px rgba(255,51,51,0.16)';
-            }
+        if (dot && st) {
+            st.textContent = active ? 'ACTIVE' : 'INACTIVE';
+            dot.style.background = active ? 'var(--green)' : 'var(--red)';
+            dot.style.boxShadow = active ? '0 0 0 4px rgba(0,255,102,0.15)' : '0 0 0 4px rgba(255,51,51,0.16)';
         }
-
-        // status pill (top header)
         try {
             const top = document.getElementById('client-top-status');
             const topDot = document.getElementById('client-top-dot');
             const topText = document.getElementById('client-top-text');
             if (top && topDot && topText) {
                 top.style.display = 'inline-flex';
-                if (active) {
-                    topText.textContent = 'ACTIVE';
-                    topDot.style.background = 'var(--green)';
-                    topDot.style.boxShadow = '0 0 0 4px rgba(0,255,102,0.15)';
-                } else {
-                    topText.textContent = 'INACTIVE';
-                    topDot.style.background = 'var(--red)';
-                    topDot.style.boxShadow = '0 0 0 4px rgba(255,51,51,0.16)';
-                }
+                topText.textContent = active ? 'ACTIVE' : 'INACTIVE';
+                topDot.style.background = active ? 'var(--green)' : 'var(--red)';
             }
         } catch(e) {}
-
     } catch(e) {}
 
     try {
-        if (client.enable === false) {
-            document.getElementById('user-status-text').innerText = "Disabled or Expired";
-            document.getElementById('user-status-text').classList.remove('active');
-            document.getElementById('user-status-text').style.color = "var(--red)";
-        } else {
-            document.getElementById('user-status-text').innerText = "Active";
-            document.getElementById('user-status-text').classList.add('active');
-            document.getElementById('user-status-text').style.color = "";
+        const st = document.getElementById('user-status-text');
+        if (st) {
+            st.innerText = client.enable === false ? "Disabled or Expired" : "Active";
+            st.classList.toggle('active', client.enable !== false);
+            st.style.color = client.enable === false ? "var(--red)" : "";
         }
     } catch(e) {}
 
-    // Progress bar (animated + detailed)
     try {
         const bar = document.getElementById('user-progress');
         const pctEl = document.getElementById('user-progress-pct');
         const usedEl = document.getElementById('user-progress-used');
         const remEl = document.getElementById('user-progress-remaining');
-
-        if (usedEl) {
-            const usedFmt = formatGB(Number(totalUsed));
-            usedEl.textContent = `${usedFmt.value} ${usedFmt.unit}`;
-        }
-
+        if (usedEl) { const f = formatGB(Number(totalUsed)); usedEl.textContent = `${f.value} ${f.unit}`; }
         if (bar) {
-            // restart CSS animation
             bar.classList.remove('anim', 'level-warn', 'level-bad');
-            void bar.offsetWidth; // force reflow
+            void bar.offsetWidth;
             bar.classList.add('anim');
-
             if (limit > 0) {
-                let pct = (Number(totalUsed) / limit) * 100;
-                if (pct > 100) pct = 100;
-
-                // level colors
+                let pct = Math.min(100, (Number(totalUsed) / limit) * 100);
                 if (pct >= 90) bar.classList.add('level-bad');
                 else if (pct >= 70) bar.classList.add('level-warn');
-
-                // width animation
                 if (typeof gsap !== 'undefined') gsap.to(bar, { width: `${pct}%`, duration: 0.55, ease: 'power2.out' });
                 else if (typeof anime !== 'undefined') anime({ targets: bar, width: `${pct}%`, duration: 550, easing: 'easeOutCubic' });
                 else bar.style.width = `${pct}%`;
-
-                // pct badge (right side)
-                if (pctEl) {
-                    pctEl.style.display = 'inline-flex';
-                    pctEl.textContent = `${pct.toFixed(1)}%`;
-                }
-
-                // remaining text
-                if (remEl) {
-                    const remainingGB = Math.max(0, Number(limit) - Number(totalUsed));
-                    const remFmt = formatGB(remainingGB);
-                    remEl.textContent = `${remFmt.value} ${remFmt.unit}`;
-                }
+                if (pctEl) { pctEl.style.display = 'inline-flex'; pctEl.textContent = `${pct.toFixed(1)}%`; }
+                if (remEl) { const r = formatGB(Math.max(0, Number(limit) - Number(totalUsed))); remEl.textContent = `${r.value} ${r.unit}`; }
             } else {
-                // Unlimited
                 bar.style.width = '100%';
                 if (pctEl) pctEl.style.display = 'none';
                 if (remEl) remEl.textContent = 'Unlimited';
@@ -525,7 +397,6 @@ function applyClientDataToUI(client) {
         }
     } catch(e) {}
 
-    // Donut update/create
     try {
         if (typeof Chart !== 'undefined') {
             const donutCanvas = document.getElementById('userDonut');
@@ -544,68 +415,55 @@ function applyClientDataToUI(client) {
             }
         }
     } catch(e) {}
+
+    // Expiry countdown
+    try { startExpiryCountdown(client.expiryTime ?? client.expiry ?? 0); } catch(e) {}
+
+    // Config link + QR (only update if we have a link and not already showing a non-stale link)
+    try {
+        const configLink = client.configLink || client.vlessLink || client.vmessLink || client.trojanLink || null;
+        const subLink = client.subLink || null;
+        showClientConfig(configLink, subLink);
+    } catch(e) {}
 }
 
 function startClientApp(client) {
     document.getElementById('login-overlay').style.display = 'none';
-    // show logout
     try { document.getElementById('btn-logout').style.display = 'inline-flex'; } catch(e) {}
-
-    // Hide admin select nav
     try { const sel = document.getElementById('admin-tab-select'); if (sel) sel.style.display = 'none'; } catch(e) {}
-
-    // Hide Admin Navigation completely (nav removed from HTML)
     try { document.querySelector('.desktop-nav')?.style && (document.querySelector('.desktop-nav').style.display = 'none'); } catch(e) {}
     try { document.querySelector('.mobile-nav')?.style && (document.querySelector('.mobile-nav').style.display = 'none'); } catch(e) {}
     document.getElementById('main-fab').style.display = 'none';
-
-    // Hide all tabs except user view
     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
     document.getElementById('tab-user-view').classList.add('active');
 
-    // first paint
     applyClientDataToUI(client);
 
-    // Start SSE for near-realtime updates (preferred)
     try {
         const idToCheck = (localStorage.getItem('xui_client_id') || client.email || '').trim();
         startClientSSE(idToCheck);
     } catch(e) {}
 
-    // Fallback polling (very slow) if SSE fails completely
     try { clearInterval(clientLoopInterval); } catch(e) {}
     clientLoopInterval = null;
     try {
         const idToCheck = (localStorage.getItem('xui_client_id') || client.email || '').trim();
         if (idToCheck) {
             clientLoopInterval = setInterval(() => {
-                fetch('/public/auth', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ type: 'client', id: idToCheck })
-                })
-                .then(r => r.json())
-                .then(d => { if (d && d.success) applyClientDataToUI(d.clientData); })
-                .catch(()=>{});
+                fetch('/public/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'client', id: idToCheck }) })
+                .then(r => r.json()).then(d => { if (d && d.success) applyClientDataToUI(d.clientData); }).catch(()=>{});
             }, 120000);
         }
     } catch(e) {}
 }
 
-// --- Admin Helper Functions ---
+// --- Admin Helpers ---
 function getAdminHeaders() {
-    // When protected by Cloudflare Access, backend authorizes via identity header.
-    // In that case, DO NOT send Bearer password.
-    if (!adminToken || adminToken === 'zero-trust-secured') {
-        return { 'Content-Type': 'application/json' };
-    }
+    if (!adminToken || adminToken === 'zero-trust-secured') return { 'Content-Type': 'application/json' };
     return { 'Authorization': `Bearer ${adminToken}`, 'Content-Type': 'application/json' };
 }
 
-window.triggerAction = (action) => {
-    showToast(`${action}...`);
-    setTimeout(() => { showToast(`${action} Triggered`); loadAdminData(); }, 1000);
-};
+window.triggerAction = (action) => { showToast(`${action}...`); setTimeout(() => { showToast(`${action} Triggered`); loadAdminData(); }, 1000); };
 
 function closeModal() { document.getElementById('modal-overlay').classList.remove('active'); }
 document.getElementById('main-fab').addEventListener('click', () => {
@@ -613,190 +471,66 @@ document.getElementById('main-fab').addEventListener('click', () => {
     m.classList.add('active');
     try {
         const card = m.querySelector('.modal-card');
-        if (!card) return;
-
-        if (typeof gsap !== 'undefined') {
-            gsap.fromTo(card, { opacity: 0, y: 22, scale: 0.98 }, { opacity: 1, y: 0, scale: 1, duration: 0.26, ease: 'power2.out' });
-        }
+        if (card && typeof gsap !== 'undefined') gsap.fromTo(card, { opacity: 0, y: 22, scale: 0.98 }, { opacity: 1, y: 0, scale: 1, duration: 0.26, ease: 'power2.out' });
     } catch(e) {}
 });
 
-function isMobileLike() {
-    try { return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 768; } catch(e) { return false; }
-}
-
-function prefersReducedMotion() {
-    try { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e) { return false; }
-}
+function isMobileLike() { try { return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 768; } catch(e) { return false; } }
+function prefersReducedMotion() { try { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e) { return false; } }
 
 function startVantaGlobe() {
     try {
         const el = document.getElementById('vanta-bg');
-        if (!el) return;
-        if (prefersReducedMotion()) return;
-        if (typeof VANTA === 'undefined' || !VANTA.GLOBE) return;
-
-        // destroy previous
+        if (!el || prefersReducedMotion() || typeof VANTA === 'undefined' || !VANTA.GLOBE) return;
         try { __vanta?.destroy?.(); } catch(e) {}
-
         const mobile = isMobileLike();
-        __vanta = VANTA.GLOBE({
-            el,
-            mouseControls: !mobile,
-            touchControls: true,
-            gyroControls: false,
-            minHeight: 200.00,
-            minWidth: 200.00,
-            scale: mobile ? 0.8 : 1.0,
-            scaleMobile: 0.75,
-            color: 0x00ffcc,
-            color2: 0x0066ff,
-            backgroundColor: 0x000000,
-            size: mobile ? 0.55 : 0.75
-        });
-
+        __vanta = VANTA.GLOBE({ el, mouseControls: !mobile, touchControls: true, gyroControls: false, minHeight: 200, minWidth: 200, scale: mobile ? 0.8 : 1.0, scaleMobile: 0.75, color: 0x00ffcc, color2: 0x0066ff, backgroundColor: 0x000000, size: mobile ? 0.55 : 0.75 });
         el.classList.add('active');
         try { localStorage.setItem('xui_bg', 'on'); } catch(e) {}
-    } catch(e) {
-        console.warn('Vanta init failed', e);
-    }
-}
-
-function stopVantaGlobe() {
-    try {
-        const el = document.getElementById('vanta-bg');
-        el?.classList.remove('active');
-        __vanta?.destroy?.();
-        __vanta = null;
-        try { localStorage.setItem('xui_bg', 'off'); } catch(e) {}
     } catch(e) {}
 }
 
-function toggleVantaGlobe() {
-    const on = !!__vanta;
-    if (on) stopVantaGlobe();
-    else startVantaGlobe();
+function stopVantaGlobe() {
+    try { document.getElementById('vanta-bg')?.classList.remove('active'); __vanta?.destroy?.(); __vanta = null; localStorage.setItem('xui_bg', 'off'); } catch(e) {}
 }
 
-// Theme toggle (night mode / day mode)
+function toggleVantaGlobe() { if (__vanta) stopVantaGlobe(); else startVantaGlobe(); }
+
 try {
     const btnTheme = document.getElementById('btn-theme');
     const applyTheme = (mode) => {
         const light = mode === 'light';
         document.body.classList.toggle('theme-light', light);
         try { localStorage.setItem('xui_theme', light ? 'light' : 'dark'); } catch(e) {}
-        try {
-            const icon = btnTheme?.querySelector('i');
-            if (icon) icon.className = light ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
-        } catch(e) {}
+        try { const icon = btnTheme?.querySelector('i'); if (icon) icon.className = light ? 'fa-solid fa-sun' : 'fa-solid fa-moon'; } catch(e) {}
     };
-
-    // load saved theme
     try { applyTheme(localStorage.getItem('xui_theme') || 'dark'); } catch(e) {}
-
-    btnTheme?.addEventListener('click', () => {
-        const isLight = document.body.classList.contains('theme-light');
-        applyTheme(isLight ? 'dark' : 'light');
-        try { if (typeof gsap !== 'undefined') gsap.fromTo(btnTheme, { scale: 0.98 }, { scale: 1, duration: 0.12 }); } catch(e) {}
-    });
+    btnTheme?.addEventListener('click', () => { applyTheme(document.body.classList.contains('theme-light') ? 'dark' : 'light'); });
 } catch(e) {}
 
-// Background toggle
 try {
     const btnBg = document.getElementById('btn-bg');
-    // restore
-    try {
-        const state = localStorage.getItem('xui_bg') || 'off';
-        if (state === 'on') startVantaGlobe();
-    } catch(e) {}
-
-    btnBg?.addEventListener('click', () => {
-        toggleVantaGlobe();
-        try { if (typeof gsap !== 'undefined') gsap.fromTo(btnBg, { scale: 0.98 }, { scale: 1, duration: 0.12 }); } catch(e) {}
-    });
-
-    // pause on tab hidden
+    try { if ((localStorage.getItem('xui_bg') || 'off') === 'on') startVantaGlobe(); } catch(e) {}
+    btnBg?.addEventListener('click', () => toggleVantaGlobe());
     document.addEventListener('visibilitychange', () => {
-        if (document.hidden) {
-            // stop to save battery
-            stopVantaGlobe();
-        } else {
-            try {
-                if ((localStorage.getItem('xui_bg') || 'off') === 'on') startVantaGlobe();
-            } catch(e) {}
-        }
+        if (document.hidden) stopVantaGlobe();
+        else { try { if ((localStorage.getItem('xui_bg') || 'off') === 'on') startVantaGlobe(); } catch(e) {} }
     });
 } catch(e) {}
 
-// Modal: draggable bottom-sheet style (drag down to close). Uses GSAP Draggable if available; fallback to basic pointer drag.
+// Modal drag
 try {
     const overlay = document.getElementById('modal-overlay');
     const card = overlay?.querySelector('.modal-card');
-
-    const closeIfDragged = (dy) => {
-        if (dy > 140) {
-            closeModal();
-            try { card.style.transform = ''; } catch(e) {}
-            return true;
-        }
-        return false;
-    };
-
+    const closeIfDragged = (dy) => { if (dy > 140) { closeModal(); try { card.style.transform = ''; } catch(e) {} return true; } return false; };
     if (card && typeof gsap !== 'undefined' && typeof Draggable !== 'undefined') {
         gsap.registerPlugin(Draggable);
-        Draggable.create(card, {
-            type: 'x,y',
-            inertia: false, // InertiaPlugin is paid.
-            bounds: window,
-            cursor: 'grab',
-            activeCursor: 'grabbing',
-            onDragEnd: function() {
-                const dy = this.y || 0;
-                if (!closeIfDragged(dy)) {
-                    gsap.to(card, { x: 0, y: 0, duration: 0.18, ease: 'power2.out' });
-                }
-            }
-        });
+        Draggable.create(card, { type: 'x,y', bounds: window, cursor: 'grab', activeCursor: 'grabbing', onDragEnd: function() { const dy = this.y || 0; if (!closeIfDragged(dy)) gsap.to(card, { x: 0, y: 0, duration: 0.18, ease: 'power2.out' }); } });
     } else if (card) {
-        // fallback
-        let dragging = false;
-        let startX = 0, startY = 0;
-        let baseX = 0, baseY = 0;
-
-        const onDown = (e) => {
-            if (e.button !== undefined && e.button !== 0) return;
-            dragging = true;
-            const pt = e.touches?.[0] || e;
-            startX = pt.clientX;
-            startY = pt.clientY;
-            const tr = card.style.transform || '';
-            const m = tr.match(/translate\(([-0-9.]+)px,\s*([-0-9.]+)px\)/);
-            baseX = m ? Number(m[1]) : 0;
-            baseY = m ? Number(m[2]) : 0;
-            card.style.cursor = 'grabbing';
-            e.preventDefault?.();
-        };
-
-        const onMove = (e) => {
-            if (!dragging) return;
-            const pt = e.touches?.[0] || e;
-            const dx = pt.clientX - startX;
-            const dy = pt.clientY - startY;
-            card.style.transform = `translate(${baseX + dx}px, ${baseY + dy}px)`;
-        };
-
-        const onUp = () => {
-            if (!dragging) return;
-            dragging = false;
-            card.style.cursor = '';
-            const tr = card.style.transform || '';
-            const m = tr.match(/translate\(([-0-9.]+)px,\s*([-0-9.]+)px\)/);
-            const dy = m ? Number(m[2]) : 0;
-            if (!closeIfDragged(dy)) {
-                card.style.transform = '';
-            }
-        };
-
+        let dragging = false, startX = 0, startY = 0, baseX = 0, baseY = 0;
+        const onDown = (e) => { if (e.button !== undefined && e.button !== 0) return; dragging = true; const pt = e.touches?.[0] || e; startX = pt.clientX; startY = pt.clientY; const m = (card.style.transform || '').match(/translate\(([-0-9.]+)px,\s*([-0-9.]+)px\)/); baseX = m ? Number(m[1]) : 0; baseY = m ? Number(m[2]) : 0; card.style.cursor = 'grabbing'; e.preventDefault?.(); };
+        const onMove = (e) => { if (!dragging) return; const pt = e.touches?.[0] || e; card.style.transform = `translate(${baseX + pt.clientX - startX}px, ${baseY + pt.clientY - startY}px)`; };
+        const onUp = () => { if (!dragging) return; dragging = false; card.style.cursor = ''; const m = (card.style.transform || '').match(/translate\(([-0-9.]+)px,\s*([-0-9.]+)px\)/); if (!closeIfDragged(m ? Number(m[2]) : 0)) card.style.transform = ''; };
         card.addEventListener('pointerdown', onDown);
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
@@ -811,75 +545,36 @@ try {
         const bodyText = document.getElementById('api-body').value.trim();
         const respBox = document.getElementById('api-response');
         respBox.value = 'Loading...';
-
         const url = `/api/xui/${path}`;
         const opts = { method, headers: getAdminHeaders() };
-
         if (method === 'POST') {
             opts.headers['Content-Type'] = 'application/json';
-            if (bodyText) {
-                try { JSON.parse(bodyText); } catch(e) {
-                    respBox.value = 'Invalid JSON body';
-                    return;
-                }
-                opts.body = bodyText;
-            } else {
-                opts.body = '{}';
-            }
+            try { if (bodyText) JSON.parse(bodyText); opts.body = bodyText || '{}'; } catch(e) { respBox.value = 'Invalid JSON body'; return; }
         }
-
         try {
             const res = await fetch(url, opts);
             const txt = await res.text();
-            // pretty print JSON if possible
-            try {
-                const j = JSON.parse(txt);
-                respBox.value = JSON.stringify(j, null, 2);
-            } catch(e) {
-                respBox.value = txt;
-            }
-        } catch (e) {
-            respBox.value = String(e);
-        }
+            try { respBox.value = JSON.stringify(JSON.parse(txt), null, 2); } catch(e) { respBox.value = txt; }
+        } catch(e) { respBox.value = String(e); }
     });
 } catch(e) {}
 
-let __adminEventSource = null;
-let __adminSseRetry = null;
+// --- Admin SSE ---
+let __adminEventSource = null, __adminSseRetry = null;
 
 function startAdminSSE() {
     try { __adminEventSource?.close?.(); } catch(e) {}
     __adminEventSource = null;
-
-    // EventSource can't send custom headers. If you're using Bearer auth, SSE won't work.
-    // Best: protect admin via Cloudflare Access (identity headers/cookie), then SSE is authorized.
     const es = new EventSource('/api/stream');
     __adminEventSource = es;
-
-    es.addEventListener('hello', () => {
-        // optional: console.log('SSE connected');
-    });
-
     es.addEventListener('metrics', (ev) => {
-        try {
-            const payload = JSON.parse(ev.data || '{}');
-            if (payload && payload.status) {
-                applyAdminStatusToUI(payload.status);
-            }
-        } catch(e) {}
+        try { const p = JSON.parse(ev.data || '{}'); if (p && p.status) applyAdminStatusToUI(p.status); } catch(e) {}
     });
-
     es.addEventListener('error', () => {
-        // Auto retry with backoff
         try { es.close(); } catch(e) {}
         __adminEventSource = null;
         if (__adminSseRetry) return;
-        let delay = 1500;
-        __adminSseRetry = setInterval(() => {
-            try { clearInterval(__adminSseRetry); } catch(e) {}
-            __adminSseRetry = null;
-            startAdminSSE();
-        }, delay);
+        __adminSseRetry = setInterval(() => { try { clearInterval(__adminSseRetry); } catch(e) {} __adminSseRetry = null; startAdminSSE(); }, 1500);
     });
 }
 
@@ -891,161 +586,100 @@ function stopAdminSSE() {
 }
 
 function switchTab(tabId) {
-    try {
-        document.querySelectorAll('.nav-btn, .m-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
-    } catch(e) {}
-
+    try { document.querySelectorAll('.nav-btn, .m-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId)); } catch(e) {}
     const allTabs = Array.from(document.querySelectorAll('.tab-content'));
     const targetId = `tab-${tabId}`;
     const target = document.getElementById(targetId);
     if (!target) return;
-
     const currentlyActive = allTabs.find(t => t.classList.contains('active'));
     if (currentlyActive === target) return;
-
-    // Prefer GSAP (free core), fallback to anime.js
     if (typeof gsap !== 'undefined' && currentlyActive) {
-        gsap.to(currentlyActive, {
-            opacity: 0,
-            y: 8,
-            duration: 0.18,
-            ease: 'power2.inOut',
-            onComplete: () => {
-                currentlyActive.classList.remove('active');
-                currentlyActive.style.opacity = '';
-                currentlyActive.style.transform = '';
-
-                target.classList.add('active');
-                gsap.fromTo(target, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.26, ease: 'power2.out' });
-            }
-        });
+        gsap.to(currentlyActive, { opacity: 0, y: 8, duration: 0.18, ease: 'power2.inOut', onComplete: () => {
+            currentlyActive.classList.remove('active'); currentlyActive.style.opacity = ''; currentlyActive.style.transform = '';
+            target.classList.add('active');
+            gsap.fromTo(target, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.26, ease: 'power2.out' });
+        }});
         return;
     }
-
     if (typeof anime !== 'undefined' && currentlyActive) {
-        anime({
-            targets: currentlyActive,
-            opacity: [1, 0],
-            translateY: [0, 8],
-            duration: 180,
-            easing: 'easeInOutCubic',
-            complete: () => {
-                currentlyActive.classList.remove('active');
-                currentlyActive.style.opacity = '';
-                currentlyActive.style.transform = '';
-
-                target.classList.add('active');
-                anime({
-                    targets: target,
-                    opacity: [0, 1],
-                    translateY: [14, 0],
-                    duration: 260,
-                    easing: 'easeOutCubic'
-                });
-            }
-        });
+        anime({ targets: currentlyActive, opacity: [1,0], translateY: [0,8], duration: 180, easing: 'easeInOutCubic', complete: () => {
+            currentlyActive.classList.remove('active'); currentlyActive.style.opacity = ''; currentlyActive.style.transform = '';
+            target.classList.add('active');
+            anime({ targets: target, opacity: [0,1], translateY: [14,0], duration: 260, easing: 'easeOutCubic' });
+        }});
         return;
     }
-
-    // no animation fallback
     allTabs.forEach(t => t.classList.toggle('active', t.id === targetId));
 }
 
-// Old nav wiring (top tabs may be removed)
-try {
-    document.querySelectorAll('.nav-btn, .m-nav-btn').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
-} catch(e) {}
+try { document.querySelectorAll('.nav-btn, .m-nav-btn').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab))); } catch(e) {}
+try { const sel = document.getElementById('admin-tab-select'); sel?.addEventListener('change', () => switchTab(sel.value)); } catch(e) {}
 
-// Admin select (replacement for top tabs)
-try {
-    const sel = document.getElementById('admin-tab-select');
-    sel?.addEventListener('change', () => switchTab(sel.value));
-} catch(e) {}
-
-
-// --- Admins Charts Setup ---
+// --- Admin Charts ---
 let trafficChart, donutChart, cpuChart, ramChart;
 function initAdminCharts() {
-    try {
-        if (typeof Chart === 'undefined') {
-            console.warn('Chart.js not loaded; skipping charts');
-            return;
-        }
-    } catch(e) { return; }
-
+    try { if (typeof Chart === 'undefined') return; } catch(e) { return; }
     const trafficCtx = document.getElementById('trafficChart')?.getContext?.('2d');
     if (!trafficCtx) return;
-    trafficChart = new Chart(trafficCtx, {
-        type: 'line', data: { labels: ['M','T','W','T','F','S','S'], datasets: [
-            { label: 'Down', data: [5,8,4,7,9,12,10], borderColor: '#0066ff', tension: 0.4, fill: true, backgroundColor: 'rgba(0,102,255,0.05)' },
-            { label: 'Up', data: [2,3,2,4,3,5,4], borderColor: '#00ffcc', tension: 0.4, fill: true, backgroundColor: 'rgba(0,255,204,0.05)' }
-        ]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-        scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#555' } } } }
-    });
-
+    trafficChart = new Chart(trafficCtx, { type: 'line', data: { labels: ['M','T','W','T','F','S','S'], datasets: [{ label: 'Down', data: [5,8,4,7,9,12,10], borderColor: '#0066ff', tension: 0.4, fill: true, backgroundColor: 'rgba(0,102,255,0.05)' }, { label: 'Up', data: [2,3,2,4,3,5,4], borderColor: '#00ffcc', tension: 0.4, fill: true, backgroundColor: 'rgba(0,255,204,0.05)' }]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#555' } } } }});
     const donutCtx = document.getElementById('usageDonut')?.getContext?.('2d');
-    if (donutCtx) donutChart = new Chart(donutCtx, { type: 'doughnut', data: { datasets: [{ data: [70, 30], backgroundColor: ['#0066ff', '#00ffcc'], borderWidth: 0 }] }, options: { cutout: '80%', plugins: { tooltip: { enabled: false } } }});
-
+    if (donutCtx) donutChart = new Chart(donutCtx, { type: 'doughnut', data: { datasets: [{ data: [70,30], backgroundColor: ['#0066ff','#00ffcc'], borderWidth: 0 }] }, options: { cutout: '80%', plugins: { tooltip: { enabled: false } } }});
     const cpuCtx = document.getElementById('cpuChart')?.getContext?.('2d');
-    if (cpuCtx) cpuChart = new Chart(cpuCtx, { type: 'line', data: { labels: Array(10).fill(''), datasets: [{ data: [10,15,12,20,18,25,22,30,28,35], borderColor: '#00ffcc', borderWidth: 2, pointRadius: 0, tension: 0.4 }]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }});
-
+    if (cpuCtx) cpuChart = new Chart(cpuCtx, { type: 'line', data: { labels: Array(10).fill(''), datasets: [{ data: Array(10).fill(0), borderColor: '#00ffcc', borderWidth: 2, pointRadius: 0, tension: 0.4 }]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }});
     const ramCtx = document.getElementById('ramChart')?.getContext?.('2d');
-    if (ramCtx) ramChart = new Chart(ramCtx, { type: 'line', data: { labels: Array(10).fill(''), datasets: [{ data: [40,42,41,45,44,48,46,50,49,52], borderColor: '#0066ff', borderWidth: 2, pointRadius: 0, tension: 0.4 }]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }});
+    if (ramCtx) ramChart = new Chart(ramCtx, { type: 'line', data: { labels: Array(10).fill(''), datasets: [{ data: Array(10).fill(0), borderColor: '#0066ff', borderWidth: 2, pointRadius: 0, tension: 0.4 }]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }});
 }
 
-// --- Admin Data Injection ---
 function applyAdminStatusToUI(stat) {
     if (!stat || !stat.success) return;
     const s = stat.obj;
-
-    // Prefer all-time traffic counters if available; netIO is often instantaneous IO and can be tiny.
     const down = toGB((s.netTraffic && (s.netTraffic.down ?? s.netTraffic.recv)) ?? s.netIO?.down);
     const up = toGB((s.netTraffic && (s.netTraffic.up ?? s.netTraffic.sent)) ?? s.netIO?.up);
     const total = (parseFloat(down) + parseFloat(up)).toFixed(2);
-    try {
-        animateNumber('#total-traffic', Number(total), { decimals: 2, duration: 650 });
-        animateNumber('#dl-traffic', Number(down), { decimals: 2, duration: 650 });
-        animateNumber('#up-traffic', Number(up), { decimals: 2, duration: 650 });
-    } catch(e) {
-        setTextSafe('#total-traffic', total);
-        setTextSafe('#dl-traffic', down);
-        setTextSafe('#up-traffic', up);
-    }
-
-    const cpuNum = Number(s.cpu);
-    const cpuPct = Number.isFinite(cpuNum) ? Math.max(0, Math.min(100, cpuNum)) : 0;
+    try { animateNumber('#total-traffic', Number(total), { decimals: 2, duration: 650 }); animateNumber('#dl-traffic', Number(down), { decimals: 2, duration: 650 }); animateNumber('#up-traffic', Number(up), { decimals: 2, duration: 650 }); } catch(e) {}
+    const cpuPct = Math.max(0, Math.min(100, Number.isFinite(Number(s.cpu)) ? Number(s.cpu) : 0));
     animateNumber('#cpu-percent', cpuPct, { decimals: 1, duration: 500, formatter: (v) => `${Number(v).toFixed(1)}%` });
-
-    const memCur = Number(s.mem?.current);
-    const memTot = Number(s.mem?.total);
-    const ramPct = (Number.isFinite(memCur) && Number.isFinite(memTot) && memTot > 0)
-        ? Math.max(0, Math.min(100, (memCur / memTot) * 100))
-        : 0;
+    const memCur = Number(s.mem?.current), memTot = Number(s.mem?.total);
+    const ramPct = (Number.isFinite(memCur) && Number.isFinite(memTot) && memTot > 0) ? Math.max(0, Math.min(100, (memCur / memTot) * 100)) : 0;
     animateNumber('#ram-percent', ramPct, { decimals: 1, duration: 500, formatter: (v) => `${Number(v).toFixed(1)}%` });
+    try { document.getElementById('node-ip').textContent = s.publicIP?.ipv4 || s.publicIP?.ipv6 || '-'; document.getElementById('node-region').textContent = s.publicIP?.country || '-'; document.getElementById('xray-version').textContent = s.xray?.version || '-'; } catch(e) {}
+    try { if (donutChart?.data?.datasets?.[0]) { donutChart.data.datasets[0].data = [Number(down), Number(up)]; donutChart.update(); } } catch(e) {}
+}
 
-    // IP info (from server status)
+// --- Expiry Alerts ---
+async function loadExpiryAlerts() {
     try {
-        document.getElementById('node-ip').textContent = s.publicIP?.ipv4 || s.publicIP?.ipv6 || '-';
-        document.getElementById('node-region').textContent = s.publicIP?.country || '-';
-        document.getElementById('node-ping').textContent = '-';
-        document.getElementById('xray-version').textContent = s.xray?.version || '-';
-    } catch(e) {}
-
-    try {
-        if (typeof donutChart !== 'undefined' && donutChart?.data?.datasets?.[0]) {
-            donutChart.data.datasets[0].data = [Number(down), Number(up)];
-            donutChart.update();
-        }
+        const r = await fetch('/api/expiry-alerts', { headers: getAdminHeaders() });
+        const data = await r.json();
+        if (data.success) renderExpiryAlerts(data.obj || []);
     } catch(e) {}
 }
 
+function renderExpiryAlerts(alerts) {
+    const card = document.getElementById('expiry-alerts-card');
+    const list = document.getElementById('expiry-alerts-list');
+    const countEl = document.getElementById('expiry-alert-count');
+    if (!alerts || !alerts.length) { if (card) card.style.display = 'none'; return; }
+    if (card) card.style.display = 'block';
+    if (countEl) countEl.textContent = `${alerts.length} client${alerts.length !== 1 ? 's' : ''}`;
+    if (!list) return;
+    list.innerHTML = '';
+    alerts.forEach(a => {
+        const expired = a.daysLeft <= 0;
+        const color = expired ? 'var(--red)' : a.daysLeft <= 7 ? 'orange' : 'var(--accent)';
+        const label = expired ? 'Expired' : `${a.daysLeft}d left`;
+        const el = document.createElement('div');
+        el.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.06);';
+        el.innerHTML = `<div><div style="font-weight:600;font-size:0.9rem;">${a.email}</div><div style="font-size:0.78rem;color:var(--text-dim);">${a.inboundRemark}</div></div><div style="text-align:right;"><div style="font-weight:700;color:${color};font-size:0.9rem;">${label}</div><div style="font-size:0.75rem;color:var(--text-dim);">${new Date(a.expiryTime).toLocaleDateString()}</div></div>`;
+        list.appendChild(el);
+    });
+}
+
+// --- Load Admin Data ---
 async function loadAdminData() {
     try {
         window.__lastAdminUpdate = Date.now();
-        try {
-            const dot = document.querySelector('.user-status .status-dot');
-            if (dot) dot.classList.add('online');
-        } catch(e) {}
+        try { const dot = document.querySelector('.user-status .status-dot'); if (dot) dot.classList.add('online'); } catch(e) {}
 
         const [stat, inb, cli, sys] = await Promise.all([
             fetch('/api/status', {headers: getAdminHeaders()}).then(r => r.json()),
@@ -1055,22 +689,29 @@ async function loadAdminData() {
         ]);
 
         applyAdminStatusToUI(stat);
+        loadExpiryAlerts();
 
         if (inb.success) {
-            // cache for add-client builder
             window.__inboundsCache = inb.obj || [];
-
-            // fill inbound selector
             try {
                 const sel = document.getElementById('addc-inbound');
+                const delSel = document.getElementById('del-inbound-sel');
                 if (sel) {
                     sel.innerHTML = '';
                     (inb.obj || []).forEach(node => {
                         const opt = document.createElement('option');
                         opt.value = node.id;
-                        const name = node.remark || `inbound-${node.id}`;
-                        opt.textContent = `${name} • ${node.protocol?.toUpperCase?.() || node.protocol} • :${node.port}`;
+                        opt.textContent = `${node.remark || 'inbound-' + node.id} • ${(node.protocol || '').toUpperCase()} • :${node.port}`;
                         sel.appendChild(opt);
+                    });
+                }
+                if (delSel) {
+                    delSel.innerHTML = '';
+                    (inb.obj || []).forEach(node => {
+                        const opt = document.createElement('option');
+                        opt.value = node.id;
+                        opt.textContent = `${node.remark || 'inbound-' + node.id} • :${node.port}`;
+                        delSel.appendChild(opt);
                     });
                 }
             } catch(e) {}
@@ -1078,43 +719,27 @@ async function loadAdminData() {
             const container = document.getElementById('inbound-cards-container');
             container.innerHTML = '';
             (inb.obj || []).forEach(node => {
-                container.innerHTML += `
-                    <div class="card item-card reveal" style="opacity:0; transform: translateY(14px);">
-                        <div class="item-header">
-                            <div><strong style="font-size:1.1rem">${node.remark || ''}</strong><p class="subtitle" style="margin:0">${(node.protocol||'').toUpperCase()} • Port ${node.port}</p></div>
-                            <div class="status-badge ${node.enable ? 'active' : ''}">${node.enable ? 'Online' : 'Off'}</div>
-                        </div>
-                        <div class="item-stats">
-                            <div class="stat-box"><span class="label">DOWN</span><span class="val">${toGB(node.down)} GB</span></div>
-                            <div class="stat-box"><span class="label">UP</span><span class="val">${toGB(node.up)} GB</span></div>
-                            <div class="stat-box"><span class="label">USERS</span><span class="val">${node.clientStats?.length ?? 0}</span></div>
-                        </div>
-                    </div>`;
+                const div = document.createElement('div');
+                div.className = 'card item-card reveal';
+                div.style.cssText = 'opacity:0;transform:translateY(14px);';
+                div.innerHTML = `<div class="item-header"><div><strong style="font-size:1.1rem">${node.remark || ''}</strong><p class="subtitle" style="margin:0">${(node.protocol||'').toUpperCase()} • Port ${node.port}</p></div><div class="status-badge ${node.enable ? 'active' : ''}">${node.enable ? 'Online' : 'Off'}</div></div><div class="item-stats"><div class="stat-box"><span class="label">DOWN</span><span class="val">${toGB(node.down)} GB</span></div><div class="stat-box"><span class="label">UP</span><span class="val">${toGB(node.up)} GB</span></div><div class="stat-box"><span class="label">USERS</span><span class="val">${node.clientStats?.length ?? 0}</span></div></div>`;
+                container.appendChild(div);
             });
 
-            // Stagger reveal (Inbounds)
             try {
                 const els = container.querySelectorAll('.reveal');
-                if (typeof gsap !== 'undefined') {
-                    gsap.to(els, { opacity: 1, y: 0, duration: 0.35, stagger: 0.03, ease: 'power2.out' });
-                } else if (typeof anime !== 'undefined') {
-                    anime({ targets: els, opacity: [0,1], translateY: [14,0], delay: anime.stagger(30), duration: 350, easing: 'easeOutCubic' });
-                } else {
-                    els.forEach(el => { el.style.opacity = '1'; el.style.transform = 'translateY(0)'; });
-                }
+                if (typeof gsap !== 'undefined') gsap.to(els, { opacity: 1, y: 0, duration: 0.35, stagger: 0.03, ease: 'power2.out' });
+                else if (typeof anime !== 'undefined') anime({ targets: els, opacity: [0,1], translateY: [14,0], delay: anime.stagger(30), duration: 350, easing: 'easeOutCubic' });
+                else els.forEach(el => { el.style.opacity = '1'; el.style.transform = 'translateY(0)'; });
             } catch(e) {}
         }
 
-        if (cli.success) {
-            __clientsCache = Array.isArray(cli.obj) ? cli.obj : [];
-            renderClientsList(__clientsCache);
-        }
+        if (cli.success) { __clientsCache = Array.isArray(cli.obj) ? cli.obj : []; renderClientsList(__clientsCache); }
 
         if (sys.success) {
             try {
-                cpuChart.data.datasets[0].data = sys.obj.map(p => p.cpu);
-                ramChart.data.datasets[0].data = sys.obj.map(p => p.ram);
-                cpuChart.update(); ramChart.update();
+                if (cpuChart?.data?.datasets?.[0]) { cpuChart.data.datasets[0].data = sys.obj.map(p => p.cpu || 0); cpuChart.update(); }
+                if (ramChart?.data?.datasets?.[0]) { ramChart.data.datasets[0].data = sys.obj.map(p => p.ram || 0); ramChart.update(); }
             } catch(e) {}
         }
 
@@ -1122,64 +747,132 @@ async function loadAdminData() {
         console.error("Data Load Error", e);
         try {
             const dot = document.querySelector('.user-status .status-dot');
-            if (dot) {
-                dot.classList.remove('online');
-                dot.style.background = 'var(--red)';
-                dot.style.boxShadow = '0 0 10px var(--red)';
-                if (typeof gsap !== 'undefined') {
-                    gsap.fromTo(dot, { x: -2 }, { x: 2, duration: 0.06, repeat: 5, yoyo: true, clearProps: 'x' });
-                } else if (typeof anime !== 'undefined') {
-                    anime({ targets: dot, translateX: [-2,2], duration: 60, direction: 'alternate', loop: 5, easing: 'linear' });
-                }
-            }
+            if (dot) { dot.classList.remove('online'); dot.style.background = 'var(--red)'; dot.style.boxShadow = '0 0 10px var(--red)'; }
         } catch(e2) {}
         try { showToast('Connection error while loading data', 'error'); } catch(e3) {}
     }
 }
 
+// --- Render Clients List (with bulk checkboxes) ---
 function renderClientsList(list) {
     const container = document.getElementById('client-list');
     if (!container) return;
-
     const term = (__clientSearchTerm || '').toLowerCase();
     const filtered = (Array.isArray(list) ? list : []).filter(u => {
         const email = String(u.email || '').toLowerCase();
         const id = String(u.id || u.uuid || '').toLowerCase();
         return !term || email.includes(term) || id.includes(term);
     });
-
     container.innerHTML = '';
     filtered.forEach((user) => {
         const used = toGB((user.up || 0) + (user.down || 0));
         const limitTxt = (user.total > 0) ? `${toGB(user.total)} GB` : 'Unlim';
-        const id = user.id || user.uuid || '';
-
-        container.innerHTML += `
-            <div class="card item-card reveal" data-client-email="${String(user.email||'').replace(/"/g,'&quot;')}" data-client-id="${String(id).replace(/"/g,'&quot;')}" style="margin-bottom:10px; opacity:0; transform: translateY(14px); cursor:pointer;">
-                <div class="item-header" style="margin:0">
-                    <div style="display:flex; align-items:center; gap:12px">
-                        <i class="fa-solid fa-circle-user" style="font-size:1.5rem; color:var(--blue)"></i>
-                        <div>
-                            <strong>${user.email}</strong>
-                            <p class="subtitle" style="margin:0">Limit: ${limitTxt}</p>
-                        </div>
+        const emailSafe = String(user.email || '').replace(/"/g, '&quot;');
+        const isSelected = __bulkSelected.has(user.email);
+        const div = document.createElement('div');
+        div.className = 'card item-card reveal';
+        div.setAttribute('data-client-email', emailSafe);
+        div.style.cssText = 'margin-bottom:10px;opacity:0;transform:translateY(14px);cursor:pointer;';
+        div.innerHTML = `
+            <div class="item-header" style="margin:0">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <input type="checkbox" class="bulk-check" data-email="${emailSafe}" ${isSelected ? 'checked' : ''} style="width:17px;height:17px;cursor:pointer;flex-shrink:0;" onclick="event.stopPropagation()">
+                    <i class="fa-solid fa-circle-user" style="font-size:1.4rem;color:var(--blue)"></i>
+                    <div>
+                        <strong>${user.email}</strong>
+                        <p class="subtitle" style="margin:0;font-size:0.78rem;">Limit: ${limitTxt} ${user.enable === false ? '• <span style="color:var(--red)">Disabled</span>' : ''}</p>
                     </div>
-                    <div class="stat-box" style="text-align:right"><span class="label">USED</span><span class="val" style="color:var(--accent)">${used} GB</span></div>
                 </div>
+                <div class="stat-box" style="text-align:right"><span class="label">USED</span><span class="val" style="color:var(--accent)">${used} GB</span></div>
             </div>`;
+        container.appendChild(div);
     });
 
-    // animate list in
     try {
         const els = container.querySelectorAll('.reveal');
-        if (typeof gsap !== 'undefined') {
-            gsap.to(els, { opacity: 1, y: 0, duration: 0.35, stagger: 0.02, ease: 'power2.out' });
-        } else if (typeof anime !== 'undefined') {
-            anime({ targets: els, opacity: [0,1], translateY: [14,0], delay: anime.stagger(20), duration: 320, easing: 'easeOutCubic' });
-        } else {
-            els.forEach(el => { el.style.opacity = '1'; el.style.transform = 'translateY(0)'; });
-        }
+        if (typeof gsap !== 'undefined') gsap.to(els, { opacity: 1, y: 0, duration: 0.35, stagger: 0.02, ease: 'power2.out' });
+        else if (typeof anime !== 'undefined') anime({ targets: els, opacity: [0,1], translateY: [14,0], delay: anime.stagger(20), duration: 320, easing: 'easeOutCubic' });
+        else els.forEach(el => { el.style.opacity = '1'; el.style.transform = 'translateY(0)'; });
     } catch(e) {}
+
+    // wire bulk checkboxes
+    container.querySelectorAll('.bulk-check').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+            const em = cb.getAttribute('data-email');
+            if (cb.checked) __bulkSelected.add(em); else __bulkSelected.delete(em);
+            updateBulkUI();
+        });
+    });
+}
+
+function updateBulkUI() {
+    const count = __bulkSelected.size;
+    const countEl = document.getElementById('bulk-count');
+    const resetBtn = document.getElementById('btn-bulk-reset');
+    const delBtn = document.getElementById('btn-bulk-delete');
+    if (countEl) { countEl.textContent = `${count} selected`; countEl.style.display = count > 0 ? 'inline' : 'none'; }
+    if (resetBtn) resetBtn.style.display = count > 0 ? 'inline-flex' : 'none';
+    if (delBtn) delBtn.style.display = count > 0 ? 'inline-flex' : 'none';
+}
+
+// Bulk select all
+try {
+    document.getElementById('bulk-select-all')?.addEventListener('change', (e) => {
+        const checked = e.target.checked;
+        const term = (__clientSearchTerm || '').toLowerCase();
+        const filtered = (__clientsCache || []).filter(u => {
+            const email = String(u.email || '').toLowerCase();
+            return !term || email.includes(term);
+        });
+        filtered.forEach(u => { if (checked) __bulkSelected.add(u.email); else __bulkSelected.delete(u.email); });
+        renderClientsList(__clientsCache);
+        updateBulkUI();
+    });
+} catch(e) {}
+
+try {
+    document.getElementById('btn-bulk-reset')?.addEventListener('click', async () => {
+        if (!__bulkSelected.size) return;
+        if (!confirm(`Reset traffic for ${__bulkSelected.size} client(s)?`)) return;
+        let done = 0;
+        for (const email of __bulkSelected) {
+            const user = __clientsCache.find(u => u.email === email);
+            if (!user) continue;
+            try { await callXui(`inbounds/${user.inboundId}/resetClientTraffic/${encodeURIComponent(email)}`, 'POST', {}); done++; } catch(e) {}
+        }
+        showToast(`Reset traffic for ${done} client(s)`);
+        __bulkSelected.clear();
+        updateBulkUI();
+        loadAdminData();
+    });
+
+    document.getElementById('btn-bulk-delete')?.addEventListener('click', async () => {
+        if (!__bulkSelected.size) return;
+        if (!confirm(`DELETE ${__bulkSelected.size} client(s)? This cannot be undone.`)) return;
+        let done = 0;
+        for (const email of __bulkSelected) {
+            const user = __clientsCache.find(u => u.email === email);
+            if (!user) continue;
+            try { await callXui(`inbounds/${user.inboundId}/delClientByEmail/${encodeURIComponent(email)}`, 'POST', {}); done++; } catch(e) {}
+        }
+        showToast(`Deleted ${done} client(s)`);
+        __bulkSelected.clear();
+        updateBulkUI();
+        loadAdminData();
+    });
+} catch(e) {}
+
+// --- Client Drawer ---
+function getClientUUID(inboundId, email) {
+    const inb = (window.__inboundsCache || []).find(x => Number(x.id) === Number(inboundId));
+    if (!inb) return null;
+    try { const s = JSON.parse(inb.settings || '{}'); return (s.clients || []).find(c => c.email === email)?.id || null; } catch(e) { return null; }
+}
+
+function getClientFullConfig(inboundId, email) {
+    const inb = (window.__inboundsCache || []).find(x => Number(x.id) === Number(inboundId));
+    if (!inb) return null;
+    try { const s = JSON.parse(inb.settings || '{}'); return (s.clients || []).find(c => c.email === email) || null; } catch(e) { return null; }
 }
 
 function openClientDrawer(user) {
@@ -1189,54 +882,71 @@ function openClientDrawer(user) {
     if (!wrap || !backdrop || !panel) return;
 
     document.getElementById('drawer-title').textContent = user.email || 'Client';
-    document.getElementById('drawer-sub').textContent = user.id || user.uuid || '';
+    document.getElementById('drawer-sub').textContent = user.inboundRemark || String(user.inboundId || '');
 
     const used = toGB((user.up || 0) + (user.down || 0));
     const down = toGB(user.down || 0);
     const up = toGB(user.up || 0);
     const limit = user.total > 0 ? `${toGB(user.total)} GB` : 'Unlimited';
+    const exp = Number(user.expiryTime);
+    const expText = exp > 0 ? new Date(exp).toLocaleString() : 'Never';
+    const uuid = getClientUUID(user.inboundId, user.email) || '-';
+    const protocol = user.protocol || '-';
 
     const body = document.getElementById('drawer-body');
     if (body) {
         body.innerHTML = `
             <div class="card" style="padding:14px;">
                 <h3 style="margin-bottom:10px;"><i class="fa-solid fa-chart-simple"></i> Usage</h3>
-                <div class="info-row"><span>Used:</span> <strong id="drawer-used">${used} GB</strong></div>
-                <div class="info-row"><span>Download:</span> <strong>${down} GB</strong></div>
-                <div class="info-row"><span>Upload:</span> <strong>${up} GB</strong></div>
-                <div class="info-row"><span>Limit:</span> <strong>${limit}</strong></div>
+                <div class="info-row"><span>Used:</span><strong>${used} GB</strong></div>
+                <div class="info-row"><span>Download:</span><strong>${down} GB</strong></div>
+                <div class="info-row"><span>Upload:</span><strong>${up} GB</strong></div>
+                <div class="info-row"><span>Limit:</span><strong>${limit}</strong></div>
+                <div class="info-row"><span>Expiry:</span><strong>${expText}</strong></div>
+                <div class="info-row"><span>Protocol:</span><strong>${protocol.toUpperCase()}</strong></div>
+                <div class="info-row"><span>UUID:</span><strong style="font-size:0.78rem;word-break:break-all;">${uuid}</strong></div>
+                <div class="info-row"><span>Status:</span><strong style="color:${user.enable === false ? 'var(--red)' : 'var(--green)'}">${user.enable === false ? 'Disabled' : 'Enabled'}</strong></div>
             </div>
-            <div class="card" style="padding:14px;">
-                <h3 style="margin-bottom:10px;"><i class="fa-solid fa-screwdriver-wrench"></i> Quick Actions</h3>
-                <p class="subtitle">Uses the same tools as “Client Tools” tab.</p>
-            </div>
-        `;
+            <div id="drawer-traffic-history" style="display:none;" class="card" style="padding:14px; margin-top:8px;"></div>`;
     }
 
-    // wire actions
-    try {
-        const setToolEmail = () => {
-            const tool = document.getElementById('tool-email');
-            if (tool) tool.value = user.email || '';
-        };
-        document.getElementById('drawer-reset').onclick = () => { setToolEmail(); document.getElementById('btn-client-reset')?.click(); };
-        document.getElementById('drawer-delete').onclick = () => { setToolEmail(); document.getElementById('btn-client-del')?.click(); };
-    } catch(e) {}
+    // Wire buttons
+    document.getElementById('drawer-reset').onclick = () => {
+        const tool = document.getElementById('tool-email');
+        const inbSel = document.getElementById('addc-inbound');
+        if (tool) tool.value = user.email || '';
+        if (inbSel) inbSel.value = user.inboundId;
+        closeClientDrawer();
+        document.getElementById('btn-client-reset')?.click();
+    };
+    document.getElementById('drawer-delete').onclick = () => {
+        const tool = document.getElementById('tool-email');
+        const inbSel = document.getElementById('addc-inbound');
+        if (tool) tool.value = user.email || '';
+        if (inbSel) inbSel.value = user.inboundId;
+        closeClientDrawer();
+        document.getElementById('btn-client-del')?.click();
+    };
+    document.getElementById('drawer-edit').onclick = () => { closeClientDrawer(); openEditClientModal(user); };
+    document.getElementById('drawer-toggle-enable').onclick = async () => {
+        const fullConf = getClientFullConfig(user.inboundId, user.email);
+        if (!fullConf) { showToast('Cannot find client config in cache', 'error'); return; }
+        const r = await callXui(`inbounds/updateClient/${fullConf.id}`, 'POST', {
+            id: user.inboundId,
+            settings: { clients: [{ ...fullConf, enable: !fullConf.enable }] }
+        });
+        showToast(r && r.success !== false ? `Client ${!fullConf.enable ? 'enabled' : 'disabled'}` : (r?.msg || 'Failed'), r && r.success !== false ? 'info' : 'error');
+        closeClientDrawer();
+        loadAdminData();
+    };
 
     wrap.style.display = 'block';
     wrap.setAttribute('aria-hidden', 'false');
 
     try {
-        if (typeof gsap !== 'undefined') {
-            gsap.to(backdrop, { opacity: 1, duration: 0.2 });
-            gsap.to(panel, { x: 0, duration: 0.28, ease: 'power2.out' });
-        } else if (typeof anime !== 'undefined') {
-            anime({ targets: backdrop, opacity: [0,1], duration: 200, easing: 'linear' });
-            anime({ targets: panel, translateX: ['110%','0%'], duration: 280, easing: 'easeOutCubic' });
-        } else {
-            backdrop.style.opacity = '1';
-            panel.style.transform = 'translateX(0)';
-        }
+        if (typeof gsap !== 'undefined') { gsap.to(backdrop, { opacity: 1, duration: 0.2 }); gsap.to(panel, { x: 0, duration: 0.28, ease: 'power2.out' }); }
+        else if (typeof anime !== 'undefined') { anime({ targets: backdrop, opacity: [0,1], duration: 200, easing: 'linear' }); anime({ targets: panel, translateX: ['110%','0%'], duration: 280, easing: 'easeOutCubic' }); }
+        else { backdrop.style.opacity = '1'; panel.style.transform = 'translateX(0)'; }
     } catch(e) {}
 }
 
@@ -1245,77 +955,45 @@ function closeClientDrawer() {
     const backdrop = document.getElementById('drawer-backdrop');
     const panel = wrap?.querySelector('.drawer-panel');
     if (!wrap || !backdrop || !panel) return;
-
-    const done = () => {
-        wrap.style.display = 'none';
-        wrap.setAttribute('aria-hidden', 'true');
-        backdrop.style.opacity = '0';
-        panel.style.transform = '';
-    };
-
+    const done = () => { wrap.style.display = 'none'; wrap.setAttribute('aria-hidden', 'true'); backdrop.style.opacity = '0'; panel.style.transform = ''; };
     try {
-        if (typeof gsap !== 'undefined') {
-            gsap.to(backdrop, { opacity: 0, duration: 0.18 });
-            gsap.to(panel, { x: '110%', duration: 0.22, ease: 'power2.in', onComplete: done });
-            return;
-        }
-        if (typeof anime !== 'undefined') {
-            anime({ targets: backdrop, opacity: [1,0], duration: 180, easing: 'linear' });
-            anime({ targets: panel, translateX: ['0%','110%'], duration: 220, easing: 'easeInCubic', complete: done });
-            return;
-        }
+        if (typeof gsap !== 'undefined') { gsap.to(backdrop, { opacity: 0, duration: 0.18 }); gsap.to(panel, { x: '110%', duration: 0.22, ease: 'power2.in', onComplete: done }); return; }
+        if (typeof anime !== 'undefined') { anime({ targets: backdrop, opacity: [1,0], duration: 180, easing: 'linear' }); anime({ targets: panel, translateX: ['0%','110%'], duration: 220, easing: 'easeInCubic', complete: done }); return; }
     } catch(e) {}
-
     done();
 }
 
-// Clients: search + click-to-drawer
 try {
     const inp = document.getElementById('client-search');
-    inp?.addEventListener('input', () => {
-        __clientSearchTerm = inp.value || '';
-        renderClientsList(__clientsCache);
-    });
-
+    inp?.addEventListener('input', () => { __clientSearchTerm = inp.value || ''; renderClientsList(__clientsCache); });
     document.getElementById('client-list')?.addEventListener('click', (e) => {
+        if (e.target?.classList?.contains('bulk-check')) return;
         const card = e.target?.closest?.('[data-client-email]');
         if (!card) return;
         const email = card.getAttribute('data-client-email');
         const user = (__clientsCache || []).find(u => String(u.email) === String(email));
         if (user) openClientDrawer(user);
     });
-
     document.getElementById('drawer-close')?.addEventListener('click', closeClientDrawer);
     document.getElementById('drawer-backdrop')?.addEventListener('click', closeClientDrawer);
 } catch(e) {}
 
-// Settings Saving
-// Cloudflare Pages backend is env-var based; settings POST is read-only.
-// UX: make it clear and disable to avoid confusing users.
+// --- Settings ---
 document.getElementById("btn-save-settings").addEventListener("click", async () => {
     const btn = document.getElementById("btn-save-settings");
-    showToast("This dashboard is configured via Cloudflare Pages environment variables (PANEL_URL / PANEL_USERNAME / PANEL_PASSWORD).", "error");
-    btn.textContent = "Managed by Cloudflare";
-    btn.disabled = true;
-    btn.style.opacity = '0.7';
-    btn.style.cursor = 'not-allowed';
+    showToast("Configured via Cloudflare Pages environment variables.", "error");
+    btn.textContent = "Managed by Cloudflare"; btn.disabled = true; btn.style.opacity = '0.7'; btn.style.cursor = 'not-allowed';
 });
 
-// --- Server Tools (Admin-only; uses /api/xui proxy) ---
+// --- Server Tools ---
 function setServerOutput(val) {
-    try {
-        const el = document.getElementById('server-output');
-        if (el) el.value = typeof val === 'string' ? val : JSON.stringify(val, null, 2);
-    } catch(e) {}
+    try { const el = document.getElementById('server-output'); if (el) el.value = typeof val === 'string' ? val : JSON.stringify(val, null, 2); } catch(e) {}
 }
 
 async function callXui(path, method='GET', bodyObj=null) {
     const url = `/api/xui/${path.replace(/^\/+/, '')}`;
     const opts = { method, headers: getAdminHeaders() };
-    if (method === 'POST') {
-        opts.headers = { ...opts.headers, 'Content-Type': 'application/json' };
-        opts.body = JSON.stringify(bodyObj ?? {});
-    }
+    if (method === 'POST') { opts.headers = { ...opts.headers, 'Content-Type': 'application/json' }; opts.body = JSON.stringify(bodyObj ?? {}); }
     const res = await fetch(url, opts);
     const ct = res.headers.get('Content-Type') || '';
     if (ct.includes('application/json')) return await res.json();
@@ -1329,157 +1007,139 @@ async function downloadFromXui(path, filename) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
 function wireServerTools() {
     const byId = (id) => document.getElementById(id);
 
-    byId('btn-xray-restart')?.addEventListener('click', async () => {
-        setServerOutput('Restarting Xray...');
-        const r = await callXui('server/restartXrayService', 'POST', {});
-        setServerOutput(r);
-        loadAdminData();
-    });
-
-    byId('btn-xray-stop')?.addEventListener('click', async () => {
-        setServerOutput('Stopping Xray...');
-        const r = await callXui('server/stopXrayService', 'POST', {});
-        setServerOutput(r);
-        loadAdminData();
-    });
-
-    byId('btn-geo-update')?.addEventListener('click', async () => {
-        setServerOutput('Updating geo files...');
-        const r = await callXui('server/updateGeofile', 'POST', {});
-        setServerOutput(r);
-    });
-
-    byId('btn-dl-config')?.addEventListener('click', async () => {
-        setServerOutput('Downloading config.json...');
-        await downloadFromXui('server/getConfigJson', 'config.json');
-        setServerOutput('Downloaded config.json');
-    });
-
-    byId('btn-dl-db')?.addEventListener('click', async () => {
-        setServerOutput('Downloading database...');
-        await downloadFromXui('server/getDb', 'x-ui.db');
-        setServerOutput('Downloaded x-ui.db');
-    });
-
+    byId('btn-xray-restart')?.addEventListener('click', async () => { setServerOutput('Restarting Xray...'); const r = await callXui('server/restartXrayService', 'POST', {}); setServerOutput(r); loadAdminData(); });
+    byId('btn-xray-stop')?.addEventListener('click', async () => { setServerOutput('Stopping Xray...'); const r = await callXui('server/stopXrayService', 'POST', {}); setServerOutput(r); loadAdminData(); });
+    byId('btn-geo-update')?.addEventListener('click', async () => { setServerOutput('Updating geo files...'); const r = await callXui('server/updateGeofile', 'POST', {}); setServerOutput(r); });
+    byId('btn-dl-config')?.addEventListener('click', async () => { setServerOutput('Downloading config.json...'); await downloadFromXui('server/getConfigJson', 'config.json'); setServerOutput('Downloaded config.json'); });
+    byId('btn-dl-db')?.addEventListener('click', async () => { setServerOutput('Downloading database...'); await downloadFromXui('server/getDb', 'x-ui.db'); setServerOutput('Downloaded x-ui.db'); });
     byId('btn-new-uuid')?.addEventListener('click', async () => {
-        try {
-            const r = await callXui('server/getNewUUID', 'GET');
-            const u = extractUuid(r) || uuidFallback();
-            setServerOutput({ raw: r, uuid: u });
-        } catch(e) {
-            setServerOutput({ error: String(e), uuid: uuidFallback() });
-        }
+        try { const r = await callXui('server/getNewUUID', 'GET'); const u = extractUuid(r) || uuidFallback(); setServerOutput({ raw: r, uuid: u }); }
+        catch(e) { setServerOutput({ error: String(e), uuid: uuidFallback() }); }
     });
-
-    byId('btn-new-x25519')?.addEventListener('click', async () => {
-        const r = await callXui('server/getNewX25519Cert', 'GET');
-        setServerOutput(r);
-    });
+    byId('btn-new-x25519')?.addEventListener('click', async () => { const r = await callXui('server/getNewX25519Cert', 'GET'); setServerOutput(r); });
 
     const getCount = () => Number(byId('log-count')?.value || 200);
+    byId('btn-logs')?.addEventListener('click', async () => { const r = await callXui(`server/logs/${getCount()}`, 'POST', { level: 'info', syslog: false }); setServerOutput(r); });
+    byId('btn-xray-logs')?.addEventListener('click', async () => { const r = await callXui(`server/xraylogs/${getCount()}`, 'POST', { filter: '', level: 'info' }); setServerOutput(r); });
 
-    byId('btn-logs')?.addEventListener('click', async () => {
-        const c = getCount();
-        const r = await callXui(`server/logs/${c}`, 'POST', { level: 'info', syslog: false });
-        setServerOutput(r);
-    });
-
-    byId('btn-xray-logs')?.addEventListener('click', async () => {
-        const c = getCount();
-        const r = await callXui(`server/xraylogs/${c}`, 'POST', { filter: '', level: 'info' });
-        setServerOutput(r);
+    // Import DB
+    byId('btn-import-db')?.addEventListener('click', async () => {
+        const fileInput = byId('import-db-file');
+        const file = fileInput?.files?.[0];
+        if (!file) { showToast('Select a .db file first', 'error'); return; }
+        setServerOutput('Uploading database...');
+        try {
+            const form = new FormData();
+            form.append('file', file);
+            const url = '/api/xui/server/importDB';
+            const headers = { ...getAdminHeaders() };
+            delete headers['Content-Type']; // let browser set multipart boundary
+            const res = await fetch(url, { method: 'POST', headers, body: form });
+            const txt = await res.text();
+            try { setServerOutput(JSON.parse(txt)); } catch(e) { setServerOutput(txt); }
+            showToast('Database imported — panel will restart');
+        } catch(e) { setServerOutput(`Error: ${e.message}`); showToast('Import failed', 'error'); }
     });
 }
 
-// wire once
 try { wireServerTools(); } catch(e) {}
 
-// --- Inbounds: Add Client (VLESS) ---
+// --- Link Building (multi-protocol) ---
 function buildLinksForClient(inbound, client) {
     try {
         const host = window.location.hostname.replace(/^www\./, '');
-        const panelHost = host; // same domain assumption
-
-        const subLink = client.subId ? `https://${panelHost}:7262/sub/nope/${client.subId}` : null;
-
         const stream = JSON.parse(inbound.streamSettings || '{}');
         const port = inbound.port;
-        const remark = inbound.remark || port;
-        const network = stream.network || 'ws';
+        const remark = inbound.remark || String(port);
+        const network = stream.network || 'tcp';
         const security = stream.security || 'none';
+        const protocol = (inbound.protocol || 'vless').toLowerCase();
+        const subLink = client.subId ? null : null; // panel sub URL not known client-side
 
-        let qs = new URLSearchParams();
-        qs.set('type', network);
-        qs.set('encryption', 'none');
+        const buildQs = () => {
+            let qs = new URLSearchParams();
+            qs.set('type', network);
+            if (network === 'ws') {
+                const ws = stream.wsSettings || {};
+                qs.set('path', ws.path || '/');
+                qs.set('host', ws.headers?.Host || ws.host || host);
+            } else if (network === 'grpc') {
+                const grpc = stream.grpcSettings || {};
+                qs.set('serviceName', grpc.serviceName || '');
+                qs.set('mode', grpc.multiMode ? 'multi' : 'gun');
+            }
+            if (security === 'tls') {
+                qs.set('security', 'tls');
+                const tls = stream.tlsSettings || {};
+                qs.set('sni', tls.serverName || host);
+                const alpn = Array.isArray(tls.alpn) ? tls.alpn.join(',') : '';
+                if (alpn) qs.set('alpn', alpn);
+                const fp = tls.settings?.fingerprint || '';
+                if (fp) qs.set('fp', fp);
+            } else if (security === 'reality') {
+                qs.set('security', 'reality');
+                const r = stream.realitySettings || {};
+                qs.set('sni', (r.serverNames || [])[0] || host);
+                qs.set('pbk', r.publicKey || '');
+                if (r.shortIds?.[0]) qs.set('sid', r.shortIds[0]);
+                qs.set('fp', r.settings?.fingerprint || 'chrome');
+            }
+            return qs;
+        };
 
-        if (network === 'ws') {
-            const ws = stream.wsSettings || {};
-            qs.set('path', ws.path || '/');
-            const wsHost = ws.host || panelHost;
-            qs.set('host', wsHost);
+        let configLink = null;
+        if (protocol === 'vless') {
+            const qs = buildQs();
+            qs.set('encryption', 'none');
+            if (client.flow) qs.set('flow', client.flow);
+            configLink = `vless://${client.id}@${host}:${port}?${qs.toString()}#${encodeURIComponent(`${remark}-${client.email}`)}`;
+        } else if (protocol === 'vmess') {
+            const obj = { v:'2', ps:`${remark}-${client.email}`, add:host, port:String(port), id:client.id, aid:'0', scy:'auto', net:network, type:'none', host: network==='ws'?(stream.wsSettings?.headers?.Host||host):'', path: network==='ws'?(stream.wsSettings?.path||'/'):'', tls: security==='tls'?'tls':'' };
+            configLink = `vmess://${btoa(JSON.stringify(obj))}`;
+        } else if (protocol === 'trojan') {
+            const qs = buildQs();
+            configLink = `trojan://${client.password || client.id}@${host}:${port}?${qs.toString()}#${encodeURIComponent(`${remark}-${client.email}`)}`;
+        } else if (protocol === 'shadowsocks') {
+            try {
+                const settings = JSON.parse(inbound.settings || '{}');
+                const method = settings.method || 'aes-256-gcm';
+                const password = client.password || settings.password || '';
+                const userInfo = btoa(`${method}:${password}`);
+                configLink = `ss://${userInfo}@${host}:${port}#${encodeURIComponent(`${remark}-${client.email}`)}`;
+            } catch(e2) { configLink = null; }
         }
 
-        if (security === 'tls') {
-            qs.set('security', 'tls');
-            const tls = stream.tlsSettings || {};
-            const sni = tls.serverName || panelHost;
-            qs.set('sni', sni);
-            const alpn = Array.isArray(tls.alpn) ? tls.alpn.join(',') : '';
-            if (alpn) qs.set('alpn', alpn);
-            const fp = tls.settings?.fingerprint || 'chrome';
-            if (fp) qs.set('fp', fp);
-        }
-
-        const vlessLink = `vless://${client.id}@${panelHost}:${port}?${qs.toString()}#${encodeURIComponent(`${remark}-${client.email}`)}`;
-        return { vlessLink, subLink };
+        return { configLink, subLink };
     } catch(e) {
-        return { vlessLink: null, subLink: null };
+        return { configLink: null, subLink: null };
     }
 }
 
 function extractUuid(val) {
-    // Accept common 3x-ui responses + plain text.
     try {
         if (!val) return null;
         if (typeof val === 'string') return val.trim();
-        // 3x-ui often returns: { success:true, obj:"uuid" }
         const cand = val.obj || val.uuid || val.data || val.result;
         if (typeof cand === 'string') return cand.trim();
-        if (cand && typeof cand === 'object') {
-            const nested = cand.uuid || cand.id;
-            if (typeof nested === 'string') return nested.trim();
-        }
+        if (cand && typeof cand === 'object') { const nested = cand.uuid || cand.id; if (typeof nested === 'string') return nested.trim(); }
         return null;
-    } catch(e) {
-        return null;
-    }
+    } catch(e) { return null; }
 }
 
 function uuidFallback() {
-    // Browser-side fallback if x-ui UUID endpoint fails.
-    try {
-        if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
-            return globalThis.crypto.randomUUID();
-        }
-    } catch(e) {}
-    // RFC4122 v4 fallback
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-        const r = Math.random() * 16 | 0;
-        const v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-    });
+    try { if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') return globalThis.crypto.randomUUID(); } catch(e) {}
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random()*16|0; return (c==='x'?r:(r&0x3|0x8)).toString(16); });
 }
 
-async function addClientVless() {
+// --- Add Client (multi-protocol aware) ---
+async function addClient() {
     const out = document.getElementById('addc-result');
     const uiCard = document.getElementById('ui-result');
     const uiBody = document.getElementById('ui-result-body');
@@ -1487,392 +1147,385 @@ async function addClientVless() {
     const email = document.getElementById('addc-email')?.value?.trim();
     const limitGb = Number(document.getElementById('addc-limit')?.value || 0);
     const days = Number(document.getElementById('addc-days')?.value || 0);
-
-    const showUICard = () => { if (uiCard) uiCard.style.display = 'block'; if (uiBody) uiBody.innerHTML = ''; };
-    const addKV = (k,v) => { const row=document.createElement('div'); row.className='kv'; row.innerHTML=`<div class="k">${k}</div><div class="v">${v}</div>`; uiBody.appendChild(row); };
-    const addCopyField = (label, value) => {
-        const wrap=document.createElement('div');
-        wrap.innerHTML = `<div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:6px;">${label}</div>`;
-        const row=document.createElement('div'); row.className='copy-row';
-        const inp=document.createElement('input'); inp.value=value||''; inp.readOnly=true;
-        const btn=document.createElement('button'); btn.className='sys-btn'; btn.textContent='Copy';
-        btn.addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(value||''); showToast('Copied'); }catch(e){ showToast('Copy failed','error'); } });
-        row.appendChild(inp); row.appendChild(btn);
-        wrap.appendChild(row);
-        uiBody.appendChild(wrap);
-    };
+    const ipLimit = Number(document.getElementById('addc-iplimit')?.value || 0);
 
     if (!email) { showToast('Enter client email/ID', 'error'); return; }
     if (!inboundId) { showToast('Select inbound', 'error'); return; }
 
-    showUICard();
-    addKV('Action','Create Client');
-    addKV('Status','Working...');
-    out.value = 'Creating client...';
+    if (uiCard) uiCard.style.display = 'block';
+    if (uiBody) uiBody.innerHTML = '<div style="color:var(--text-dim)">Creating...</div>';
+    if (out) out.value = 'Creating client...';
 
-    // get uuid (prefer x-ui endpoint; fallback to browser UUID)
+    const inbound = (window.__inboundsCache || []).find(x => Number(x.id) === inboundId);
+    const protocol = (inbound?.protocol || 'vless').toLowerCase();
+
     let clientId = null;
-    try {
-        const uuidRes = await callXui('server/getNewUUID', 'GET');
-        clientId = extractUuid(uuidRes);
-    } catch(e) {
-        clientId = null;
-    }
-    if (!clientId) {
-        // Don’t hard-fail: generate locally so the tool still works even if x-ui endpoint is flaky.
-        clientId = uuidFallback();
-        showToast('UUID endpoint failed — used local UUID', 'info');
-    }
+    try { const uuidRes = await callXui('server/getNewUUID', 'GET'); clientId = extractUuid(uuidRes); } catch(e) {}
+    if (!clientId) { clientId = uuidFallback(); showToast('UUID endpoint failed — used local UUID', 'info'); }
 
     const subId = Math.random().toString(36).slice(2, 18);
     const expiryTime = days > 0 ? (Date.now() + days * 24 * 60 * 60 * 1000) : 0;
     const totalGB = limitGb > 0 ? Math.floor(limitGb * (1024 ** 3)) : 0;
 
-    const payload = {
-        id: inboundId,
-        settings: {
-            clients: [
-                {
-                    id: clientId,
-                    email,
-                    enable: true,
-                    expiryTime,
-                    limitIp: 0,
-                    reset: 0,
-                    subId,
-                    totalGB,
-                    flow: '',
-                    tgId: ''
-                }
-            ]
-        }
-    };
+    let clientSettings;
+    if (protocol === 'trojan') {
+        clientSettings = { password: clientId, email, enable: true, expiryTime, limitIp: ipLimit, subId, totalGB, tgId: '' };
+    } else if (protocol === 'shadowsocks') {
+        clientSettings = { password: uuidFallback(), email, enable: true, expiryTime, limitIp: ipLimit, subId, totalGB };
+    } else {
+        // vless / vmess
+        clientSettings = { id: clientId, email, enable: true, expiryTime, limitIp: ipLimit, reset: 0, subId, totalGB, flow: '', tgId: '' };
+    }
 
+    const payload = { id: inboundId, settings: { clients: [clientSettings] } };
     const res = await callXui('inbounds/addClient', 'POST', payload);
 
-    // Build links from cached inbound
-    const inb = (window.__inboundsCache || []).find(x => Number(x.id) === inboundId);
-    const links = inb ? buildLinksForClient(inb, { id: clientId, email, subId }) : { vlessLink: null, subLink: null };
+    const links = inbound ? buildLinksForClient(inbound, { id: clientId, email, subId, flow: '' }) : { configLink: null, subLink: null };
 
-    const payloadOut = { api: res };
-    out.value = JSON.stringify(payloadOut, null, 2);
+    if (out) out.value = JSON.stringify({ api: res, configLink: links.configLink }, null, 2);
 
-    try {
-        const uiBody = document.getElementById('ui-result-body');
-        if (uiBody) {
-            uiBody.innerHTML = '';
-            const ok = res && (res.success === true || res.msg === 'success');
-            const status = ok ? 'Success' : 'Check response';
-            const row = document.createElement('div');
-            row.className = 'kv';
-            row.innerHTML = `<div class="k">Status</div><div class="v" style="color:${ok?'var(--green)':'var(--accent)'}">${status}</div>`;
-            uiBody.appendChild(row);
+    if (uiBody) {
+        uiBody.innerHTML = '';
+        const ok = res && (res.success === true || res.msg === 'success');
+        const addRow = (k, v) => { const d = document.createElement('div'); d.className='kv'; d.innerHTML=`<div class="k">${k}</div><div class="v">${v}</div>`; uiBody.appendChild(d); };
+        addRow('Status', `<span style="color:${ok?'var(--green)':'var(--accent)'}">${ok?'Created':'Check response'}</span>`);
+        addRow('Protocol', protocol.toUpperCase());
+        addRow('Email', email);
 
-            const addCopy = (label,val) => {
-                const wrap=document.createElement('div');
-                wrap.innerHTML = `<div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:6px;">${label}</div>`;
-                const row=document.createElement('div'); row.className='copy-row';
-                const inp=document.createElement('input'); inp.value=val||''; inp.readOnly=true;
-                const btn=document.createElement('button'); btn.className='sys-btn'; btn.textContent='Copy';
-                btn.addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(val||''); showToast('Copied'); }catch(e){ showToast('Copy failed','error'); } });
-                row.appendChild(inp); row.appendChild(btn);
-                wrap.appendChild(row);
-                uiBody.appendChild(wrap);
-            };
+        if (ok && links.configLink) {
+            const wrap = document.createElement('div');
+            wrap.innerHTML = '<div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:6px;">Config Link</div>';
+            const row = document.createElement('div'); row.className = 'copy-row';
+            const inp = document.createElement('input'); inp.value = links.configLink; inp.readOnly = true; inp.style.fontSize = '0.78rem';
+            const btn = document.createElement('button'); btn.className = 'sys-btn'; btn.textContent = 'Copy';
+            btn.addEventListener('click', async () => { try { await navigator.clipboard.writeText(links.configLink); showToast('Copied'); } catch(e) { showToast('Copy failed','error'); } });
+            row.appendChild(inp); row.appendChild(btn); wrap.appendChild(row);
 
-            // Intentionally not showing subscription/VLESS links in the dashboard UI
-            
+            // QR code
+            const qrWrap = document.createElement('div'); qrWrap.style.cssText = 'margin-top:12px;display:flex;justify-content:center;';
+            const qrCanvas = document.createElement('canvas'); qrCanvas.style.cssText = 'border-radius:8px;background:#fff;padding:8px;';
+            qrWrap.appendChild(qrCanvas); wrap.appendChild(qrWrap);
+            uiBody.appendChild(wrap);
+            setTimeout(() => generateQR(links.configLink, qrCanvas, 180), 50);
         }
-        const uiCard = document.getElementById('ui-result');
-        if (uiCard) uiCard.style.display = 'block';
-    } catch(e) {}
-
-    showToast('Client created');
-
-    // refresh view
+    }
+    if (uiCard) uiCard.style.display = 'block';
+    showToast(res?.success !== false ? 'Client created' : (res?.msg || 'Failed'), res?.success !== false ? 'info' : 'error');
     loadAdminData();
 }
 
+// --- Edit Client Modal ---
+window.closeEditClientModal = function() {
+    const m = document.getElementById('edit-client-modal');
+    if (m) m.style.display = 'none';
+};
+
+function openEditClientModal(user) {
+    const m = document.getElementById('edit-client-modal');
+    if (!m) return;
+
+    const fullConf = getClientFullConfig(user.inboundId, user.email);
+    if (!fullConf) { showToast('Client config not found in cache — refresh data first', 'error'); return; }
+
+    document.getElementById('edit-client-uuid').value = fullConf.id || '';
+    document.getElementById('edit-client-inbound-id').value = user.inboundId || '';
+    document.getElementById('edit-client-email').value = fullConf.email || '';
+    document.getElementById('edit-client-limit').value = fullConf.totalGB > 0 ? Math.round(fullConf.totalGB / (1024**3)) : 0;
+    document.getElementById('edit-client-iplimit').value = fullConf.limitIp || 0;
+    document.getElementById('edit-client-enable').checked = fullConf.enable !== false;
+
+    const expEl = document.getElementById('edit-client-expiry');
+    if (expEl) {
+        const exp = Number(fullConf.expiryTime);
+        if (exp > 0) {
+            const d = new Date(exp);
+            const pad = n => String(n).padStart(2,'0');
+            expEl.value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        } else { expEl.value = ''; }
+    }
+
+    document.getElementById('edit-client-result').textContent = '';
+    m.style.display = 'flex';
+
+    document.getElementById('btn-edit-client-save').onclick = async () => {
+        const uuid = document.getElementById('edit-client-uuid').value;
+        const inboundId = Number(document.getElementById('edit-client-inbound-id').value);
+        const email = document.getElementById('edit-client-email').value.trim();
+        const limitGb = Number(document.getElementById('edit-client-limit').value || 0);
+        const ipLimit = Number(document.getElementById('edit-client-iplimit').value || 0);
+        const enable = document.getElementById('edit-client-enable').checked;
+        const expVal = document.getElementById('edit-client-expiry').value;
+        const expiryTime = expVal ? new Date(expVal).getTime() : 0;
+        const totalGB = limitGb > 0 ? Math.floor(limitGb * (1024**3)) : 0;
+
+        const updated = { ...fullConf, email, enable, expiryTime, limitIp: ipLimit, totalGB };
+        const r = await callXui(`inbounds/updateClient/${uuid}`, 'POST', { id: inboundId, settings: { clients: [updated] } });
+        const ok = r && r.success !== false;
+        document.getElementById('edit-client-result').textContent = ok ? 'Saved successfully.' : (r?.msg || 'Failed');
+        document.getElementById('edit-client-result').style.color = ok ? 'var(--green)' : 'var(--red)';
+        showToast(ok ? 'Client updated' : (r?.msg || 'Update failed'), ok ? 'info' : 'error');
+        if (ok) { setTimeout(closeEditClientModal, 800); loadAdminData(); }
+    };
+}
+
+// --- Add Inbound Modal ---
+window.closeAddInboundModal = function() {
+    const m = document.getElementById('add-inbound-modal');
+    if (m) m.style.display = 'none';
+};
+
+function buildInboundPayload() {
+    const remark = document.getElementById('new-inbound-remark')?.value?.trim() || 'new-inbound';
+    const protocol = document.getElementById('new-inbound-protocol')?.value || 'vless';
+    const port = Number(document.getElementById('new-inbound-port')?.value || 0);
+    const network = document.getElementById('new-inbound-network')?.value || 'tcp';
+    const security = document.getElementById('new-inbound-security')?.value || 'none';
+
+    const streamSettings = { network, security };
+    if (network === 'ws') streamSettings.wsSettings = { path: '/', headers: {} };
+    if (network === 'grpc') streamSettings.grpcSettings = { serviceName: '' };
+    if (security === 'tls') streamSettings.tlsSettings = { serverName: '', alpn: ['h2','http/1.1'], certificates: [] };
+    if (security === 'reality') streamSettings.realitySettings = { show: false, dest: 'example.com:443', xver: 0, serverNames: ['example.com'], privateKey: '', shortIds: [''] };
+
+    let settings;
+    if (protocol === 'vless') settings = { clients: [], decryption: 'none', fallbacks: [] };
+    else if (protocol === 'vmess') settings = { clients: [], disableInsecureEncryption: false };
+    else if (protocol === 'trojan') settings = { clients: [], fallbacks: [] };
+    else if (protocol === 'shadowsocks') settings = { method: 'aes-256-gcm', password: uuidFallback(), network: 'tcp', clients: [] };
+
+    return {
+        up: 0, down: 0, total: 0, remark, enable: true, expiryTime: 0, listen: '', port, protocol,
+        settings: JSON.stringify(settings),
+        streamSettings: JSON.stringify(streamSettings),
+        sniffing: JSON.stringify({ enabled: true, destOverride: ['http','tls'] }),
+        tag: `inbound-${port}`
+    };
+}
+
 try {
-    const out = () => document.getElementById('addc-result');
+    document.getElementById('btn-add-inbound')?.addEventListener('click', () => {
+        const m = document.getElementById('add-inbound-modal');
+        if (m) m.style.display = 'flex';
+        document.getElementById('add-inbound-result').textContent = '';
+    });
+
+    document.getElementById('btn-add-inbound-save')?.addEventListener('click', async () => {
+        const payload = buildInboundPayload();
+        if (!payload.port) { showToast('Enter a port number', 'error'); return; }
+        document.getElementById('add-inbound-result').textContent = 'Creating...';
+        const r = await callXui('inbounds/add', 'POST', payload);
+        const ok = r && r.success !== false;
+        document.getElementById('add-inbound-result').textContent = ok ? 'Inbound created!' : (r?.msg || 'Failed');
+        document.getElementById('add-inbound-result').style.color = ok ? 'var(--green)' : 'var(--red)';
+        showToast(ok ? 'Inbound created' : (r?.msg || 'Failed'), ok ? 'info' : 'error');
+        if (ok) { setTimeout(closeAddInboundModal, 800); loadAdminData(); }
+    });
+} catch(e) {}
+
+// Delete inbound
+try {
+    document.getElementById('btn-del-inbound')?.addEventListener('click', () => {
+        const row = document.getElementById('del-inbound-row');
+        if (row) row.style.display = row.style.display === 'none' ? 'block' : 'none';
+    });
+
+    document.getElementById('btn-del-inbound-confirm')?.addEventListener('click', async () => {
+        const sel = document.getElementById('del-inbound-sel');
+        const id = sel?.value;
+        if (!id) { showToast('Select an inbound', 'error'); return; }
+        const name = sel.options[sel.selectedIndex]?.text || id;
+        if (!confirm(`Delete inbound "${name}"? All client configs in this inbound will be lost.`)) return;
+        const r = await callXui(`inbounds/del/${id}`, 'POST', {});
+        showToast(r?.success !== false ? 'Inbound deleted' : (r?.msg || 'Failed'), r?.success !== false ? 'info' : 'error');
+        document.getElementById('del-inbound-row').style.display = 'none';
+        loadAdminData();
+    });
+} catch(e) {}
+
+// --- Drag Sliders ---
+try {
+    const wireDragSlider = ({ trackId, handleId, fillId, inputId, valId, max, step=1 }) => {
+        const track = document.getElementById(trackId), handle = document.getElementById(handleId);
+        const fill = document.getElementById(fillId), input = document.getElementById(inputId), outVal = document.getElementById(valId);
+        if (!track || !handle || !fill || !input || !outVal) return;
+        const setFromValue = (v) => {
+            const clamped = Math.max(0, Math.min(max, Math.round(Number(v)/step)*step));
+            input.value = String(clamped); outVal.textContent = String(clamped);
+            const pct = (clamped / max) * 100;
+            fill.style.width = `${pct}%`; handle.style.left = `${pct}%`;
+        };
+        input.addEventListener('input', () => setFromValue(input.value));
+        setFromValue(input.value || 0);
+        const pxToVal = (x) => { const r = track.getBoundingClientRect(); return Math.max(0, Math.min(1, (x - r.left) / r.width)) * max; };
+        track.addEventListener('pointerdown', (e) => setFromValue(pxToVal(e.clientX)));
+        if (typeof gsap !== 'undefined' && typeof Draggable !== 'undefined') {
+            gsap.registerPlugin(Draggable);
+            Draggable.create(handle, { type: 'x', bounds: track, onDrag: function() { const r = track.getBoundingClientRect(); setFromValue(pxToVal(r.left + this.x + handle.offsetWidth/2)); }, onPress: function() { handle.style.cursor='grabbing'; }, onRelease: function() { handle.style.cursor='grab'; } });
+        } else {
+            let dragging = false;
+            handle.addEventListener('pointerdown', (e) => { dragging=true; handle.setPointerCapture?.(e.pointerId); handle.style.cursor='grabbing'; });
+            window.addEventListener('pointermove', (e) => { if(dragging) setFromValue(pxToVal(e.clientX)); });
+            window.addEventListener('pointerup', () => { dragging=false; handle.style.cursor='grab'; });
+        }
+    };
+    wireDragSlider({ trackId:'limit-track', handleId:'limit-handle', fillId:'limit-fill', inputId:'addc-limit', valId:'limit-val', max:500, step:1 });
+    wireDragSlider({ trackId:'days-track', handleId:'days-handle', fillId:'days-fill', inputId:'addc-days', valId:'days-val', max:365, step:1 });
+} catch(e) {}
+
+try { document.getElementById('btn-add-client')?.addEventListener('click', addClient); } catch(e) {}
+try { document.getElementById('btn-add-client-refresh')?.addEventListener('click', loadAdminData); } catch(e) {}
+
+// --- Show Result UI (inbound/client tools) ---
+const showResultUI = (title, obj) => {
+    const uiCard = document.getElementById('ui-result');
+    const uiBody = document.getElementById('ui-result-body');
+    const raw = document.getElementById('addc-result');
+    if (uiCard) uiCard.style.display = 'block';
+    if (uiBody) uiBody.innerHTML = '';
+    if (raw) raw.value = JSON.stringify(obj, null, 2);
+
+    const addTitle = (t) => { const h=document.createElement('div'); h.style.fontWeight='800'; h.textContent=t; uiBody.appendChild(h); };
+    const addChips = (arr) => { const w=document.createElement('div'); w.className='chips'; (arr||[]).forEach(x=>{ const c=document.createElement('div'); c.className='chip'; c.textContent=String(x); w.appendChild(c); }); uiBody.appendChild(w); };
+    const addKV = (k,v) => { const row=document.createElement('div'); row.className='kv'; row.innerHTML=`<div class="k">${k}</div><div class="v">${v}</div>`; uiBody.appendChild(row); };
+
+    addTitle(title);
+    if (obj && obj.success === false) { addKV('Status','Failed'); addKV('Message', obj.msg || obj.error || '-'); return; }
+    if (obj && Array.isArray(obj.obj)) { addKV('Count', obj.obj.length); addChips(obj.obj); return; }
+    if (obj && Array.isArray(obj.obj?.data)) { addKV('Count', obj.obj.data.length); addChips(obj.obj.data.map(x=>`${x.email}: ${x.lastOnline}`)); return; }
+    addKV('Status','OK'); addKV('Info','See raw JSON below');
+};
+
+// --- Inbound Tools ---
+try {
     const getInboundId = () => Number(document.getElementById('addc-inbound')?.value);
     const getEmail = () => (document.getElementById('tool-email')?.value || '').trim();
 
-    // Draggable sliders for limit/days (GSAP Draggable -> anime.js fallback)
-    const wireDragSlider = ({ trackId, handleId, fillId, inputId, valId, max, step=1 }) => {
-        const track = document.getElementById(trackId);
-        const handle = document.getElementById(handleId);
-        const fill = document.getElementById(fillId);
-        const input = document.getElementById(inputId);
-        const outVal = document.getElementById(valId);
-        if (!track || !handle || !fill || !input || !outVal) return;
-
-        const setFromValue = (v) => {
-            const clamped = Math.max(0, Math.min(max, Math.round(Number(v)/step)*step));
-            input.value = String(clamped);
-            outVal.textContent = String(clamped);
-            const pct = (clamped / max) * 100;
-            fill.style.width = `${pct}%`;
-            handle.style.left = `${pct}%`;
-        };
-
-        // sync when user types
-        input.addEventListener('input', () => setFromValue(input.value));
-
-        // init
-        setFromValue(input.value || 0);
-
-        const pxToVal = (x) => {
-            const r = track.getBoundingClientRect();
-            const pct = Math.max(0, Math.min(1, (x - r.left) / r.width));
-            return pct * max;
-        };
-
-        // click on track
-        track.addEventListener('pointerdown', (e) => {
-            setFromValue(pxToVal(e.clientX));
-        });
-
-        if (typeof gsap !== 'undefined' && typeof Draggable !== 'undefined') {
-            gsap.registerPlugin(Draggable);
-            Draggable.create(handle, {
-                type: 'x',
-                bounds: track,
-                onDrag: function() {
-                    const r = track.getBoundingClientRect();
-                    const cx = r.left + (this.x + (handle.offsetWidth/2));
-                    setFromValue(pxToVal(cx));
-                },
-                onPress: function() { handle.style.cursor = 'grabbing'; },
-                onRelease: function() { handle.style.cursor = 'grab'; }
-            });
-        } else {
-            // basic drag fallback
-            let dragging=false;
-            const onDown = (e) => { dragging=true; handle.setPointerCapture?.(e.pointerId); handle.style.cursor='grabbing'; };
-            const onMove = (e) => { if(!dragging) return; setFromValue(pxToVal(e.clientX)); };
-            const onUp = () => { dragging=false; handle.style.cursor='grab'; };
-            handle.addEventListener('pointerdown', onDown);
-            window.addEventListener('pointermove', onMove);
-            window.addEventListener('pointerup', onUp);
-        }
-    };
-
-    wireDragSlider({ trackId:'limit-track', handleId:'limit-handle', fillId:'limit-fill', inputId:'addc-limit', valId:'limit-val', max: 500, step: 1 });
-    wireDragSlider({ trackId:'days-track', handleId:'days-handle', fillId:'days-fill', inputId:'addc-days', valId:'days-val', max: 365, step: 1 });
-
-    document.getElementById('btn-add-client')?.addEventListener('click', addClientVless);
-    document.getElementById('btn-add-client-refresh')?.addEventListener('click', loadAdminData);
-
-    const showResultUI = (title, obj) => {
-        const uiCard = document.getElementById('ui-result');
-        const uiBody = document.getElementById('ui-result-body');
-        const raw = document.getElementById('addc-result');
-        if (uiCard) uiCard.style.display = 'block';
-        if (uiBody) uiBody.innerHTML = '';
-        if (raw) raw.value = JSON.stringify(obj, null, 2);
-
-        const addTitle = (t) => {
-            const h=document.createElement('div');
-            h.style.fontWeight='800';
-            h.textContent=t;
-            uiBody.appendChild(h);
-        };
-        const addChips = (arr) => {
-            const w=document.createElement('div'); w.className='chips';
-            (arr||[]).forEach(x=>{ const c=document.createElement('div'); c.className='chip'; c.textContent=String(x); w.appendChild(c); });
-            uiBody.appendChild(w);
-        };
-        const addKV = (k,v) => { const row=document.createElement('div'); row.className='kv'; row.innerHTML=`<div class="k">${k}</div><div class="v">${v}</div>`; uiBody.appendChild(row); };
-
-        addTitle(title);
-
-        if (obj && obj.success === false) {
-            addKV('Status','Failed');
-            addKV('Message', obj.msg || obj.error || '-');
-            return;
-        }
-
-        // Onlines: obj.obj is list
-        if (obj && Array.isArray(obj.obj)) {
-            addKV('Count', obj.obj.length);
-            addChips(obj.obj);
-            return;
-        }
-
-        // Last online: obj.obj is list of {email,lastOnline}
-        if (obj && Array.isArray(obj.obj?.data)) {
-            addKV('Count', obj.obj.data.length);
-            addChips(obj.obj.data.map(x => `${x.email}: ${x.lastOnline}`));
-            return;
-        }
-
-        // Default
-        addKV('Status','OK');
-        addKV('Info','See raw JSON below');
-    };
-
-    // Inbound tools
-    document.getElementById('btn-inb-onlines')?.addEventListener('click', async () => {
-        const r = await callXui('inbounds/onlines', 'POST', {});
-        showResultUI('Online users', r);
-    });
-
-    document.getElementById('btn-inb-lastonline')?.addEventListener('click', async () => {
-        const r = await callXui('inbounds/lastOnline', 'POST', {});
-        showResultUI('Last online', r);
-    });
-
+    document.getElementById('btn-inb-onlines')?.addEventListener('click', async () => { const r = await callXui('inbounds/onlines', 'POST', {}); showResultUI('Online users', r); });
+    document.getElementById('btn-inb-lastonline')?.addEventListener('click', async () => { const r = await callXui('inbounds/lastOnline', 'POST', {}); showResultUI('Last online', r); });
     document.getElementById('btn-inb-reset')?.addEventListener('click', async () => {
-        const id = getInboundId();
-        if (!id) return;
+        const id = getInboundId(); if (!id) return;
         if (!confirm(`Reset ALL client traffic for inbound ${id}?`)) return;
-        const r = await callXui(`inbounds/resetAllClientTraffics/${id}`, 'POST', {});
-        showResultUI(`Reset inbound ${id}`, r);
-        loadAdminData();
+        const r = await callXui(`inbounds/resetAllClientTraffics/${id}`, 'POST', {}); showResultUI(`Reset inbound ${id}`, r); loadAdminData();
     });
-
     document.getElementById('btn-all-reset')?.addEventListener('click', async () => {
         if (!confirm('Reset ALL traffics for ALL inbounds?')) return;
-        const r = await callXui('inbounds/resetAllTraffics', 'POST', {});
-        showResultUI('Reset ALL traffics', r);
-        loadAdminData();
+        const r = await callXui('inbounds/resetAllTraffics', 'POST', {}); showResultUI('Reset ALL traffics', r); loadAdminData();
+    });
+
+    // Auto-refresh onlines
+    document.getElementById('auto-refresh-onlines')?.addEventListener('change', (e) => {
+        clearInterval(__autoRefreshOntimer); __autoRefreshOntimer = null;
+        if (e.target.checked) {
+            __autoRefreshOntimer = setInterval(async () => {
+                const r = await callXui('inbounds/onlines', 'POST', {});
+                showResultUI('Online users (auto)', r);
+            }, 30000);
+            showToast('Auto-refresh onlines enabled (every 30s)');
+        } else { showToast('Auto-refresh onlines disabled'); }
     });
 
     // Client tools
     document.getElementById('btn-client-reset')?.addEventListener('click', async () => {
-        const inboundId = getInboundId();
-        const email = getEmail();
+        const inboundId = getInboundId(), email = getEmail();
         if (!inboundId || !email) { showToast('Select inbound + enter email', 'error'); return; }
-        if (!confirm(`Reset traffic for ${email} in inbound ${inboundId}?`)) return;
-        const r = await callXui(`inbounds/${inboundId}/resetClientTraffic/${encodeURIComponent(email)}`, 'POST', {});
-        showResultUI(`Reset traffic: ${email}`, r);
-        loadAdminData();
+        if (!confirm(`Reset traffic for ${email}?`)) return;
+        const r = await callXui(`inbounds/${inboundId}/resetClientTraffic/${encodeURIComponent(email)}`, 'POST', {}); showResultUI(`Reset traffic: ${email}`, r); loadAdminData();
     });
 
     document.getElementById('btn-client-del')?.addEventListener('click', async () => {
-        const inboundId = getInboundId();
-        const email = getEmail();
+        const inboundId = getInboundId(), email = getEmail();
         if (!inboundId || !email) { showToast('Select inbound + enter email', 'error'); return; }
-        if (!confirm(`DELETE client ${email} from inbound ${inboundId}?`)) return;
-        const r = await callXui(`inbounds/${inboundId}/delClientByEmail/${encodeURIComponent(email)}`, 'POST', {});
-        showResultUI(`Delete client: ${email}`, r);
-        loadAdminData();
+        if (!confirm(`DELETE client ${email}?`)) return;
+        const r = await callXui(`inbounds/${inboundId}/delClientByEmail/${encodeURIComponent(email)}`, 'POST', {}); showResultUI(`Delete client: ${email}`, r); loadAdminData();
     });
 
     document.getElementById('btn-client-ips')?.addEventListener('click', async () => {
-        const email = getEmail();
-        if (!email) { showToast('Enter email', 'error'); return; }
-        const r = await callXui(`inbounds/clientIps/${encodeURIComponent(email)}`, 'POST', {});
-        showResultUI(`Client IPs: ${email}`, r);
+        const email = getEmail(); if (!email) { showToast('Enter email', 'error'); return; }
+        const r = await callXui(`inbounds/clientIps/${encodeURIComponent(email)}`, 'POST', {}); showResultUI(`Client IPs: ${email}`, r);
     });
 
     document.getElementById('btn-client-ips-clear')?.addEventListener('click', async () => {
-        const email = getEmail();
-        if (!email) { showToast('Enter email', 'error'); return; }
+        const email = getEmail(); if (!email) { showToast('Enter email', 'error'); return; }
         if (!confirm(`Clear IPs for ${email}?`)) return;
-        const r = await callXui(`inbounds/clearClientIps/${encodeURIComponent(email)}`, 'POST', {});
-        showResultUI(`Clear IPs: ${email}`, r);
+        const r = await callXui(`inbounds/clearClientIps/${encodeURIComponent(email)}`, 'POST', {}); showResultUI(`Clear IPs: ${email}`, r);
+    });
+
+    document.getElementById('btn-client-traffic-history')?.addEventListener('click', async () => {
+        const email = getEmail(); if (!email) { showToast('Enter email', 'error'); return; }
+        try {
+            const r = await callXui(`inbounds/getClientTrafficsByEmail/${encodeURIComponent(email)}`, 'GET');
+            if (r && r.success !== false) showResultUI(`Traffic history: ${email}`, r);
+            else showResultUI(`Traffic history: ${email}`, r);
+        } catch(e) { showToast('Traffic history not available on this panel version', 'error'); }
+    });
+
+    document.getElementById('btn-client-toggle-enable')?.addEventListener('click', async () => {
+        const inboundId = getInboundId(), email = getEmail();
+        if (!inboundId || !email) { showToast('Select inbound + enter email', 'error'); return; }
+        const fullConf = getClientFullConfig(inboundId, email);
+        if (!fullConf) { showToast('Client not found in cache — refresh data first', 'error'); return; }
+        const r = await callXui(`inbounds/updateClient/${fullConf.id}`, 'POST', { id: inboundId, settings: { clients: [{ ...fullConf, enable: !fullConf.enable }] } });
+        showResultUI(`Toggle enable: ${email}`, r);
+        showToast(r?.success !== false ? `Client ${!fullConf.enable ? 'enabled' : 'disabled'}` : (r?.msg || 'Failed'), r?.success !== false ? 'info' : 'error');
+        loadAdminData();
     });
 
 } catch(e) {}
 
-// Setup Initial State
+// --- DOMContentLoaded Setup ---
 document.addEventListener("DOMContentLoaded", async () => {
-    // If we came back from Cloudflare Access (e.g., after visiting /api/status),
-    // verify admin session and open admin UI.
     try {
         const p = new URLSearchParams(window.location.search);
         if (p.get('admin') === '1') {
-            // remove query param
             window.history.replaceState({}, document.title, window.location.pathname);
-            currentRole = 'admin';
-            adminToken = 'zero-trust-secured';
+            currentRole = 'admin'; adminToken = 'zero-trust-secured';
             sessionStorage.setItem('xui_admin_token', 'zero-trust-secured');
             startAdminApp();
         }
     } catch(e) {}
 
-    // Restore cached login inputs/tab + allow direct-link auto fill
     try {
         const urlParams = new URLSearchParams(window.location.search);
         const lastTab = localStorage.getItem('xui_last_tab') || 'client';
         const cachedClient = localStorage.getItem('xui_client_id') || '';
-
         const directClient = (urlParams.get('client') || urlParams.get('id') || '').trim();
         const directAuto = urlParams.get('auto') === '1' || urlParams.get('auto') === 'true';
 
-        if (directClient) {
-            document.getElementById('login-email').value = directClient;
-            // also cache it
-            try { localStorage.setItem('xui_client_id', directClient); localStorage.setItem('xui_last_tab', 'client'); } catch(e) {}
-        } else if (cachedClient) {
-            document.getElementById('login-email').value = cachedClient;
-        }
+        if (directClient) { document.getElementById('login-email').value = directClient; try { localStorage.setItem('xui_client_id', directClient); localStorage.setItem('xui_last_tab', 'client'); } catch(e) {} }
+        else if (cachedClient) { document.getElementById('login-email').value = cachedClient; }
 
-        if (directClient || directAuto) {
-            document.getElementById('tab-login-client').click();
-        } else if (lastTab === 'admin') {
-            document.getElementById('tab-login-admin').click();
-        } else {
-            document.getElementById('tab-login-client').click();
-        }
+        if (directClient || directAuto) document.getElementById('tab-login-client').click();
+        else if (lastTab === 'admin') document.getElementById('tab-login-admin').click();
+        else document.getElementById('tab-login-client').click();
 
-        // Auto restore session
         const tok = sessionStorage.getItem('xui_admin_token');
         if (tok) {
-            // verify session by calling status
             const headers = (tok === 'zero-trust-secured') ? {} : { Authorization: `Bearer ${tok}` };
-            fetch('/api/status', { headers })
-              .then(r => r.json())
-              .then(j => {
-                  if (j && j.success) {
-                      currentRole = 'admin';
-                      adminToken = tok;
-                      startAdminApp();
-                  } else {
-                      // Not logged in / blocked by Access
-                      sessionStorage.removeItem('xui_admin_token');
-                  }
-              })
-              .catch(() => { sessionStorage.removeItem('xui_admin_token'); });
+            fetch('/api/status', { headers }).then(r => r.json()).then(j => {
+                if (j && j.success) { currentRole = 'admin'; adminToken = tok; startAdminApp(); }
+                else sessionStorage.removeItem('xui_admin_token');
+            }).catch(() => { sessionStorage.removeItem('xui_admin_token'); });
         } else if ((lastTab === 'client' && cachedClient) || directAuto) {
             const idToCheck = (directClient || cachedClient || '').trim();
             if (idToCheck) {
-                // auto run client check again (or via direct link ?client=...&auto=1)
-                fetch('/public/auth', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ type: 'client', id: idToCheck })
-                }).then(r => r.json()).then(d => {
-                    if (d && d.success) {
-                        currentRole = 'client';
-                        startClientApp(d.clientData);
-                    } else if (directAuto) {
-                        showToast((d && d.msg) || 'User not found', 'error');
-                    }
+                fetch('/public/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'client', id: idToCheck }) })
+                .then(r => r.json()).then(d => {
+                    if (d && d.success) { currentRole = 'client'; startClientApp(d.clientData); }
+                    else if (directAuto) showToast((d && d.msg) || 'User not found', 'error');
                 }).catch(()=>{ if (directAuto) showToast('Connection Error', 'error'); });
             }
         }
-
     } catch(e) {}
 
-    // Hide UI elements until login
     document.querySelector('.desktop-nav').style.display = 'none';
     document.querySelector('.mobile-nav').style.display = 'none';
     document.getElementById('main-fab').style.display = 'none';
-    
-    // Auto-check for Zero Trust
+
     try {
-        const res = await fetch('/api/auth', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'admin', username: '', password: '' })
-        });
+        const res = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'admin', username: '', password: '' }) });
         const data = await res.json();
-        if(data.success && data.msg === 'Cloudflare Zero Trust Authenticated') {
-            currentRole = 'admin';
-            adminToken = 'zero-trust-secured'; 
-            startAdminApp();
+        if (data.success && data.msg === 'Cloudflare Zero Trust Authenticated') {
+            currentRole = 'admin'; adminToken = 'zero-trust-secured'; startAdminApp();
         }
     } catch(e) {}
 });
