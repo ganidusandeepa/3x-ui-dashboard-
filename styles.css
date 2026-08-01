@@ -1875,3 +1875,54 @@ body.theme-light .info-row:hover { background: rgba(0, 0, 0, 0.03); }
     }
     .data-card-hero::after { display: none; }
 }
+
+/* ======================================================================
+   Ring tip sparks + live speed arrows
+   ====================================================================== */
+
+/* Particles thrown off the leading edge of the usage arc. Rendered inside the
+   SVG, positioned at the arc tip by JS, animated via the Web Animations API. */
+.ring-spark { pointer-events: none; }
+.ring-spark-dot {
+    fill: #fff;
+    filter: drop-shadow(0 0 3px rgba(255, 255, 255, 1)) drop-shadow(0 0 6px rgba(140, 190, 255, 0.75));
+    will-change: transform, opacity;
+}
+body.theme-light .ring-spark-dot {
+    fill: var(--on-bg);
+    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.35));
+}
+
+/* Give the arc tip itself a soft glow so the sparks look like they come from
+   somewhere hot rather than appearing out of nowhere. */
+.ring-fill { filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.28)); }
+body.theme-light .ring-fill { filter: none; }
+
+/* --- Speed arrows: still when idle, pulsing at the live throughput rate --- */
+.spd-arrow {
+    display: inline-block;
+    will-change: transform;
+    transition: opacity var(--m3-effects);
+    opacity: 0.55;
+}
+.spd-arrow.active { opacity: 1; }
+@media (prefers-reduced-motion: no-preference) {
+    .spd-arrow.dl.active { animation: spd-down var(--spd-dur, 1s) cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+    .spd-arrow.ul.active { animation: spd-up   var(--spd-dur, 1s) cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+    /* Saturated link: add a glow so it reads as "busy" at a glance. */
+    .spd-arrow.active.fast { filter: drop-shadow(0 0 5px currentColor); }
+}
+@keyframes spd-down {
+    0%   { transform: translateY(-3px); opacity: 0.35; }
+    45%  { transform: translateY(2px);  opacity: 1; }
+    100% { transform: translateY(-3px); opacity: 0.35; }
+}
+@keyframes spd-up {
+    0%   { transform: translateY(3px);  opacity: 0.35; }
+    45%  { transform: translateY(-2px); opacity: 1; }
+    100% { transform: translateY(3px);  opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .spd-arrow { animation: none !important; opacity: 1; }
+    .ring-spark-dot { display: none; }
+}

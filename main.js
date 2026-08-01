@@ -376,6 +376,8 @@ function doLogout() {
     loopInterval = null; clientLoopInterval = null; __autoRefreshOntimer = null;
     __expiryCountdownTimer = null; __currentClientData = null;
     __clientLast = null; __clientSpeedEma = { dl: null, ul: null };
+    try { stopRingSparks('user-ring-fill'); stopRingSparks('usage-ring-fill'); } catch(e) {}
+    try { setSpeedArrowActivity('#spd-arrow-dl', 0); setSpeedArrowActivity('#spd-arrow-ul', 0); } catch(e) {}
     currentRole = null; adminToken = null;
     try { sessionStorage.removeItem('xui_admin_token'); } catch(e) {}
     document.getElementById('login-overlay').style.display = 'flex';
@@ -583,6 +585,26 @@ async function startAdminApp() {
 // Instead, only re-baseline when the counters ACTUALLY change, so dt is the
 // true elapsed time between flushes and the Mbps figure is correct.
 const SPEED_IDLE_MS = 20000; // no change for this long => genuinely idle, show 0
+
+// Drive the ↓/↑ arrows from the actual throughput: idle arrows sit still,
+// active ones pulse, and the pulse gets quicker the faster the link is.
+function setSpeedArrowActivity(sel, mbps) {
+    try {
+        const el = document.querySelector(sel);
+        if (!el) return;
+        const v = Number(mbps) || 0;
+        if (v <= 0.01 || prefersReducedMotion()) {
+            el.classList.remove('active', 'fast');
+            el.style.removeProperty('--spd-dur');
+            return;
+        }
+        el.classList.add('active');
+        el.classList.toggle('fast', v >= 5);
+        // 1.15s when barely moving -> 0.42s when saturated.
+        const dur = Math.max(0.42, 1.15 - Math.min(v, 20) * 0.036);
+        el.style.setProperty('--spd-dur', dur.toFixed(2) + 's');
+    } catch (e) {}
+}
 function updateClientSpeedsFromDelta(nowDown, nowUp) {
     try {
         const now = Date.now();
@@ -602,6 +624,8 @@ function updateClientSpeedsFromDelta(nowDown, nowUp) {
         if (dDown < 0 || dUp < 0) {
             __clientLast = { downBytes: d, upBytes: u, ts: now };
             __clientSpeedEma = { dl: null, ul: null };
+            setSpeedArrowActivity('#spd-arrow-dl', 0);
+            setSpeedArrowActivity('#spd-arrow-ul', 0);
             animateNumber('#user-dl-speed', 0, { decimals: 2, duration: 300 });
             animateNumber('#user-up-speed', 0, { decimals: 2, duration: 300 });
             return;
@@ -614,6 +638,8 @@ function updateClientSpeedsFromDelta(nowDown, nowUp) {
         if (dDown === 0 && dUp === 0) {
             if (now - __clientLast.ts > SPEED_IDLE_MS) {
                 __clientSpeedEma = { dl: null, ul: null };
+                setSpeedArrowActivity('#spd-arrow-dl', 0);
+                setSpeedArrowActivity('#spd-arrow-ul', 0);
                 animateNumber('#user-dl-speed', 0, { decimals: 2, duration: 600 });
                 animateNumber('#user-up-speed', 0, { decimals: 2, duration: 600 });
                 __clientLast.ts = now; // restart the idle window
@@ -637,6 +663,8 @@ function updateClientSpeedsFromDelta(nowDown, nowUp) {
 
         animateNumber('#user-dl-speed', __clientSpeedEma.dl, { decimals: 2, duration: 500 });
         animateNumber('#user-up-speed', __clientSpeedEma.ul, { decimals: 2, duration: 500 });
+        setSpeedArrowActivity('#spd-arrow-dl', __clientSpeedEma.dl);
+        setSpeedArrowActivity('#spd-arrow-ul', __clientSpeedEma.ul);
         __clientLast = { downBytes: d, upBytes: u, ts: now };
     } catch(e) {}
 }
@@ -719,7 +747,106 @@ function updateRing(ringFillId, pctElId, pct) {
         }
     }
     if (pctEl) pctEl.textContent = Math.round(clampedPct) + '%';
+    try { startRingSparks(ringFillId, clampedPct); } catch(e) {}
 }
+
+// --- Ring tip sparks -------------------------------------------------------
+// Emits particles from the leading edge of the usage arc while it shows any
+// bandwidth. The tip position is derived from the element's LIVE
+// strokeDashoffset (not the target value), so sparks track the arc while GSAP
+// is still animating it into place.
+const RING_R = 52, RING_CX = 60, RING_CY = 60, RING_CIRC = 326.73;
+const __ringSparkState = new Map(); // ringFillId -> { timer, pct }
+
+function ringTipPoint(pct) {
+    // The arc is rotated -90deg, so 0% sits at 12 o'clock and grows clockwise.
+    const ang = ((pct / 100) * 360 - 90) * Math.PI / 180;
+    return { x: RING_CX + RING_R * Math.cos(ang), y: RING_CY + RING_R * Math.sin(ang) };
+}
+
+// Read the arc's current (possibly mid-animation) percentage off the DOM.
+function ringLivePct(fillEl, fallbackPct) {
+    try {
+        const raw = getComputedStyle(fillEl).strokeDashoffset;
+        const off = parseFloat(raw);
+        if (!Number.isFinite(off)) return fallbackPct;
+        return Math.min(100, Math.max(0, ((RING_CIRC - off) / RING_CIRC) * 100));
+    } catch (e) { return fallbackPct; }
+}
+
+function stopRingSparks(ringFillId) {
+    const st = __ringSparkState.get(ringFillId);
+    if (st && st.timer) clearInterval(st.timer);
+    __ringSparkState.delete(ringFillId);
+    // Deterministically clear any particles still in flight. Relying only on
+    // each animation's onfinish can leave strays behind if a tween is
+    // interrupted, and those would accumulate across ring updates.
+    try {
+        const group = document.getElementById(ringFillId.replace('-fill', '-spark'));
+        group?.querySelectorAll('.ring-spark-dot').forEach(el => {
+            try { el.getAnimations().forEach(a => a.cancel()); } catch (e) {}
+            el.remove();
+        });
+    } catch (e) {}
+}
+
+function startRingSparks(ringFillId, pct) {
+    const fill = document.getElementById(ringFillId);
+    if (!fill) return;
+    const group = document.getElementById(ringFillId.replace('-fill', '-spark'));
+    if (!group) return;
+
+    // No bandwidth to celebrate, or the user asked for less motion.
+    if (!(pct > 0) || prefersReducedMotion()) { stopRingSparks(ringFillId); return; }
+
+    const prev = __ringSparkState.get(ringFillId);
+    if (prev) { prev.pct = pct; return; } // already running; just retarget
+
+    const state = { pct, timer: null };
+    const emit = () => {
+        // Don't burn cycles while the tab is hidden or the ring is off-screen.
+        if (document.hidden || !fill.isConnected || !fill.getClientRects().length) return;
+        const live = ringLivePct(fill, state.pct);
+        if (!(live > 0.5)) return;
+        const tip = ringTipPoint(live);
+
+        const n = 1 + Math.floor(Math.random() * 2);
+        for (let i = 0; i < n; i++) {
+            const p = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            p.setAttribute('class', 'ring-spark-dot');
+            p.setAttribute('cx', tip.x.toFixed(2));
+            p.setAttribute('cy', tip.y.toFixed(2));
+            p.setAttribute('r', (1.1 + Math.random() * 1.4).toFixed(2));
+            group.appendChild(p);
+
+            // Fling outward from the arc, with a little tangential drift.
+            const outAng = Math.atan2(tip.y - RING_CY, tip.x - RING_CX);
+            const spread = (Math.random() - 0.5) * 1.2;
+            const dist = 6 + Math.random() * 10;
+            const dx = Math.cos(outAng + spread) * dist;
+            const dy = Math.sin(outAng + spread) * dist;
+
+            const anim = p.animate([
+                { transform: 'translate(0px,0px) scale(1)', opacity: 0.95 },
+                { transform: `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px) scale(0.2)`, opacity: 0 }
+            ], { duration: 620 + Math.random() * 420, easing: 'cubic-bezier(0.2,0.7,0.3,1)' });
+            anim.onfinish = () => p.remove();
+            anim.oncancel = () => p.remove();
+        }
+    };
+
+    state.timer = setInterval(emit, 170);
+    __ringSparkState.set(ringFillId, state);
+    emit();
+}
+
+// Pause emission entirely when the tab is backgrounded.
+try {
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) return;
+        document.querySelectorAll('.ring-spark-dot').forEach(el => el.remove());
+    });
+} catch (e) {}
 
 // --- Expiry Countdown (flip-clock) ---
 function setFlipDigit(id, val) {

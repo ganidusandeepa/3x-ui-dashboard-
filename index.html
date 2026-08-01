@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=32">
+    <link rel="stylesheet" href="styles.css?v=33">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <!-- Kept render-blocking on purpose: deferring it makes every icon pop in
@@ -160,15 +160,17 @@
                             <p style="margin-top: 20px; color: var(--text-dim);">Status: <strong id="user-status-text" class="status-badge active" style="margin-left:10px;">Active</strong></p>
                             <p style="margin-top: 10px; color: var(--text-dim);">
                                 Speed:
-                                <strong style="color:var(--blue)">↓ <span id="user-dl-speed">0</span> Mbps</strong>
+                                <strong style="color:var(--blue)"><span class="spd-arrow dl" id="spd-arrow-dl">↓</span> <span id="user-dl-speed">0</span> Mbps</strong>
                                 &nbsp;&nbsp;
-                                <strong style="color:var(--accent)">↑ <span id="user-up-speed">0</span> Mbps</strong>
+                                <strong style="color:var(--accent)"><span class="spd-arrow ul" id="spd-arrow-ul">↑</span> <span id="user-up-speed">0</span> Mbps</strong>
                             </p>
                         </div>
                         <div class="usage-ring-wrap" style="width:160px;height:160px;">
                             <svg id="user-ring" class="usage-ring" viewBox="0 0 120 120" aria-hidden="true">
                                 <circle class="ring-track" cx="60" cy="60" r="52"/>
                                 <circle class="ring-fill" cx="60" cy="60" r="52" id="user-ring-fill"/>
+                                <!-- Sparks emitted from the leading tip of the arc -->
+                                <g id="user-ring-spark" class="ring-spark"></g>
                                 <text class="ring-pct-text" x="60" y="57" id="user-ring-pct">0%</text>
                                 <text class="ring-sub-text" x="60" y="71" id="user-ring-sub">USED</text>
                             </svg>
@@ -719,7 +721,7 @@
     <!-- `defer` is REQUIRED here: the CDN libs above are deferred, and deferred
          scripts run after non-deferred ones. Without defer these would execute
          before GSAP/QRious existed. Deferred scripts run in document order. -->
-    <script defer src="main.js?v=44" data-cfasync="false"></script>
+    <script defer src="main.js?v=45" data-cfasync="false"></script>
     <script defer src="fx.js?v=2" data-cfasync="false"></script>
 </body>
 </html>
