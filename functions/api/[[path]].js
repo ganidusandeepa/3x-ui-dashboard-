@@ -357,7 +357,7 @@ export async function onRequest(context) {
             return new Response(JSON.stringify({
               success: true,
               role: 'client',
-              clientData: { ...foundClient, isOnline, ips, subLink, vlessLink, vmessLink, trojanLink, configLink, protocol, subInfo, allLinks, subProtoLinks, lastOnlineTs }
+              clientData: { ...foundClient, isOnline, subLink, vlessLink, vmessLink, trojanLink, configLink, protocol, subInfo, allLinks, subProtoLinks, lastOnlineTs }
             }), {
               headers: { "Content-Type": "application/json" }
             });

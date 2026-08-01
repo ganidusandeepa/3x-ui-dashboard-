@@ -693,12 +693,6 @@ function applyClientDataToUI(client) {
             const el = document.getElementById('user-last-online');
             if (el) el.textContent = fmtLastSeen(ts, client.isOnline);
         }
-        if (client.ips !== undefined) {
-            const arr = Array.isArray(client.ips)
-                ? client.ips.map(x => typeof x === 'string' ? x : (x && (x.ip || x.address)) || '').filter(Boolean)
-                : [];
-            document.getElementById('user-ips').textContent = arr.length ? arr.join(', ') : 'None';
-        }
     } catch(e) {}
 
     animateNumber('#user-used', Number(totalUsed), { decimals: 2, duration: 500 });

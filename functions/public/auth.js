@@ -165,7 +165,7 @@ export async function onRequestPost(context) {
     return new Response(JSON.stringify({
       success: true,
       role: 'client',
-      clientData: { ...foundClient, uuid: resolvedUuid, isOnline, ips, subLink, vlessLink }
+      clientData: { ...foundClient, uuid: resolvedUuid, isOnline, subLink, vlessLink }
     }), {
       headers: { 'Content-Type': 'application/json' }
     });

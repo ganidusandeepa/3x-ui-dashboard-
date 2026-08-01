@@ -267,7 +267,7 @@ async function resolveClient(id) {
     status: 200,
     body: {
       success: true, role: 'client',
-      clientData: { ...foundClient, isOnline, ips, subLink, vlessLink, vmessLink, trojanLink, configLink, protocol, subInfo, allLinks, subProtoLinks, lastOnlineTs }
+      clientData: { ...foundClient, isOnline, subLink, vlessLink, vmessLink, trojanLink, configLink, protocol, subInfo, allLinks, subProtoLinks, lastOnlineTs }
     }
   };
 }
