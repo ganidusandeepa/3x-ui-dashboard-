@@ -17,9 +17,12 @@ ENV NODE_ENV=production
 ENV PORT=8080
 EXPOSE 8080
 
-# NOTE: no Docker HEALTHCHECK here on purpose. A failing container healthcheck
-# makes Coolify mark the app "unhealthy" and its proxy (Traefik) then refuses to
-# route the domain to it. Let Coolify manage health via its own UI setting
-# (Health Check path = /healthz) instead of baking a brittle one into the image.
+# Container healthcheck. Coolify's rolling update inspects
+# .State.Health.Status, so the image MUST define a HEALTHCHECK or the deploy
+# fails with `map has no entry for key "Health"`. We use busybox wget (always
+# present in node:*-alpine) against the built-in /healthz route — shell form so
+# ${PORT} is expanded at runtime.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
+  CMD wget -q -O /dev/null "http://127.0.0.1:${PORT:-8080}/healthz" || exit 1
 
 CMD ["node", "server.js"]

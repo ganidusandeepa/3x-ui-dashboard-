@@ -77,6 +77,26 @@ publish the container on a **direct custom port** instead:
 The dashboard's env vars stay the same (`PANEL_URL`, `PANEL_USERNAME`,
 `PANEL_PASSWORD`) — only the external port changes.
 
+### Clean HTTPS domain behind your existing nginx (recommended)
+
+If your panel already owns 80/443 but you want a real domain like
+`https://dashboard.trackydev.site` (not `IP:port`), reverse-proxy it through the
+nginx that's already on the box. A ready-to-use config with SSE support is at
+[`deploy/nginx-dashboard.conf`](deploy/nginx-dashboard.conf):
+
+1. **DNS:** `A` record `dashboard.trackydev.site` → your VPS IP.
+2. **Publish the container locally** — Coolify → app → **Ports Mappings**:
+   `127.0.0.1:8090:8080` (bound to localhost, so it stays private and needs
+   **no** firewall/Security-List change).
+3. **Install the config:**
+   ```bash
+   sudo cp deploy/nginx-dashboard.conf /etc/nginx/sites-available/dashboard.conf
+   sudo ln -s /etc/nginx/sites-available/dashboard.conf /etc/nginx/sites-enabled/
+   sudo nginx -t && sudo systemctl reload nginx
+   sudo certbot --nginx -d dashboard.trackydev.site
+   ```
+4. Open `https://dashboard.trackydev.site`.
+
 ## 📦 Local Installation (Optional)
 1. Install dependencies: `npm install`
 2. Set env vars: `PANEL_URL`, `PANEL_USERNAME`, `PANEL_PASSWORD` (defaults target `http://127.0.0.1:2053`).
