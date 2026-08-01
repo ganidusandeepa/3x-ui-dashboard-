@@ -85,9 +85,14 @@ nginx that's already on the box. A ready-to-use config with SSE support is at
 [`deploy/nginx-dashboard.conf`](deploy/nginx-dashboard.conf):
 
 1. **DNS:** `A` record `dashboard.trackydev.site` → your VPS IP.
-2. **Publish the container locally** — Coolify → app → **Ports Mappings**:
-   `127.0.0.1:8090:8080` (bound to localhost, so it stays private and needs
-   **no** firewall/Security-List change).
+2. **Publish the container locally** — either:
+   - Coolify → app → **Ports Mappings**: `127.0.0.1:8090:8080`, **or**
+   - Deploy with the committed [`docker-compose.yml`](docker-compose.yml)
+     (Coolify → Build Pack: *Docker Compose*), which already maps
+     `127.0.0.1:8090:8080` in code.
+
+   Either way it's bound to localhost, so it stays private and needs **no**
+   firewall/Security-List change.
 3. **Install the config:**
    ```bash
    sudo cp deploy/nginx-dashboard.conf /etc/nginx/sites-available/dashboard.conf

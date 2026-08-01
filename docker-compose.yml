@@ -1,0 +1,26 @@
+# Docker Compose deployment for the 3x-ui dashboard.
+#
+# Use this (Coolify → Build Pack: "Docker Compose") when you want the host
+# port mapping defined IN CODE instead of the Coolify UI's "Ports Mappings".
+#
+# The port is published on 127.0.0.1 only, so the container stays private and
+# is meant to sit behind the nginx reverse proxy in deploy/nginx-dashboard.conf
+# (clean HTTPS subdomain, no firewall/Security-List change needed). To expose it
+# directly on a public port instead, change "127.0.0.1:8090:8080" to
+# "8090:8080" and open that port in your firewall / Oracle Security List.
+#
+# Set PANEL_URL / PANEL_USERNAME / PANEL_PASSWORD in Coolify's Environment
+# Variables (they're injected here via the ${...} references below).
+
+services:
+  dashboard:
+    build: .
+    restart: unless-stopped
+    environment:
+      - PANEL_URL=${PANEL_URL:-http://127.0.0.1:2053}
+      - PANEL_USERNAME=${PANEL_USERNAME:-admin}
+      - PANEL_PASSWORD=${PANEL_PASSWORD:-password}
+      - PORT=8080
+    ports:
+      # host (127.0.0.1:8090)  ->  container (8080)
+      - "127.0.0.1:8090:8080"
