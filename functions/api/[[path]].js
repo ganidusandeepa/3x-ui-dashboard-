@@ -37,17 +37,44 @@ export async function onRequest(context) {
     if (_session.cookie && (now - _session.ts) < SESSION_TTL) {
       return _session.cookie;
     }
-    const loginRes = await fetch(`${PANEL_URL}/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ username: ADMIN_USER, password: ADMIN_PASS }),
-      redirect: 'follow'
-    });
-    const cookie = loginRes.headers.get("set-cookie");
-    if (cookie) {
-      _session = { cookie, ts: now };
-    }
-    return cookie;
+
+    try {
+      // Try 3x-ui 3.6.0+ API first (JSON endpoint)
+      const loginRes = await fetch(`${PANEL_URL}/api/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: ADMIN_USER, password: ADMIN_PASS }),
+        redirect: 'follow'
+      });
+
+      const cookie = loginRes.headers.get("set-cookie");
+      if (cookie) {
+        _session = { cookie, ts: now };
+        return cookie;
+      }
+
+      const data = await loginRes.json().catch(() => null);
+      if (data?.success && cookie) {
+        return cookie;
+      }
+    } catch (e) {}
+
+    try {
+      // Fallback to old /login endpoint (form-encoded)
+      const loginRes = await fetch(`${PANEL_URL}/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ username: ADMIN_USER, password: ADMIN_PASS }),
+        redirect: 'follow'
+      });
+      const cookie = loginRes.headers.get("set-cookie");
+      if (cookie) {
+        _session = { cookie, ts: now };
+        return cookie;
+      }
+    } catch (e) {}
+
+    return null;
   }
 
   const cfUserRecord = request.headers.get('Cf-Access-Authenticated-User-Email');

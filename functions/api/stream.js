@@ -30,13 +30,30 @@ export async function onRequest(context) {
   }
 
   async function getSession() {
-    const loginRes = await fetch(`${PANEL_URL}/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ username: ADMIN_USER, password: ADMIN_PASS }),
-      redirect: 'follow'
-    });
-    return loginRes.headers.get('set-cookie');
+    try {
+      // Try 3x-ui 3.6.0+ API first (JSON endpoint)
+      const loginRes = await fetch(`${PANEL_URL}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: ADMIN_USER, password: ADMIN_PASS }),
+        redirect: 'follow'
+      });
+      const cookie = loginRes.headers.get('set-cookie');
+      if (cookie) return cookie;
+    } catch (e) {}
+
+    try {
+      // Fallback to old /login endpoint (form-encoded)
+      const loginRes = await fetch(`${PANEL_URL}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ username: ADMIN_USER, password: ADMIN_PASS }),
+        redirect: 'follow'
+      });
+      return loginRes.headers.get('set-cookie');
+    } catch (e) {}
+
+    return null;
   }
 
   // Cache panel status for a few seconds to prevent hammering your origin.
