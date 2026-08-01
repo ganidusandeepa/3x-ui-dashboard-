@@ -10,6 +10,9 @@
 //   PANEL_PASSWORD   panel admin password (also the dashboard admin token)
 //   PANEL_API_TOKEN  panel Settings -> Security -> API Token (Bearer). Preferred
 //                    over username/password when set — skips login entirely.
+//   PANEL_NODES      optional JSON array of extra node panels to search when a
+//                    client isn't found on the master panel, e.g.:
+//                    [{"name":"Node1","url":"https://node1.example.com:2053/base","apiToken":"..."}]
 //   PORT             HTTP port to listen on (default 8080)
 //   METRICS_INTERVAL_MS / METRICS_CACHE_TTL   optional SSE tuning
 
@@ -25,6 +28,20 @@ const ADMIN_USER = process.env.PANEL_USERNAME || 'admin';
 const ADMIN_PASS = process.env.PANEL_PASSWORD || 'password';
 const PANEL_API_TOKEN = process.env.PANEL_API_TOKEN || null;
 const PORT = Number(process.env.PORT || 8080);
+
+// Optional: extra node panels to search when a client isn't found on the
+// master panel (e.g. clients added directly on a node's own UI). JSON array:
+//   PANEL_NODES=[{"name":"Node1","url":"https://node1.example.com:2053/base","apiToken":"..."}]
+// Each node's own API token is required — the master panel stores a
+// registered node's token write-only and won't hand it back over the API.
+let PANEL_NODES = [];
+try {
+  const raw = process.env.PANEL_NODES;
+  if (raw) {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) PANEL_NODES = parsed;
+  }
+} catch (e) { PANEL_NODES = []; }
 const INTERVAL_MS = Math.max(1000, Number(process.env.METRICS_INTERVAL_MS || 3000));
 const CACHE_TTL_S = Number(process.env.METRICS_CACHE_TTL || 3);
 
@@ -118,16 +135,19 @@ async function cachedJson(key, ttlS, producer) {
   return value;
 }
 
-// ---- Shared client lookup + config-link builder (mirrors /api auth 'client') ----
-async function resolveClient(id) {
-  const cookie = await getSession();
-  if (!cookie) return { status: 500, body: { success: false, msg: 'Panel Auth Failed' } };
+// ---- Client lookup + config-link builder, scoped to ONE panel (master or a
+// node) so the same logic can search either. Returns the clientData object,
+// or null if this panel doesn't have the client (so the caller can try the
+// next one) or is unreachable. ----
+async function resolveClientFromPanel(baseUrl, authHeaders, id, sourceLabel) {
+  const h = (extra) => Object.assign({}, extra || {}, authHeaders);
 
-  const apiRes = await fetch(`${PANEL_URL}/panel/api/inbounds/list`, { headers: panelHeaders(cookie) });
-  const data = await apiRes.json();
-  if (!data || !data.success || !Array.isArray(data.obj)) {
-    return { status: 502, body: { success: false, msg: 'Bad response from panel' } };
-  }
+  let data;
+  try {
+    const apiRes = await fetch(`${baseUrl}/panel/api/inbounds/list`, { headers: h() });
+    data = await apiRes.json();
+  } catch (e) { return null; }
+  if (!data || !data.success || !Array.isArray(data.obj)) return null;
 
   let foundClient = null;
   let foundInbound = null;
@@ -137,7 +157,7 @@ async function resolveClient(id) {
       if (client) { foundClient = client; foundInbound = inb; }
     }
   });
-  if (!foundClient) return { status: 404, body: { success: false, msg: 'User email not found' } };
+  if (!foundClient) return null;
 
   let isOnline = null;
   let ips = [];
@@ -145,8 +165,8 @@ async function resolveClient(id) {
   try {
     for (const p of ['clients/onlines', 'inbounds/onlines']) {
       try {
-        const onRes = await fetch(`${PANEL_URL}/panel/api/${p}`, {
-          method: 'POST', headers: panelHeaders(cookie, { 'Content-Type': 'application/json' }), body: JSON.stringify({})
+        const onRes = await fetch(`${baseUrl}/panel/api/${p}`, {
+          method: 'POST', headers: h({ 'Content-Type': 'application/json' }), body: JSON.stringify({})
         });
         const onData = await onRes.json();
         if (onData && onData.success && Array.isArray(onData.obj)) { isOnline = onData.obj.includes(foundClient.email); break; }
@@ -158,8 +178,8 @@ async function resolveClient(id) {
     const em = encodeURIComponent(foundClient.email);
     for (const p of [`clients/ips/${em}`, `inbounds/clientIps/${em}`]) {
       try {
-        const ipRes = await fetch(`${PANEL_URL}/panel/api/${p}`, {
-          method: 'POST', headers: panelHeaders(cookie, { 'Content-Type': 'application/json' }), body: JSON.stringify({})
+        const ipRes = await fetch(`${baseUrl}/panel/api/${p}`, {
+          method: 'POST', headers: h({ 'Content-Type': 'application/json' }), body: JSON.stringify({})
         });
         const ipData = await ipRes.json();
         if (ipData && ipData.success) {
@@ -178,18 +198,18 @@ async function resolveClient(id) {
     return null;
   }).filter(x => x && x.link) : [];
   try {
-    const r = await fetch(`${PANEL_URL}/panel/api/clients/links/${encodeURIComponent(foundClient.email)}`, { headers: panelHeaders(cookie, { Accept: 'application/json' }) });
+    const r = await fetch(`${baseUrl}/panel/api/clients/links/${encodeURIComponent(foundClient.email)}`, { headers: h({ Accept: 'application/json' }) });
     const j = await r.json(); if (j && j.success) allLinks = normLinks(j.obj);
   } catch (e) {}
   try {
     if (foundClient.subId) {
-      const r = await fetch(`${PANEL_URL}/panel/api/clients/subLinks/${encodeURIComponent(foundClient.subId)}`, { headers: panelHeaders(cookie, { Accept: 'application/json' }) });
+      const r = await fetch(`${baseUrl}/panel/api/clients/subLinks/${encodeURIComponent(foundClient.subId)}`, { headers: h({ Accept: 'application/json' }) });
       const j = await r.json();
       if (j && j.success && Array.isArray(j.obj)) subProtoLinks = j.obj.map(x => typeof x === 'string' ? x : (x && (x.link || x.url || x.uri))).filter(Boolean);
     }
   } catch (e) {}
   try {
-    const r = await fetch(`${PANEL_URL}/panel/api/clients/lastOnline`, { method: 'POST', headers: panelHeaders(cookie, { 'Content-Type': 'application/json' }), body: JSON.stringify({}) });
+    const r = await fetch(`${baseUrl}/panel/api/clients/lastOnline`, { method: 'POST', headers: h({ 'Content-Type': 'application/json' }), body: JSON.stringify({}) });
     const j = await r.json();
     if (j && j.success && j.obj && typeof j.obj === 'object') {
       let ts = Number(j.obj[foundClient.email] || 0);
@@ -198,10 +218,13 @@ async function resolveClient(id) {
     }
   } catch (e) {}
 
+  // Config links point at THIS panel's own host — for a node-resolved client
+  // that's the node's address (where its Xray inbound actually lives), not
+  // the master's.
   let subLink = null, vlessLink = null, vmessLink = null, trojanLink = null, protocol = 'vless';
   try {
-    const host = new URL(PANEL_URL).hostname;
-    subLink = foundClient.subId ? `${PANEL_URL}/sub/${foundClient.subId}` : null;
+    const host = new URL(baseUrl).hostname;
+    subLink = foundClient.subId ? `${baseUrl}/sub/${foundClient.subId}` : null;
 
     if (foundInbound) {
       const stream = parseMaybe(foundInbound.streamSettings);
@@ -275,7 +298,7 @@ async function resolveClient(id) {
   if (subLink) {
     try {
       const siRes = await fetch(`${subLink}?format=info`, {
-        headers: panelHeaders(cookie, { 'User-Agent': 'ClashforWindows/0.20.0' })
+        headers: h({ 'User-Agent': 'ClashforWindows/0.20.0' })
       });
       const sct = siRes.headers.get('content-type') || '';
       if (sct.includes('json')) {
@@ -295,13 +318,33 @@ async function resolveClient(id) {
     } catch (e) {}
   }
 
-  return {
-    status: 200,
-    body: {
-      success: true, role: 'client',
-      clientData: { ...foundClient, isOnline, subLink, vlessLink, vmessLink, trojanLink, configLink, protocol, subInfo, allLinks, subProtoLinks, lastOnlineTs }
+  return { ...foundClient, isOnline, subLink, vlessLink, vmessLink, trojanLink, configLink, protocol, subInfo, allLinks, subProtoLinks, lastOnlineTs, sourceNode: sourceLabel || null };
+}
+
+// ---- Shared client lookup (mirrors /api auth 'client') ----
+// Searches the master panel first, then falls back to each configured node's
+// own panel (see PANEL_NODES) so a client added directly on a node's UI still
+// resolves to a full dashboard, exactly like a master-panel client.
+async function resolveClient(id) {
+  const cookie = await getSession();
+  if (!cookie) return { status: 500, body: { success: false, msg: 'Panel Auth Failed' } };
+
+  let clientData = null;
+  try { clientData = await resolveClientFromPanel(PANEL_URL, panelHeaders(cookie), id, null); } catch (e) {}
+
+  if (!clientData) {
+    for (const node of PANEL_NODES) {
+      const nodeUrl = String(node?.url || '').replace(/\/$/, '');
+      if (!nodeUrl || !node?.apiToken) continue;
+      try {
+        clientData = await resolveClientFromPanel(nodeUrl, { Authorization: `Bearer ${node.apiToken}` }, id, node.name || nodeUrl);
+      } catch (e) {}
+      if (clientData) break;
     }
-  };
+  }
+
+  if (!clientData) return { status: 404, body: { success: false, msg: 'User email not found' } };
+  return { status: 200, body: { success: true, role: 'client', clientData } };
 }
 
 // ---- Admin auth guard (Bearer <PANEL_PASSWORD>) ----
@@ -401,6 +444,38 @@ async function fetchInbounds(cookie) {
     method: 'GET', headers: panelHeaders(cookie, { Accept: 'application/json', Referer: `${PANEL_URL}/` })
   });
   return apiRes.json();
+}
+
+// ---- Per-panel cached fetchers for the public client SSE stream ----
+// Keyed by baseUrl so master and each node cache independently.
+async function fetchInboundsForPanel(baseUrl, authHeaders) {
+  return cachedJson(`inbounds:${baseUrl}`, CACHE_TTL_S, async () => {
+    const apiRes = await fetch(`${baseUrl}/panel/api/inbounds/list`, { headers: authHeaders });
+    return apiRes.json();
+  });
+}
+async function fetchOnlinesForPanel(baseUrl, authHeaders) {
+  return cachedJson(`onlines:${baseUrl}`, CACHE_TTL_S, async () => {
+    for (const p of ['clients/onlines', 'inbounds/onlines']) {
+      try {
+        const r = await fetch(`${baseUrl}/panel/api/${p}`, {
+          method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders), body: JSON.stringify({})
+        });
+        const j = await r.json();
+        if (j && j.success && Array.isArray(j.obj)) return j.obj;
+      } catch (e) {}
+    }
+    return [];
+  });
+}
+// All panels (master + configured nodes) to search, in order.
+function panelTargets(cookie) {
+  const list = [{ baseUrl: PANEL_URL, headers: panelHeaders(cookie) }];
+  for (const node of PANEL_NODES) {
+    const nodeUrl = String(node?.url || '').replace(/\/$/, '');
+    if (nodeUrl && node?.apiToken) list.push({ baseUrl: nodeUrl, headers: { Authorization: `Bearer ${node.apiToken}` } });
+  }
+  return list;
 }
 
 app.get('/api/expiry-alerts', requireAdmin, async (req, res) => {
@@ -553,7 +628,7 @@ app.get('/public/stream', async (req, res) => {
 
   sseSend(res, 'hello', { ok: true, intervalMs: INTERVAL_MS, cacheTtlSeconds: CACHE_TTL_S, ts: Date.now() });
 
-  const findClient = (inboundsData) => {
+  const findClientIn = (inboundsData) => {
     if (!inboundsData || !inboundsData.success || !Array.isArray(inboundsData.obj)) return null;
     let found = null;
     inboundsData.obj.forEach(inb => {
@@ -569,15 +644,32 @@ app.get('/public/stream', async (req, res) => {
     try {
       const cookie = await getSession();
       if (!cookie) { sseSend(res, 'error', { msg: 'Panel Auth Failed' }); await new Promise(r => setTimeout(r, INTERVAL_MS)); continue; }
-      const inbounds = await cachedJson('inbounds', CACHE_TTL_S, () => fetchInbounds(cookie));
-      const client = findClient(inbounds);
+
+      // Search master first, then each configured node — same fallback as
+      // the initial /api/auth lookup, so a node-only client keeps updating.
+      let client = null, clientPanel = null;
+      for (const target of panelTargets(cookie)) {
+        let inbounds;
+        try { inbounds = await fetchInboundsForPanel(target.baseUrl, target.headers); } catch (e) { continue; }
+        const found = findClientIn(inbounds);
+        if (found) { client = found; clientPanel = target; break; }
+      }
+
       if (closed) break;
       if (!client) {
         sseSend(res, 'notfound', { id, ts: Date.now() });
       } else {
+        // Authoritative online status each tick, from the SAME panel the
+        // client was found on, so the pill doesn't flip back to AWAY.
+        let isOnline = false;
+        try {
+          const onlines = await fetchOnlinesForPanel(clientPanel.baseUrl, clientPanel.headers);
+          if (Array.isArray(onlines)) isOnline = onlines.includes(client.email);
+        } catch (e) {}
+
         sseSend(res, 'client', {
           ts: Date.now(), email: client.email, down: client.down, up: client.up,
-          total: client.total, enable: client.enable, lastOnline: client.lastOnline,
+          total: client.total, enable: client.enable, isOnline, lastOnline: client.lastOnline,
           uuid: client.uuid, subId: client.subId
         });
       }

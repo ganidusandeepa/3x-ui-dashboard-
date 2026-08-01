@@ -34,6 +34,12 @@ services:
       - PANEL_USERNAME=${PANEL_USERNAME:-admin}
       - PANEL_PASSWORD=${PANEL_PASSWORD:-password}
       - PANEL_API_TOKEN=${PANEL_API_TOKEN:-}
+      # Optional: JSON array of extra node panels to search when a client isn't
+      # found on the master panel (e.g. clients added directly on a node's own
+      # UI). Each node needs its OWN API token — the master won't hand back a
+      # registered node's token via its API. Example:
+      #   PANEL_NODES=[{"name":"Node1","url":"https://node1.example.com:2053/base","apiToken":"..."}]
+      - PANEL_NODES=${PANEL_NODES:-[]}
       - PORT=8080
     ports:
       # host (127.0.0.1:8090)  ->  container (8080)
