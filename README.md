@@ -27,9 +27,39 @@ This dashboard is ready to be hosted on **Cloudflare Pages**.
      - `PANEL_PASSWORD` : (your admin pass)
 4. **Deploy**: Cloudflare will automatically detect the `functions` folder and use it as your backend!
 
+## 🐳 Coolify / Docker Deployment (Same VPS as 3x-ui)
+
+Run the dashboard on the **same VPS** as your 3x-ui panel using Coolify. The
+included `Dockerfile` and `server.js` mirror the Cloudflare Functions exactly,
+so behavior is identical — Coolify builds and runs it straight from this repo,
+no extra setup files needed.
+
+1. **Coolify → New Resource → Application → Public/Private Repository.**
+   - Select this repository and your branch.
+   - **Build Pack:** `Dockerfile` (Coolify auto-detects the `Dockerfile` in the repo root).
+2. **Environment Variables** (Coolify → your app → Environment Variables):
+   - `PANEL_URL` = `http://127.0.0.1:2053` — since the dashboard runs on the same
+     VPS, point it at the panel's local address. If both run as Docker containers,
+     use the panel's container name instead (e.g. `http://3x-ui:2053`).
+   - `PANEL_USERNAME` = your panel admin username.
+   - `PANEL_PASSWORD` = your panel admin password (also the dashboard admin token).
+   - *(optional)* `PORT` (default `8080`), `METRICS_INTERVAL_MS`, `METRICS_CACHE_TTL`.
+3. **Networking:**
+   - The container listens on **`8080`** — set this as the exposed/port mapping.
+   - Add your **Domain** (e.g. `dashboard.example.com`); Coolify issues a Let's
+     Encrypt certificate automatically.
+   - If using `PANEL_URL=http://127.0.0.1:2053`, enable **host networking** (or
+     map the host) so the container can reach the panel on localhost. Otherwise
+     put the panel and dashboard on the same Coolify/Docker network and use the
+     container name.
+4. **Deploy.** Coolify builds the image and starts it. A built-in `/healthz`
+   route backs the container healthcheck. Every push to the selected branch
+   auto-redeploys.
+
 ## 📦 Local Installation (Optional)
 1. Install dependencies: `npm install`
-2. Start: `npm start` (Runs the Node.js preview version)
+2. Set env vars: `PANEL_URL`, `PANEL_USERNAME`, `PANEL_PASSWORD` (defaults target `http://127.0.0.1:2053`).
+3. Start: `npm start` — serves the dashboard and panel proxy on port `8080` (override with `PORT`).
 
 ## 🎨 Features
 - **Zero-Latency Monitoring**: Hosted on Cloudflare's Edge.
