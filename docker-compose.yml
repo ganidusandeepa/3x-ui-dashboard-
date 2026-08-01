@@ -9,6 +9,15 @@
 # directly on a public port instead, change "127.0.0.1:8090:8080" to
 # "8090:8080" and open that port in your firewall / Oracle Security List.
 #
+# Reaching a panel on the SAME host:
+#   Inside a container, 127.0.0.1 is the CONTAINER, not the host — so the panel
+#   on the host's localhost is NOT at 127.0.0.1 from here. Use the host gateway
+#   alias below instead:
+#     PANEL_URL=http://host.docker.internal:2053/<your-base-path>
+#   The `extra_hosts` line maps that name to the Docker host. (Alternatively,
+#   uncomment `network_mode: host` AND remove the `ports:` block to share the
+#   host network directly, in which case 127.0.0.1:2053 works as-is.)
+#
 # Set PANEL_URL / PANEL_USERNAME / PANEL_PASSWORD in Coolify's Environment
 # Variables (they're injected here via the ${...} references below).
 
@@ -16,10 +25,15 @@ services:
   dashboard:
     build: .
     restart: unless-stopped
+    # network_mode: host   # <- uncomment (and remove ports: below) to use the host network
+    extra_hosts:
+      # Lets the container reach the host (where the panel runs) via this name.
+      - "host.docker.internal:host-gateway"
     environment:
-      - PANEL_URL=${PANEL_URL:-http://127.0.0.1:2053}
+      - PANEL_URL=${PANEL_URL:-http://host.docker.internal:2053}
       - PANEL_USERNAME=${PANEL_USERNAME:-admin}
       - PANEL_PASSWORD=${PANEL_PASSWORD:-password}
+      - PANEL_API_TOKEN=${PANEL_API_TOKEN:-}
       - PORT=8080
     ports:
       # host (127.0.0.1:8090)  ->  container (8080)
