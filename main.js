@@ -422,7 +422,6 @@ document.getElementById('btn-login-admin').addEventListener('click', async () =>
             adminToken = password;
             try { sessionStorage.setItem('xui_admin_token', password); } catch(e) {}
             startAdminApp();
-            try { window.FX && window.FX.celebrate(); } catch(e) {}
         } else {
             const msg = data && data.msg;
             if (msg === 'Panel Auth Failed' || msg === 'Invalid admin credentials') {
@@ -450,7 +449,7 @@ async function doClientLogin() {
             showToast(res.status === 401 ? 'Session expired. Refresh and try again.' : 'Server temporary issue. Try again.', 'error');
         } else {
             const data = await res.json();
-            if (data && data.success) { currentRole = 'client'; startClientApp(data.clientData); try { window.FX && window.FX.celebrate(); } catch(e) {} return; }
+            if (data && data.success) { currentRole = 'client'; startClientApp(data.clientData); return; }
             else {
                 const msg = data && data.msg;
                 if (msg === 'Panel Auth Failed') {
