@@ -949,7 +949,7 @@ function renderClientLinks(allLinks, subProtoLinks) {
             // Only surface the multi-server list when there's genuinely more than
             // one — a single link is already shown above with its big QR.
             if (arr.length > 1) {
-                arr.forEach((it, i) => list.appendChild(makeLinkRow(it.remark || `Server ${i + 1}`, it.link, true)));
+                arr.forEach((it, i) => list.appendChild(makeLinkRow(it.remark || `Server ${i + 1}`, it.link, false)));
                 wrap.style.display = 'block';
             } else {
                 wrap.style.display = 'none';
@@ -962,7 +962,7 @@ function renderClientLinks(allLinks, subProtoLinks) {
             slist.innerHTML = '';
             const arr = Array.isArray(subProtoLinks) ? subProtoLinks : [];
             if (arr.length) {
-                arr.forEach((lnk) => slist.appendChild(makeLinkRow(protoOf(lnk), lnk, true)));
+                arr.forEach((lnk) => slist.appendChild(makeLinkRow(protoOf(lnk), lnk, false)));
                 swrap.style.display = 'block';
             } else {
                 swrap.style.display = 'none';

@@ -301,22 +301,6 @@
                     <div style="display:flex; flex-direction:column; align-items:center; gap:16px;">
                         <canvas id="client-qr-canvas" style="border-radius:12px; background:#fff; padding:10px;"></canvas>
 
-                        <div style="width:100%;">
-                            <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:6px;">Config Link</div>
-                            <div class="copy-row">
-                                <input id="client-config-link" type="text" readonly value="" style="font-size:0.78rem; word-break:break-all;">
-                                <button class="sys-btn" onclick="copyClientConfig()"><i class="fa-solid fa-copy"></i> Copy</button>
-                            </div>
-                        </div>
-
-                        <div id="client-sub-row" style="width:100%; display:none;">
-                            <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:6px;">Subscription URL</div>
-                            <div class="copy-row">
-                                <input id="client-sub-link" type="text" readonly value="">
-                                <button class="sys-btn" onclick="copyClientSub()"><i class="fa-solid fa-copy"></i> Copy</button>
-                            </div>
-                        </div>
-
                         <div id="client-all-links" style="width:100%; display:none;">
                             <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:8px;"><i class="fa-solid fa-server"></i> All Servers</div>
                             <div id="client-all-links-list" class="links-list"></div>
@@ -728,7 +712,7 @@
         </div>
     </div>
 
-    <script src="main.js?v=37" data-cfasync="false"></script>
+    <script src="main.js?v=38" data-cfasync="false"></script>
     <script src="fx.js?v=1" data-cfasync="false"></script>
 </body>
 </html>
