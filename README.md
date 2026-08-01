@@ -53,8 +53,29 @@ no extra setup files needed.
      put the panel and dashboard on the same Coolify/Docker network and use the
      container name.
 4. **Deploy.** Coolify builds the image and starts it. A built-in `/healthz`
-   route backs the container healthcheck. Every push to the selected branch
-   auto-redeploys.
+   route is available for Coolify's Health Check setting. Every push to the
+   selected branch auto-redeploys.
+
+### If ports 80/443 are already taken (run on a custom port, no proxy)
+
+If your 3x-ui panel (or another app) already owns `80`/`443`, Coolify's built-in
+proxy can't route a domain to the dashboard. In that case, skip the proxy and
+publish the container on a **direct custom port** instead:
+
+1. **Coolify → your app → Configuration → Network → "Ports Mappings"**
+   - Set `8090:8080` (host `8090` → container `8080`). Pick any free, non-common
+     host port; confirm it's free first: `sudo ss -tulpn | grep :8090`.
+   - Leave the **Domains** field empty (you're not using the proxy).
+2. **Open the port in your firewall.** On Oracle Cloud (and most VPS) the port is
+   blocked by default at two layers:
+   - **Cloud Security List / firewall:** add an Ingress rule allowing TCP `8090`
+     from `0.0.0.0/0` (Oracle Cloud → VCN → Security Lists).
+   - **Host iptables:** `sudo iptables -I INPUT -p tcp --dport 8090 -j ACCEPT`
+     then persist (`sudo netfilter-persistent save`, or use `ufw allow 8090/tcp`).
+3. **Redeploy**, then open `http://YOUR_VPS_IP:8090`.
+
+The dashboard's env vars stay the same (`PANEL_URL`, `PANEL_USERNAME`,
+`PANEL_PASSWORD`) — only the external port changes.
 
 ## 📦 Local Installation (Optional)
 1. Install dependencies: `npm install`
