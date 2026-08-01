@@ -1717,3 +1717,161 @@ body.theme-light ::selection { background: rgba(0,0,0,0.12); }
 @media (prefers-reduced-motion: reduce) {
     .hdr-btn.loading > i { animation: none; }
 }
+
+/* ======================================================================
+   Interaction polish — pure CSS/GPU, zero added payload.
+   Rules:
+     • transform/opacity/box-shadow only (no layout thrash)
+     • hover effects gated on (hover: hover) so they don't stick on touch
+     • cards use shadow/glow NOT transform — vanilla-tilt owns their inline
+       transform, so a CSS transform here would simply never apply
+     • everything collapses under prefers-reduced-motion
+   ====================================================================== */
+
+/* --- Cards: depth + a light sweep on hover ------------------------------ */
+@media (hover: hover) {
+    .card {
+        transition: box-shadow var(--m3-std-fast), border-color var(--m3-effects), background-color var(--m3-effects);
+    }
+    .card:hover {
+        box-shadow: 0 10px 34px -14px rgba(0, 0, 0, 0.75), 0 0 0 1px var(--border-hi);
+    }
+    /* Slow diagonal sheen across the hero card */
+    .data-card-hero { position: relative; overflow: hidden; }
+    .data-card-hero::after {
+        content: "";
+        position: absolute;
+        top: -60%; left: -160%;
+        width: 60%; height: 220%;
+        background: linear-gradient(100deg, transparent, rgba(255,255,255,0.07), transparent);
+        transform: rotate(12deg);
+        pointer-events: none;
+        transition: left 0.75s cubic-bezier(0.22, 0.61, 0.36, 1);
+    }
+    .data-card-hero:hover::after { left: 160%; }
+}
+
+/* --- Account-detail rows: reveal an accent rail on hover ---------------- */
+.info-row {
+    position: relative;
+    border-radius: 8px;
+    padding-inline: 8px;
+    margin-inline: -8px;
+    transition: background-color var(--m3-effects);
+}
+.info-row::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 6px; bottom: 6px;
+    width: 2px; border-radius: 2px;
+    background: var(--accent);
+    transform: scaleY(0);
+    transform-origin: 50% 50%;
+    opacity: 0;
+    transition: transform var(--m3-expressive-fast), opacity var(--m3-effects);
+}
+@media (hover: hover) {
+    .info-row:hover { background: rgba(255, 255, 255, 0.035); }
+    .info-row:hover::before { transform: scaleY(1); opacity: 0.8; }
+    .info-row strong { transition: transform var(--m3-std-fast); }
+    .info-row:hover strong { transform: translateX(-2px); }
+}
+body.theme-light .info-row:hover { background: rgba(0, 0, 0, 0.03); }
+
+/* --- Server / subscription link rows ----------------------------------- */
+.link-item {
+    position: relative;
+    overflow: hidden;
+    transition: transform var(--m3-expressive-fast), border-color var(--m3-effects), background-color var(--m3-effects);
+}
+.link-item::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: linear-gradient(180deg, var(--blue), var(--accent));
+    transform: scaleY(0);
+    transition: transform var(--m3-expressive-fast);
+}
+@media (hover: hover) {
+    .link-item:hover {
+        transform: translateX(3px);
+        border-color: var(--border-hi);
+        background: rgba(255, 255, 255, 0.06);
+    }
+    .link-item:hover::before { transform: scaleY(1); }
+    .link-item:hover .link-item-name { letter-spacing: 0.06em; }
+}
+.link-item-name { transition: letter-spacing var(--m3-std-fast); }
+
+/* Staggered entrance for dynamically-rendered link rows */
+@media (prefers-reduced-motion: no-preference) {
+    .links-list .link-item {
+        animation: fx-row-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .links-list .link-item:nth-child(1) { animation-delay: 0.02s }
+    .links-list .link-item:nth-child(2) { animation-delay: 0.07s }
+    .links-list .link-item:nth-child(3) { animation-delay: 0.12s }
+    .links-list .link-item:nth-child(4) { animation-delay: 0.17s }
+    .links-list .link-item:nth-child(n+5) { animation-delay: 0.22s }
+}
+@keyframes fx-row-in {
+    from { opacity: 0; transform: translateY(10px) scale(0.985); }
+    to   { opacity: 1; transform: none; }
+}
+
+/* --- Download/upload stats: lift the number on hover -------------------- */
+@media (hover: hover) {
+    .split-item .val { display: inline-block; transition: transform var(--m3-expressive-fast); }
+    .split-item:hover .val { transform: translateY(-2px) scale(1.04); }
+}
+
+/* --- Buttons: nudge the icon on hover ----------------------------------- */
+@media (hover: hover) {
+    .sys-btn > i { transition: transform var(--m3-expressive-fast); }
+    .sys-btn:hover > i { transform: scale(1.14); }
+    .hdr-btn > i { transition: transform var(--m3-expressive-fast); }
+    .hdr-btn:hover > i { transform: rotate(-8deg) scale(1.1); }
+}
+
+/* Copy confirmation — flash the button green briefly (JS adds .copy-success) */
+.sys-btn.copy-success {
+    border-color: var(--good) !important;
+    color: var(--good) !important;
+}
+
+/* --- QR: gentle float so it reads as "live", and lift on hover ---------- */
+@media (prefers-reduced-motion: no-preference) {
+    #client-qr-canvas { animation: fx-float 5.5s ease-in-out infinite; }
+}
+@keyframes fx-float {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-4px); }
+}
+@media (hover: hover) {
+    #client-qr-canvas { transition: transform var(--m3-expressive-default), box-shadow var(--m3-std-fast); }
+    #client-qr-canvas:hover {
+        animation-play-state: paused;
+        transform: scale(1.05);
+        box-shadow: 0 14px 40px -12px rgba(0, 0, 0, 0.6);
+    }
+}
+
+/* --- Status pill: subtle breathing when connected ----------------------- */
+@media (prefers-reduced-motion: no-preference) {
+    #plan-status-pill.online { animation: fx-breathe 3.2s ease-in-out infinite; }
+}
+@keyframes fx-breathe {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.0); }
+    50%      { box-shadow: 0 0 14px -2px rgba(52, 211, 153, 0.45); }
+}
+
+/* --- Respect reduced motion across everything above --------------------- */
+@media (prefers-reduced-motion: reduce) {
+    .card, .link-item, .info-row, .info-row::before, .link-item::before,
+    .split-item .val, .sys-btn > i, .hdr-btn > i, #client-qr-canvas {
+        transition: none !important;
+        animation: none !important;
+    }
+    .data-card-hero::after { display: none; }
+}
