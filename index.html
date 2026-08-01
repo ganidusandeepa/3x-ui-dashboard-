@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=25">
+    <link rel="stylesheet" href="styles.css?v=26">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" data-cfasync="false"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js" data-cfasync="false"></script>
@@ -315,6 +315,16 @@
                                 <input id="client-sub-link" type="text" readonly value="">
                                 <button class="sys-btn" onclick="copyClientSub()"><i class="fa-solid fa-copy"></i> Copy</button>
                             </div>
+                        </div>
+
+                        <div id="client-all-links" style="width:100%; display:none;">
+                            <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:8px;"><i class="fa-solid fa-server"></i> All Servers</div>
+                            <div id="client-all-links-list" class="links-list"></div>
+                        </div>
+
+                        <div id="client-sub-links" style="width:100%; display:none;">
+                            <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:8px;"><i class="fa-solid fa-rss"></i> Subscription Links</div>
+                            <div id="client-sub-links-list" class="links-list"></div>
                         </div>
                     </div>
                 </div>
@@ -718,7 +728,7 @@
         </div>
     </div>
 
-    <script src="main.js?v=35" data-cfasync="false"></script>
+    <script src="main.js?v=36" data-cfasync="false"></script>
     <script src="fx.js?v=1" data-cfasync="false"></script>
 </body>
 </html>

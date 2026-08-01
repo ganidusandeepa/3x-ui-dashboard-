@@ -1575,3 +1575,30 @@ body.theme-light ::selection { background: rgba(0,0,0,0.12); }
 @media (prefers-reduced-motion: reduce) {
     .fx-skeleton { animation: none; color: inherit !important; background: none; }
 }
+
+/* ======================================================================
+   Multi-link lists — "All Servers" + "Subscription Links" (client view)
+   ====================================================================== */
+.links-list { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.link-item {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 10px 12px;
+}
+.link-item-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.link-item-name {
+    font-size: 0.82rem; font-weight: 600; letter-spacing: 0.02em;
+    color: var(--accent, #7c5cff); text-transform: uppercase;
+}
+.link-item-acts { display: flex; gap: 6px; flex-shrink: 0; }
+.sys-btn.sm { padding: 6px 10px; font-size: 0.8rem; min-width: auto; }
+.link-item-url {
+    margin-top: 6px; font-size: 0.72rem; color: var(--text-dim, #9aa);
+    word-break: break-all; font-family: 'JetBrains Mono', monospace;
+}
+.link-qr {
+    margin-top: 10px; display: flex; justify-content: center; align-self: center;
+    background: #fff; border-radius: 12px; padding: 10px;
+}
+.link-qr canvas { display: block; border-radius: 6px; }

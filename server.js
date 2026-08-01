@@ -126,6 +126,34 @@ async function resolveClient(id) {
     }
   } catch (e) {}
 
+  // New client-scoped extras: all config links, all subscription links, last-seen.
+  let allLinks = [], subProtoLinks = [], lastOnlineTs = 0;
+  const normLinks = (obj) => Array.isArray(obj) ? obj.map(x => {
+    if (typeof x === 'string') return { remark: '', link: x };
+    if (x && typeof x === 'object') return { remark: x.remark || x.name || x.tag || '', link: x.link || x.url || x.uri || '' };
+    return null;
+  }).filter(x => x && x.link) : [];
+  try {
+    const r = await fetch(`${PANEL_URL}/panel/api/clients/links/${encodeURIComponent(foundClient.email)}`, { headers: { Cookie: cookie, Accept: 'application/json' } });
+    const j = await r.json(); if (j && j.success) allLinks = normLinks(j.obj);
+  } catch (e) {}
+  try {
+    if (foundClient.subId) {
+      const r = await fetch(`${PANEL_URL}/panel/api/clients/subLinks/${encodeURIComponent(foundClient.subId)}`, { headers: { Cookie: cookie, Accept: 'application/json' } });
+      const j = await r.json();
+      if (j && j.success && Array.isArray(j.obj)) subProtoLinks = j.obj.map(x => typeof x === 'string' ? x : (x && (x.link || x.url || x.uri))).filter(Boolean);
+    }
+  } catch (e) {}
+  try {
+    const r = await fetch(`${PANEL_URL}/panel/api/clients/lastOnline`, { method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+    const j = await r.json();
+    if (j && j.success && j.obj && typeof j.obj === 'object') {
+      let ts = Number(j.obj[foundClient.email] || 0);
+      if (ts > 0 && ts < 1e12) ts *= 1000;
+      lastOnlineTs = ts || 0;
+    }
+  } catch (e) {}
+
   let subLink = null, vlessLink = null, vmessLink = null, trojanLink = null, protocol = 'vless';
   try {
     const host = new URL(PANEL_URL).hostname;
@@ -227,7 +255,7 @@ async function resolveClient(id) {
     status: 200,
     body: {
       success: true, role: 'client',
-      clientData: { ...foundClient, isOnline, ips, subLink, vlessLink, vmessLink, trojanLink, configLink, protocol, subInfo }
+      clientData: { ...foundClient, isOnline, ips, subLink, vlessLink, vmessLink, trojanLink, configLink, protocol, subInfo, allLinks, subProtoLinks, lastOnlineTs }
     }
   };
 }

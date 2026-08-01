@@ -657,6 +657,18 @@ function applyClientDataToUI(client) {
     const remainDesc = limit === 0 ? "Unlimited GB" : `${limit.toFixed(2)} GB`;
 
     const fmtTime = (ms) => { const n = Number(ms); if (!Number.isFinite(n) || n <= 0) return '-'; return new Date(n).toLocaleString(); };
+    const fmtLastSeen = (ms, online) => {
+        if (online === true) return 'Online now';
+        const n = Number(ms); if (!Number.isFinite(n) || n <= 0) return '-';
+        const diff = Date.now() - n;
+        if (diff < 0) return new Date(n).toLocaleString();
+        const s = Math.floor(diff / 1000);
+        if (s < 60) return 'just now';
+        const m = Math.floor(s / 60); if (m < 60) return `${m} min ago`;
+        const h = Math.floor(m / 60); if (h < 24) return `${h} hr${h > 1 ? 's' : ''} ago`;
+        const d = Math.floor(h / 24); if (d < 30) return `${d} day${d > 1 ? 's' : ''} ago`;
+        return new Date(n).toLocaleDateString();
+    };
 
     try {
         if (client.email) {
@@ -666,7 +678,12 @@ function applyClientDataToUI(client) {
         document.getElementById('user-email').textContent = client.email || '-';
         if (client.uuid !== undefined) document.getElementById('user-uuid').textContent = client.uuid || '-';
         if (client.subId !== undefined) document.getElementById('user-subid').textContent = client.subId || '-';
-        if (client.lastOnline !== undefined) document.getElementById('user-last-online').textContent = fmtTime(client.lastOnline);
+        if (client.lastOnlineTs !== undefined || client.lastOnline !== undefined) {
+            const ts = Number(client.lastOnlineTs) > 0 ? Number(client.lastOnlineTs)
+                     : (client.lastOnline !== undefined ? Number(client.lastOnline) : 0);
+            const el = document.getElementById('user-last-online');
+            if (el) el.textContent = fmtLastSeen(ts, client.isOnline);
+        }
         if (client.ips !== undefined) document.getElementById('user-ips').textContent = Array.isArray(client.ips) ? (client.ips.join(', ') || 'None') : '-';
     } catch(e) {}
 
@@ -831,11 +848,106 @@ function applyClientDataToUI(client) {
     // Expiry countdown
     try { startExpiryCountdown(client.expiryTime ?? client.expiry ?? 0); } catch(e) {}
 
-    // Config link + QR (only update if we have a link and not already showing a non-stale link)
+    // Config link + QR (only update if we have a link; SSE ticks omit these,
+    // so skip rather than hide the card).
     try {
         const configLink = client.configLink || client.vlessLink || client.vmessLink || client.trojanLink || null;
         const subLink = client.subLink || null;
-        showClientConfig(configLink, subLink);
+        if (configLink) showClientConfig(configLink, subLink);
+        if (client.allLinks !== undefined || client.subProtoLinks !== undefined) {
+            renderClientLinks(client.allLinks, client.subProtoLinks);
+        }
+    } catch(e) {}
+}
+
+// Protocol label from a connection URL (e.g. "vless://..." -> "VLESS").
+function protoOf(link) {
+    try { return (String(link).split('://')[0] || 'link').toUpperCase(); } catch(e) { return 'LINK'; }
+}
+
+// Build one link row: label + copy + toggleable QR + the raw URL.
+function makeLinkRow(label, link, withQR) {
+    const row = document.createElement('div');
+    row.className = 'link-item';
+
+    const head = document.createElement('div');
+    head.className = 'link-item-head';
+    const name = document.createElement('span');
+    name.className = 'link-item-name';
+    name.textContent = label || protoOf(link);
+    head.appendChild(name);
+
+    const acts = document.createElement('div');
+    acts.className = 'link-item-acts';
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'sys-btn sm';
+    copyBtn.innerHTML = '<i class="fa-solid fa-copy"></i>';
+    copyBtn.title = 'Copy';
+    copyBtn.addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(link); showToast('Copied'); flashCopyBtn(copyBtn); }
+        catch(e) { showToast('Copy failed', 'error'); }
+    });
+    acts.appendChild(copyBtn);
+
+    let qrWrap = null;
+    if (withQR && typeof QRious !== 'undefined') {
+        const qrBtn = document.createElement('button');
+        qrBtn.className = 'sys-btn sm';
+        qrBtn.innerHTML = '<i class="fa-solid fa-qrcode"></i>';
+        qrBtn.title = 'Show QR';
+        acts.appendChild(qrBtn);
+        qrWrap = document.createElement('div');
+        qrWrap.className = 'link-qr';
+        qrWrap.style.display = 'none';
+        const c = document.createElement('canvas');
+        qrWrap.appendChild(c);
+        qrBtn.addEventListener('click', () => {
+            const show = qrWrap.style.display === 'none';
+            qrWrap.style.display = show ? 'flex' : 'none';
+            if (show && !qrWrap.__done) { generateQR(link, c, 168); qrWrap.__done = true; }
+        });
+    }
+    head.appendChild(acts);
+    row.appendChild(head);
+
+    const urlEl = document.createElement('div');
+    urlEl.className = 'link-item-url';
+    urlEl.textContent = link;
+    row.appendChild(urlEl);
+    if (qrWrap) row.appendChild(qrWrap);
+    return row;
+}
+
+// Render the "All Servers" and "Subscription Links" lists from the panel data.
+function renderClientLinks(allLinks, subProtoLinks) {
+    try {
+        const wrap = document.getElementById('client-all-links');
+        const list = document.getElementById('client-all-links-list');
+        if (wrap && list) {
+            list.innerHTML = '';
+            const arr = Array.isArray(allLinks) ? allLinks : [];
+            // Only surface the multi-server list when there's genuinely more than
+            // one — a single link is already shown above with its big QR.
+            if (arr.length > 1) {
+                arr.forEach((it, i) => list.appendChild(makeLinkRow(it.remark || `Server ${i + 1}`, it.link, true)));
+                wrap.style.display = 'block';
+            } else {
+                wrap.style.display = 'none';
+            }
+        }
+
+        const swrap = document.getElementById('client-sub-links');
+        const slist = document.getElementById('client-sub-links-list');
+        if (swrap && slist) {
+            slist.innerHTML = '';
+            const arr = Array.isArray(subProtoLinks) ? subProtoLinks : [];
+            if (arr.length) {
+                arr.forEach((lnk) => slist.appendChild(makeLinkRow(protoOf(lnk), lnk, true)));
+                swrap.style.display = 'block';
+            } else {
+                swrap.style.display = 'none';
+            }
+        }
     } catch(e) {}
 }
 

@@ -188,6 +188,49 @@ export async function onRequest(context) {
               }
             } catch (e) {}
 
+            // New client-scoped extras: every config link across inbounds, all
+            // subscription protocol links, and an accurate last-seen timestamp.
+            let allLinks = [];
+            let subProtoLinks = [];
+            let lastOnlineTs = 0;
+            const getHdr = PANEL_API_TOKEN
+              ? { "Authorization": `Bearer ${PANEL_API_TOKEN}`, "Accept": "application/json" }
+              : { "Cookie": cookie, "Accept": "application/json" };
+            const postHdr = PANEL_API_TOKEN
+              ? { "Authorization": `Bearer ${PANEL_API_TOKEN}`, "Content-Type": "application/json" }
+              : { "Cookie": cookie, "Content-Type": "application/json" };
+            const normLinks = (obj) => Array.isArray(obj) ? obj.map(x => {
+              if (typeof x === 'string') return { remark: '', link: x };
+              if (x && typeof x === 'object') return { remark: x.remark || x.name || x.tag || '', link: x.link || x.url || x.uri || '' };
+              return null;
+            }).filter(x => x && x.link) : [];
+
+            try {
+              const r = await fetch(`${PANEL_URL}/panel/api/clients/links/${encodeURIComponent(foundClient.email)}`, { headers: getHdr });
+              const j = await r.json();
+              if (j && j.success) allLinks = normLinks(j.obj);
+            } catch (e) {}
+
+            try {
+              if (foundClient.subId) {
+                const r = await fetch(`${PANEL_URL}/panel/api/clients/subLinks/${encodeURIComponent(foundClient.subId)}`, { headers: getHdr });
+                const j = await r.json();
+                if (j && j.success && Array.isArray(j.obj)) {
+                  subProtoLinks = j.obj.map(x => typeof x === 'string' ? x : (x && (x.link || x.url || x.uri))).filter(Boolean);
+                }
+              }
+            } catch (e) {}
+
+            try {
+              const r = await fetch(`${PANEL_URL}/panel/api/clients/lastOnline`, { method: 'POST', headers: postHdr, body: JSON.stringify({}) });
+              const j = await r.json();
+              if (j && j.success && j.obj && typeof j.obj === 'object') {
+                let ts = Number(j.obj[foundClient.email] || 0);
+                if (ts > 0 && ts < 1e12) ts *= 1000; // seconds -> ms
+                lastOnlineTs = ts || 0;
+              }
+            } catch (e) {}
+
             let subLink = null;
             let vlessLink = null;
             let vmessLink = null;
@@ -300,7 +343,7 @@ export async function onRequest(context) {
             return new Response(JSON.stringify({
               success: true,
               role: 'client',
-              clientData: { ...foundClient, isOnline, ips, subLink, vlessLink, vmessLink, trojanLink, configLink, protocol, subInfo }
+              clientData: { ...foundClient, isOnline, ips, subLink, vlessLink, vmessLink, trojanLink, configLink, protocol, subInfo, allLinks, subProtoLinks, lastOnlineTs }
             }), {
               headers: { "Content-Type": "application/json" }
             });
