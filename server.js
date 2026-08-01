@@ -19,8 +19,21 @@
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
+const compression = require('compression');
+const { Agent, setGlobalDispatcher } = require('undici');
+
+// Reuse HTTP connections to the panel (and nodes) instead of a fresh TCP/TLS
+// handshake per request. A single client login can make 6+ calls to the same
+// panel host back to back — keep-alive turns those into one warm connection.
+setGlobalDispatcher(new Agent({
+  keepAliveTimeout: 30_000,
+  keepAliveMaxTimeout: 60_000,
+  connections: 32
+}));
 
 const app = express();
+// Gzip/brotli-negotiated compression for every response (HTML/JS/CSS/JSON).
+app.use(compression());
 
 const PANEL_URL_RAW = process.env.PANEL_URL || 'http://127.0.0.1:2053';
 const PANEL_URL = PANEL_URL_RAW.replace(/\/$/, '');
@@ -42,8 +55,11 @@ try {
     if (Array.isArray(parsed)) PANEL_NODES = parsed;
   }
 } catch (e) { PANEL_NODES = []; }
-const INTERVAL_MS = Math.max(1000, Number(process.env.METRICS_INTERVAL_MS || 3000));
-const CACHE_TTL_S = Number(process.env.METRICS_CACHE_TTL || 3);
+// Self-hosted on the same VPS as the panel = no Cloudflare subrequest/rate
+// limits to work around, so we can poll tighter for a near-real-time feel.
+// Override with env vars if you want to ease off (e.g. many concurrent viewers).
+const INTERVAL_MS = Math.max(500, Number(process.env.METRICS_INTERVAL_MS || 1500));
+const CACHE_TTL_S = Number(process.env.METRICS_CACHE_TTL || 1);
 
 // ---- Session cache (18 min), mirrors the Worker module-level cache ----
 let _session = { cookie: null, ts: 0 };
@@ -55,12 +71,6 @@ function parseMaybe(v, fallback) {
   if (typeof v === 'object') return v;
   try { return JSON.parse(v); } catch (e) { return fallback || {}; }
 }
-function normIp(x) {
-  if (typeof x === 'string') return x;
-  if (x && typeof x === 'object') return x.ip || x.address || x.clientIp || x.remote || '';
-  return '';
-}
-
 // Maintenance mode — when true, admin sign-in is blocked. Flip to false (and in
 // functions/api/[[path]].js + main.js) to re-enable admin access.
 const ADMIN_MAINTENANCE = true;
@@ -159,64 +169,68 @@ async function resolveClientFromPanel(baseUrl, authHeaders, id, sourceLabel) {
   });
   if (!foundClient) return null;
 
-  let isOnline = null;
-  let ips = [];
-  // 3x-ui moved these to /panel/api/clients/*; fall back to legacy /panel/api/inbounds/* on older panels.
-  try {
+  // These five lookups are all independent of each other — fire them
+  // concurrently instead of sequentially. On the same VPS as the panel this
+  // turns ~5 round trips into effectively 1 (the slowest of the five).
+  const normLinks = (obj) => Array.isArray(obj) ? obj.map(x => {
+    if (typeof x === 'string') return { remark: '', link: x };
+    if (x && typeof x === 'object') return { remark: x.remark || x.name || x.tag || '', link: x.link || x.url || x.uri || '' };
+    return null;
+  }).filter(x => x && x.link) : [];
+
+  const findOnline = async () => {
+    // 3x-ui moved this to /panel/api/clients/*; fall back to legacy /panel/api/inbounds/* on older panels.
     for (const p of ['clients/onlines', 'inbounds/onlines']) {
       try {
         const onRes = await fetch(`${baseUrl}/panel/api/${p}`, {
           method: 'POST', headers: h({ 'Content-Type': 'application/json' }), body: JSON.stringify({})
         });
         const onData = await onRes.json();
-        if (onData && onData.success && Array.isArray(onData.obj)) { isOnline = onData.obj.includes(foundClient.email); break; }
+        if (onData && onData.success && Array.isArray(onData.obj)) return onData.obj.includes(foundClient.email);
       } catch (e) {}
     }
-  } catch (e) {}
-
-  try {
-    const em = encodeURIComponent(foundClient.email);
-    for (const p of [`clients/ips/${em}`, `inbounds/clientIps/${em}`]) {
-      try {
-        const ipRes = await fetch(`${baseUrl}/panel/api/${p}`, {
-          method: 'POST', headers: h({ 'Content-Type': 'application/json' }), body: JSON.stringify({})
-        });
-        const ipData = await ipRes.json();
-        if (ipData && ipData.success) {
-          if (Array.isArray(ipData.obj)) { ips = ipData.obj.map(normIp).filter(Boolean); break; }
-          if (typeof ipData.obj === 'string' && ipData.obj && !/no ip/i.test(ipData.obj)) { ips = ipData.obj.split(/[,\s]+/).filter(Boolean); break; }
-        }
-      } catch (e) {}
-    }
-  } catch (e) {}
-
-  // New client-scoped extras: all config links, all subscription links, last-seen.
-  let allLinks = [], subProtoLinks = [], lastOnlineTs = 0;
-  const normLinks = (obj) => Array.isArray(obj) ? obj.map(x => {
-    if (typeof x === 'string') return { remark: '', link: x };
-    if (x && typeof x === 'object') return { remark: x.remark || x.name || x.tag || '', link: x.link || x.url || x.uri || '' };
     return null;
-  }).filter(x => x && x.link) : [];
-  try {
-    const r = await fetch(`${baseUrl}/panel/api/clients/links/${encodeURIComponent(foundClient.email)}`, { headers: h({ Accept: 'application/json' }) });
-    const j = await r.json(); if (j && j.success) allLinks = normLinks(j.obj);
-  } catch (e) {}
-  try {
-    if (foundClient.subId) {
+  };
+
+  // Note: client IPs are deliberately NOT fetched here — they were removed
+  // from the client-facing response for privacy, so fetching them would just
+  // be a wasted round trip on every login.
+
+  const findAllLinks = async () => {
+    try {
+      const r = await fetch(`${baseUrl}/panel/api/clients/links/${encodeURIComponent(foundClient.email)}`, { headers: h({ Accept: 'application/json' }) });
+      const j = await r.json();
+      if (j && j.success) return normLinks(j.obj);
+    } catch (e) {}
+    return [];
+  };
+
+  const findSubProtoLinks = async () => {
+    if (!foundClient.subId) return [];
+    try {
       const r = await fetch(`${baseUrl}/panel/api/clients/subLinks/${encodeURIComponent(foundClient.subId)}`, { headers: h({ Accept: 'application/json' }) });
       const j = await r.json();
-      if (j && j.success && Array.isArray(j.obj)) subProtoLinks = j.obj.map(x => typeof x === 'string' ? x : (x && (x.link || x.url || x.uri))).filter(Boolean);
-    }
-  } catch (e) {}
-  try {
-    const r = await fetch(`${baseUrl}/panel/api/clients/lastOnline`, { method: 'POST', headers: h({ 'Content-Type': 'application/json' }), body: JSON.stringify({}) });
-    const j = await r.json();
-    if (j && j.success && j.obj && typeof j.obj === 'object') {
-      let ts = Number(j.obj[foundClient.email] || 0);
-      if (ts > 0 && ts < 1e12) ts *= 1000;
-      lastOnlineTs = ts || 0;
-    }
-  } catch (e) {}
+      if (j && j.success && Array.isArray(j.obj)) return j.obj.map(x => typeof x === 'string' ? x : (x && (x.link || x.url || x.uri))).filter(Boolean);
+    } catch (e) {}
+    return [];
+  };
+
+  const findLastOnline = async () => {
+    try {
+      const r = await fetch(`${baseUrl}/panel/api/clients/lastOnline`, { method: 'POST', headers: h({ 'Content-Type': 'application/json' }), body: JSON.stringify({}) });
+      const j = await r.json();
+      if (j && j.success && j.obj && typeof j.obj === 'object') {
+        let ts = Number(j.obj[foundClient.email] || 0);
+        if (ts > 0 && ts < 1e12) ts *= 1000;
+        return ts || 0;
+      }
+    } catch (e) {}
+    return 0;
+  };
+
+  const [isOnline, allLinks, subProtoLinks, lastOnlineTs] = await Promise.all([
+    findOnline(), findAllLinks(), findSubProtoLinks(), findLastOnline()
+  ]);
 
   // Config links point at THIS panel's own host — for a node-resolved client
   // that's the node's address (where its Xray inbound actually lives), not
@@ -329,18 +343,26 @@ async function resolveClient(id) {
   const cookie = await getSession();
   if (!cookie) return { status: 500, body: { success: false, msg: 'Panel Auth Failed' } };
 
-  let clientData = null;
-  try { clientData = await resolveClientFromPanel(PANEL_URL, panelHeaders(cookie), id, null); } catch (e) {}
-
-  if (!clientData) {
-    for (const node of PANEL_NODES) {
-      const nodeUrl = String(node?.url || '').replace(/\/$/, '');
-      if (!nodeUrl || !node?.apiToken) continue;
-      try {
-        clientData = await resolveClientFromPanel(nodeUrl, { Authorization: `Bearer ${node.apiToken}` }, id, node.name || nodeUrl);
-      } catch (e) {}
-      if (clientData) break;
+  // Search the master panel and every configured node CONCURRENTLY — same VPS,
+  // no rate limits to respect, so the worst case (client only on the last
+  // configured node) is one round-trip-chain instead of N sequential ones.
+  // Priority (master wins over nodes, nodes in configured order) is still
+  // respected once all results are in.
+  const targets = [{ baseUrl: PANEL_URL, headers: panelHeaders(cookie), label: null }];
+  for (const node of PANEL_NODES) {
+    const nodeUrl = String(node?.url || '').replace(/\/$/, '');
+    if (nodeUrl && node?.apiToken) {
+      targets.push({ baseUrl: nodeUrl, headers: { Authorization: `Bearer ${node.apiToken}` }, label: node.name || nodeUrl });
     }
+  }
+
+  const results = await Promise.allSettled(
+    targets.map(t => resolveClientFromPanel(t.baseUrl, t.headers, id, t.label))
+  );
+
+  let clientData = null;
+  for (const r of results) {
+    if (r.status === 'fulfilled' && r.value) { clientData = r.value; break; }
   }
 
   if (!clientData) return { status: 404, body: { success: false, msg: 'User email not found' } };
@@ -439,11 +461,17 @@ app.all('/api/xui/*', requireAdmin, async (req, res) => {
 });
 
 // ============================ Aggregated admin endpoints ============================
-async function fetchInbounds(cookie) {
+async function fetchInboundsRaw(cookie) {
   const apiRes = await fetch(`${PANEL_URL}/panel/api/inbounds/list`, {
     method: 'GET', headers: panelHeaders(cookie, { Accept: 'application/json', Referer: `${PANEL_URL}/` })
   });
   return apiRes.json();
+}
+// Cached: /api/expiry-alerts, /api/clients and /api/inbounds all pull the same
+// master inbounds/list — a page load hits all three within milliseconds, so
+// share one upstream fetch instead of three.
+function fetchInbounds(cookie) {
+  return cachedJson('admin-inbounds', CACHE_TTL_S, () => fetchInboundsRaw(cookie));
 }
 
 // ---- Per-panel cached fetchers for the public client SSE stream ----
@@ -548,14 +576,9 @@ app.get('/api/history', requireAdmin, (req, res) => {
 
 app.get('/api/status', requireAdmin, async (req, res) => {
   try {
-    const cookie = await getSession();
-    if (!cookie) return res.status(401).json({ success: false, msg: 'Panel Auth Failed' });
-    const apiRes = await fetch(`${PANEL_URL}/panel/api/server/status`, {
-      method: 'GET', headers: panelHeaders(cookie, { Accept: 'application/json', Referer: `${PANEL_URL}/` })
-    });
-    const data = await apiRes.json();
+    const data = await fetchStatusCached();
     if (data && data.obj) pushHistory(data.obj);
-    res.json({ success: true, obj: data.obj || data });
+    res.json(data);
   } catch (err) {
     _session = { cookie: null, ts: 0 };
     res.status(500).json({ success: false, error: err.message });
@@ -589,22 +612,25 @@ function sseSend(res, event, dataObj) {
   res.write(`event: ${event}\ndata: ${payload}\n\n`);
 }
 
+// Shared with the plain GET /api/status route below — a page load fires both
+// (once for the initial numbers, once to open the stream) within milliseconds
+// of each other, so they share one upstream fetch via the 'status' cache key.
+const fetchStatusCached = () => cachedJson('status', CACHE_TTL_S, async () => {
+  const cookie = await getSession();
+  if (!cookie) throw new Error('Panel Auth Failed');
+  const apiRes = await fetch(`${PANEL_URL}/panel/api/server/status`, {
+    method: 'GET', headers: panelHeaders(cookie, { Accept: 'application/json', Referer: `${PANEL_URL}/` })
+  });
+  const data = await apiRes.json();
+  return { success: true, obj: data.obj || data };
+});
+
 app.get('/api/stream', requireAdmin, async (req, res) => {
   sseInit(res);
   let closed = false;
   req.on('close', () => { closed = true; });
 
   sseSend(res, 'hello', { ok: true, intervalMs: INTERVAL_MS, cacheTtlSeconds: CACHE_TTL_S, ts: Date.now() });
-
-  const fetchStatusCached = () => cachedJson('status', CACHE_TTL_S, async () => {
-    const cookie = await getSession();
-    if (!cookie) throw new Error('Panel Auth Failed');
-    const apiRes = await fetch(`${PANEL_URL}/panel/api/server/status`, {
-      method: 'GET', headers: panelHeaders(cookie, { Accept: 'application/json', Referer: `${PANEL_URL}/` })
-    });
-    const data = await apiRes.json();
-    return { success: true, obj: data.obj || data };
-  });
 
   while (!closed) {
     let status;
@@ -645,14 +671,20 @@ app.get('/public/stream', async (req, res) => {
       const cookie = await getSession();
       if (!cookie) { sseSend(res, 'error', { msg: 'Panel Auth Failed' }); await new Promise(r => setTimeout(r, INTERVAL_MS)); continue; }
 
-      // Search master first, then each configured node — same fallback as
-      // the initial /api/auth lookup, so a node-only client keeps updating.
+      // Search master and every configured node CONCURRENTLY — same fallback
+      // priority as the initial /api/auth lookup (master wins), but run in
+      // parallel so a node-only client isn't paying for N sequential chains
+      // every single tick.
+      const targets = panelTargets(cookie);
+      const invResults = await Promise.allSettled(
+        targets.map(t => fetchInboundsForPanel(t.baseUrl, t.headers).then(inbounds => ({ target: t, inbounds })))
+      );
+
       let client = null, clientPanel = null;
-      for (const target of panelTargets(cookie)) {
-        let inbounds;
-        try { inbounds = await fetchInboundsForPanel(target.baseUrl, target.headers); } catch (e) { continue; }
-        const found = findClientIn(inbounds);
-        if (found) { client = found; clientPanel = target; break; }
+      for (const r of invResults) {
+        if (r.status !== 'fulfilled') continue;
+        const found = findClientIn(r.value.inbounds);
+        if (found) { client = found; clientPanel = r.value.target; break; }
       }
 
       if (closed) break;
@@ -683,7 +715,20 @@ app.get('/public/stream', async (req, res) => {
 });
 
 // ============================ Static assets + SPA fallback ============================
-app.use(express.static(path.join(__dirname), { index: 'index.html', extensions: ['html'] }));
+app.use(express.static(path.join(__dirname), {
+  index: 'index.html',
+  extensions: ['html'],
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('index.html')) {
+      // Always revalidate — it's what references the versioned asset URLs below.
+      res.setHeader('Cache-Control', 'no-cache');
+    } else {
+      // main.js/styles.css/fx.js are loaded via a `?v=NN` cache-busted URL
+      // (bumped on every change), so it's safe to cache them for a long time.
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  }
+}));
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/') || req.path.startsWith('/public/')) {
     return res.status(404).json({ success: false, msg: 'Endpoint not found' });

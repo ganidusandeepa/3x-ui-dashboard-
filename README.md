@@ -43,7 +43,9 @@ no extra setup files needed.
      use the panel's container name instead (e.g. `http://3x-ui:2053`).
    - `PANEL_USERNAME` = your panel admin username.
    - `PANEL_PASSWORD` = your panel admin password (also the dashboard admin token).
-   - *(optional)* `PORT` (default `8080`), `METRICS_INTERVAL_MS`, `METRICS_CACHE_TTL`.
+   - *(optional)* `PANEL_API_TOKEN` — panel Settings → Security → API Token; preferred over username/password when set.
+   - *(optional)* `PANEL_NODES` — JSON array to also resolve clients that were added directly on a node's own panel, e.g. `[{"name":"Node1","url":"https://node1.example.com:2053/base","apiToken":"..."}]`. Each node needs its own API token.
+   - *(optional)* `PORT` (default `8080`), `METRICS_INTERVAL_MS` (default `1500`), `METRICS_CACHE_TTL` (default `1`) — safe to lower further since the dashboard runs on the same VPS as the panel with no external rate limits.
 3. **Networking:**
    - The container listens on **`8080`** — set this as the exposed/port mapping.
    - Add your **Domain** (e.g. `dashboard.example.com`); Coolify issues a Let's
