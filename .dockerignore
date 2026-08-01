@@ -1,0 +1,9 @@
+node_modules
+.git
+.gitignore
+*.zip
+*.log
+nohup.out
+.DS_Store
+server-config.json
+functions

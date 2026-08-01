@@ -27,9 +27,60 @@ This dashboard is ready to be hosted on **Cloudflare Pages**.
      - `PANEL_PASSWORD` : (your admin pass)
 4. **Deploy**: Cloudflare will automatically detect the `functions` folder and use it as your backend!
 
+## 🐳 Coolify / Docker Deployment (Same VPS as 3x-ui)
+
+Run the dashboard on the **same VPS** as your 3x-ui panel using Coolify. The
+included `Dockerfile` and `server.js` mirror the Cloudflare Functions exactly,
+so behavior is identical — Coolify builds and runs it straight from this repo,
+no extra setup files needed.
+
+1. **Coolify → New Resource → Application → Public/Private Repository.**
+   - Select this repository and your branch.
+   - **Build Pack:** `Dockerfile` (Coolify auto-detects the `Dockerfile` in the repo root).
+2. **Environment Variables** (Coolify → your app → Environment Variables):
+   - `PANEL_URL` = `http://127.0.0.1:2053` — since the dashboard runs on the same
+     VPS, point it at the panel's local address. If both run as Docker containers,
+     use the panel's container name instead (e.g. `http://3x-ui:2053`).
+   - `PANEL_USERNAME` = your panel admin username.
+   - `PANEL_PASSWORD` = your panel admin password (also the dashboard admin token).
+   - *(optional)* `PORT` (default `8080`), `METRICS_INTERVAL_MS`, `METRICS_CACHE_TTL`.
+3. **Networking:**
+   - The container listens on **`8080`** — set this as the exposed/port mapping.
+   - Add your **Domain** (e.g. `dashboard.example.com`); Coolify issues a Let's
+     Encrypt certificate automatically.
+   - If using `PANEL_URL=http://127.0.0.1:2053`, enable **host networking** (or
+     map the host) so the container can reach the panel on localhost. Otherwise
+     put the panel and dashboard on the same Coolify/Docker network and use the
+     container name.
+4. **Deploy.** Coolify builds the image and starts it. A built-in `/healthz`
+   route is available for Coolify's Health Check setting. Every push to the
+   selected branch auto-redeploys.
+
+### If ports 80/443 are already taken (run on a custom port, no proxy)
+
+If your 3x-ui panel (or another app) already owns `80`/`443`, Coolify's built-in
+proxy can't route a domain to the dashboard. In that case, skip the proxy and
+publish the container on a **direct custom port** instead:
+
+1. **Coolify → your app → Configuration → Network → "Ports Mappings"**
+   - Set `8090:8080` (host `8090` → container `8080`). Pick any free, non-common
+     host port; confirm it's free first: `sudo ss -tulpn | grep :8090`.
+   - Leave the **Domains** field empty (you're not using the proxy).
+2. **Open the port in your firewall.** On Oracle Cloud (and most VPS) the port is
+   blocked by default at two layers:
+   - **Cloud Security List / firewall:** add an Ingress rule allowing TCP `8090`
+     from `0.0.0.0/0` (Oracle Cloud → VCN → Security Lists).
+   - **Host iptables:** `sudo iptables -I INPUT -p tcp --dport 8090 -j ACCEPT`
+     then persist (`sudo netfilter-persistent save`, or use `ufw allow 8090/tcp`).
+3. **Redeploy**, then open `http://YOUR_VPS_IP:8090`.
+
+The dashboard's env vars stay the same (`PANEL_URL`, `PANEL_USERNAME`,
+`PANEL_PASSWORD`) — only the external port changes.
+
 ## 📦 Local Installation (Optional)
 1. Install dependencies: `npm install`
-2. Start: `npm start` (Runs the Node.js preview version)
+2. Set env vars: `PANEL_URL`, `PANEL_USERNAME`, `PANEL_PASSWORD` (defaults target `http://127.0.0.1:2053`).
+3. Start: `npm start` — serves the dashboard and panel proxy on port `8080` (override with `PORT`).
 
 ## 🎨 Features
 - **Zero-Latency Monitoring**: Hosted on Cloudflare's Edge.
