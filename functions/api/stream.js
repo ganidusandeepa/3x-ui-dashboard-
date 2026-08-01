@@ -12,6 +12,7 @@ export async function onRequest(context) {
   const PANEL_URL = PANEL_URL_RAW.replace(/\/$/, '');
   const ADMIN_USER = env.PANEL_USERNAME || 'admin';
   const ADMIN_PASS = env.PANEL_PASSWORD || 'password';
+  const PANEL_API_TOKEN = env.PANEL_API_TOKEN || null;
 
   // ---- Auth (mirrors functions/api/[[path]].js logic) ----
   const authHeader = request.headers.get('Authorization');
@@ -30,6 +31,11 @@ export async function onRequest(context) {
   }
 
   async function getSession() {
+    // If using API token, return it directly (no session needed)
+    if (PANEL_API_TOKEN) {
+      return `Bearer ${PANEL_API_TOKEN}`;
+    }
+
     try {
       // Try 3x-ui 3.6.0+ API first (JSON endpoint)
       const loginRes = await fetch(`${PANEL_URL}/api/login`, {
@@ -74,7 +80,7 @@ export async function onRequest(context) {
       const apiRes = await fetch(`${PANEL_URL}/panel/api/server/status`, {
         method: 'GET',
         headers: {
-          Cookie: cookie,
+          ...(PANEL_API_TOKEN ? { "Authorization": `Bearer ${PANEL_API_TOKEN}` } : { "Cookie": cookie }),
           Accept: 'application/json',
           Referer: `${PANEL_URL}/`
         }

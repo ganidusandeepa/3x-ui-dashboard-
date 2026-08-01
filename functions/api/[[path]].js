@@ -29,10 +29,16 @@ export async function onRequest(context) {
   const PANEL_URL = PANEL_URL_RAW.replace(/\/$/, "");
   const ADMIN_USER = env.PANEL_USERNAME || "admin";
   const ADMIN_PASS = env.PANEL_PASSWORD || "password";
+  const PANEL_API_TOKEN = env.PANEL_API_TOKEN || null;
 
   const path = url.pathname.replace('/api/', '');
 
   async function getSession() {
+    // If using API token, return it directly (no session needed)
+    if (PANEL_API_TOKEN) {
+      return `Bearer ${PANEL_API_TOKEN}`;
+    }
+
     const now = Date.now();
     if (_session.cookie && (now - _session.ts) < SESSION_TTL) {
       return _session.cookie;
@@ -79,6 +85,14 @@ export async function onRequest(context) {
 
   const cfUserRecord = request.headers.get('Cf-Access-Authenticated-User-Email');
 
+  // Helper to add auth to headers (supports both cookie and Bearer token)
+  function authHeaders(baseHeaders = {}) {
+    if (PANEL_API_TOKEN) {
+      return { ...baseHeaders, "Authorization": `Bearer ${PANEL_API_TOKEN}` };
+    }
+    return baseHeaders;
+  }
+
   // Authentication endpoint
   if (request.method === "POST" && path === "auth") {
     const body = await request.json();
@@ -110,8 +124,11 @@ export async function onRequest(context) {
           });
         }
 
+        const headers = PANEL_API_TOKEN
+          ? { "Authorization": `Bearer ${PANEL_API_TOKEN}` }
+          : { "Cookie": cookie };
         const apiRes = await fetch(`${PANEL_URL}/panel/api/inbounds/list`, {
-          headers: { "Cookie": cookie }
+          headers
         });
         const data = await apiRes.json();
 
@@ -130,9 +147,12 @@ export async function onRequest(context) {
             let ips = [];
 
             try {
+              const onHeaders = PANEL_API_TOKEN
+                ? { "Authorization": `Bearer ${PANEL_API_TOKEN}`, "Content-Type": "application/json" }
+                : { "Cookie": cookie, "Content-Type": "application/json" };
               const onRes = await fetch(`${PANEL_URL}/panel/api/inbounds/onlines`, {
                 method: 'POST',
-                headers: { "Cookie": cookie, "Content-Type": "application/json" },
+                headers: onHeaders,
                 body: JSON.stringify({})
               });
               const onData = await onRes.json();
@@ -142,9 +162,12 @@ export async function onRequest(context) {
             } catch (e) {}
 
             try {
+              const ipHeaders = PANEL_API_TOKEN
+                ? { "Authorization": `Bearer ${PANEL_API_TOKEN}`, "Content-Type": "application/json" }
+                : { "Cookie": cookie, "Content-Type": "application/json" };
               const ipRes = await fetch(`${PANEL_URL}/panel/api/inbounds/clientIps/${encodeURIComponent(foundClient.email)}`, {
                 method: 'POST',
-                headers: { "Cookie": cookie, "Content-Type": "application/json" },
+                headers: ipHeaders,
                 body: JSON.stringify({})
               });
               const ipData = await ipRes.json();
@@ -334,7 +357,7 @@ export async function onRequest(context) {
       const targetUrl = `${PANEL_URL}/panel/api/${subPath}`;
 
       const headers = {
-        "Cookie": cookie,
+        ...(PANEL_API_TOKEN ? { "Authorization": `Bearer ${PANEL_API_TOKEN}` } : { "Cookie": cookie }),
         "Accept": "application/json",
         "Referer": `${PANEL_URL}/`
       };
@@ -369,7 +392,11 @@ export async function onRequest(context) {
     const fetchInbounds = async () => {
       const apiRes = await fetch(`${PANEL_URL}/panel/api/inbounds/list`, {
         method: "GET",
-        headers: { "Cookie": cookie, "Accept": "application/json", "Referer": `${PANEL_URL}/` }
+        headers: {
+          ...(PANEL_API_TOKEN ? { "Authorization": `Bearer ${PANEL_API_TOKEN}` } : { "Cookie": cookie }),
+          "Accept": "application/json",
+          "Referer": `${PANEL_URL}/`
+        }
       });
       return await apiRes.json();
     };
@@ -453,7 +480,11 @@ export async function onRequest(context) {
 
     const apiRes = await fetch(targetUrl, {
       method: "GET",
-      headers: { "Cookie": cookie, "Accept": "application/json", "Referer": `${PANEL_URL}/` }
+      headers: {
+        ...(PANEL_API_TOKEN ? { "Authorization": `Bearer ${PANEL_API_TOKEN}` } : { "Cookie": cookie }),
+        "Accept": "application/json",
+        "Referer": `${PANEL_URL}/`
+      }
     });
 
     const data = await apiRes.json();
