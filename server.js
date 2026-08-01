@@ -41,6 +41,10 @@ function normIp(x) {
   return '';
 }
 
+// Maintenance mode — when true, admin sign-in is blocked. Flip to false (and in
+// functions/api/[[path]].js + main.js) to re-enable admin access.
+const ADMIN_MAINTENANCE = true;
+
 async function getSession(force = false) {
   const now = Date.now();
   if (!force && _session.cookie && now - _session.ts < SESSION_TTL) {
@@ -303,6 +307,9 @@ async function handleClientAuth(id, res) {
 app.post('/api/auth', async (req, res) => {
   const body = req.body || {};
   if (body.type === 'admin') {
+    if (ADMIN_MAINTENANCE) {
+      return res.status(503).json({ success: false, maintenance: true, msg: 'Admin panel is under maintenance. Please check back later.' });
+    }
     if (body.username === ADMIN_USER && body.password === ADMIN_PASS) {
       return res.json({ success: true, role: 'admin' });
     }

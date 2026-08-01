@@ -108,6 +108,9 @@ body.theme-light {
 /* `clip` (not `hidden`) contains horizontal overflow WITHOUT creating a scroll
    container — `overflow-x: hidden` here breaks the sticky header on mobile. */
 html, body { width: 100%; overflow-x: clip; }
+/* Reserve scrollbar space so content (e.g. the header logo) doesn't shift left
+   when a scrollbar appears/disappears during animations like the ping refresh. */
+html { scrollbar-gutter: stable; }
 body {
     font-family: var(--font);
     background: var(--bg);
@@ -1686,10 +1689,14 @@ body.theme-light ::selection { background: rgba(0,0,0,0.12); }
 
 /* Keep label/icon above the state layer. The ripple must stay ABSOLUTE — making
    it position:relative turned it into a flex item and shoved the icon sideways. */
-.sys-btn > i, .sys-btn > span, .hdr-btn > i, .hdr-btn > span,
-.ping-btn > i, .ping-btn > span, .login-btn > i, .login-btn > span,
-.accent-btn > i, .accent-btn > span, .fab > i, .fab > span { position: relative; z-index: 1; }
-.m3-ripple { position: absolute; z-index: 1; }
+.sys-btn > i, .sys-btn > span:not(.m3-ripple),
+.hdr-btn > i, .hdr-btn > span:not(.m3-ripple),
+.ping-btn > i, .ping-btn > span:not(.m3-ripple),
+.login-btn > i, .login-btn > span:not(.m3-ripple),
+.accent-btn > i, .accent-btn > span:not(.m3-ripple),
+.fab > i, .fab > span:not(.m3-ripple) { position: relative; z-index: 1; }
+/* Ripple always stays out of flow so it can't push the icon (order-independent). */
+.m3-ripple { position: absolute !important; z-index: 1; }
 
 @media (prefers-reduced-motion: reduce) {
     .sys-btn, .hdr-btn, .ping-btn, .login-btn, .accent-btn, .fab { transition: none; }

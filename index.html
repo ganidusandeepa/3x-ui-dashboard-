@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=29">
+    <link rel="stylesheet" href="styles.css?v=30">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" data-cfasync="false"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js" data-cfasync="false"></script>
@@ -64,6 +64,9 @@
             </div>
 
             <div id="login-form-admin" style="display:none;">
+                <div id="admin-maintenance-note" style="display:none; margin-bottom:14px; padding:12px 14px; border-radius:12px; background:rgba(230,168,23,0.12); border:1px solid rgba(230,168,23,0.4); color:var(--warn); font-size:0.85rem; text-align:center; line-height:1.5;">
+                    <i class="fa-solid fa-screwdriver-wrench"></i> Admin panel is temporarily under maintenance.<br>Please check back later.
+                </div>
                 <div class="login-field">
                     <label class="login-field-label">Panel Username</label>
                     <div class="login-field-wrap">
@@ -713,7 +716,7 @@
         </div>
     </div>
 
-    <script src="main.js?v=41" data-cfasync="false"></script>
+    <script src="main.js?v=42" data-cfasync="false"></script>
     <script src="fx.js?v=1" data-cfasync="false"></script>
 </body>
 </html>

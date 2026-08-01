@@ -2,6 +2,10 @@
 let _session = { cookie: null, ts: 0 };
 const SESSION_TTL = 18 * 60 * 1000; // 18 min
 
+// Maintenance mode — when true, admin sign-in is blocked server-side.
+// Flip to false (and in main.js) to re-enable admin access.
+const ADMIN_MAINTENANCE = true;
+
 // Newer 3x-ui can return settings/streamSettings/sniffing as nested objects
 // instead of JSON strings — tolerate both so link building never throws.
 function parseMaybe(v, fallback) {
@@ -112,6 +116,13 @@ export async function onRequest(context) {
     const body = await request.json();
 
     if (body.type === 'admin') {
+      // Maintenance mode: block all admin sign-in (see ADMIN_MAINTENANCE).
+      if (ADMIN_MAINTENANCE) {
+        return new Response(JSON.stringify({ success: false, maintenance: true, msg: 'Admin panel is under maintenance. Please check back later.' }), {
+          status: 503,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
       if (cfUserRecord) {
         return new Response(JSON.stringify({ success: true, role: 'admin', msg: 'Cloudflare Zero Trust Authenticated' }), {
           headers: { "Content-Type": "application/json" }

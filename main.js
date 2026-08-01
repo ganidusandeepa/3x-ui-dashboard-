@@ -381,11 +381,25 @@ function showToast(msg, type="info") {
     }, 3200);
 }
 
+// --- Maintenance mode ---
+// Flip to false to re-enable admin login. When true, admin sign-in is blocked
+// and a maintenance notice is shown; the client side keeps working normally.
+const ADMIN_MAINTENANCE = true;
+
+function applyAdminMaintenanceUI() {
+    const note = document.getElementById('admin-maintenance-note');
+    const btn = document.getElementById('btn-login-admin');
+    if (!ADMIN_MAINTENANCE) { if (note) note.style.display = 'none'; if (btn) btn.disabled = false; return; }
+    if (note) note.style.display = 'block';
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; btn.style.cursor = 'not-allowed'; }
+}
+
 // --- Login UI (segmented control) ---
 function setLoginTab(tab) {
     const isAdmin = tab === 'admin';
     document.getElementById('tab-login-admin').classList.toggle('active', isAdmin);
     document.getElementById('tab-login-client').classList.toggle('active', !isAdmin);
+    if (isAdmin) applyAdminMaintenanceUI();
 
     const incoming = document.getElementById(isAdmin ? 'login-form-admin' : 'login-form-client');
     const outgoing = document.getElementById(isAdmin ? 'login-form-client' : 'login-form-admin');
@@ -410,6 +424,11 @@ document.getElementById('tab-login-admin').addEventListener('click', () => setLo
 document.getElementById('tab-login-client').addEventListener('click', () => setLoginTab('client'));
 
 document.getElementById('btn-login-admin').addEventListener('click', async () => {
+    if (ADMIN_MAINTENANCE) {
+        applyAdminMaintenanceUI();
+        showToast('Admin panel is under maintenance. Please check back later.', 'error');
+        return;
+    }
     const username = (document.getElementById('admin-login-user').value || '').trim();
     const password = (document.getElementById('admin-login-pass').value || '').trim();
     const btn = document.getElementById('btn-login-admin');
