@@ -6,8 +6,10 @@
 //
 // Config comes from environment variables:
 //   PANEL_URL        e.g. http://127.0.0.1:2053   (the local 3x-ui panel)
-//   PANEL_USERNAME   panel admin username
+//   PANEL_USERNAME   panel admin username (used only if PANEL_API_TOKEN is unset)
 //   PANEL_PASSWORD   panel admin password (also the dashboard admin token)
+//   PANEL_API_TOKEN  panel Settings -> Security -> API Token (Bearer). Preferred
+//                    over username/password when set — skips login entirely.
 //   PORT             HTTP port to listen on (default 8080)
 //   METRICS_INTERVAL_MS / METRICS_CACHE_TTL   optional SSE tuning
 
@@ -21,6 +23,7 @@ const PANEL_URL_RAW = process.env.PANEL_URL || 'http://127.0.0.1:2053';
 const PANEL_URL = PANEL_URL_RAW.replace(/\/$/, '');
 const ADMIN_USER = process.env.PANEL_USERNAME || 'admin';
 const ADMIN_PASS = process.env.PANEL_PASSWORD || 'password';
+const PANEL_API_TOKEN = process.env.PANEL_API_TOKEN || null;
 const PORT = Number(process.env.PORT || 8080);
 const INTERVAL_MS = Math.max(1000, Number(process.env.METRICS_INTERVAL_MS || 3000));
 const CACHE_TTL_S = Number(process.env.METRICS_CACHE_TTL || 3);
@@ -46,10 +49,27 @@ function normIp(x) {
 const ADMIN_MAINTENANCE = true;
 
 async function getSession(force = false) {
+  // If an API token is configured, use it directly — no session/login needed.
+  if (PANEL_API_TOKEN) return 'token';
+
   const now = Date.now();
   if (!force && _session.cookie && now - _session.ts < SESSION_TTL) {
     return _session.cookie;
   }
+
+  // Try 3x-ui 3.6.0+ JSON login first.
+  try {
+    const r = await fetch(`${PANEL_URL}/api/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: ADMIN_USER, password: ADMIN_PASS }),
+      redirect: 'follow'
+    });
+    const c = r.headers.get('set-cookie');
+    if (c) { _session = { cookie: c, ts: now }; return c; }
+  } catch (e) {}
+
+  // Fallback to the legacy form-encoded /login.
   const loginRes = await fetch(`${PANEL_URL}/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -59,6 +79,14 @@ async function getSession(force = false) {
   const cookie = loginRes.headers.get('set-cookie');
   if (cookie) _session = { cookie, ts: now };
   return cookie;
+}
+
+// Build panel-request headers: Bearer token when configured, otherwise the
+// session cookie. Used for EVERY fetch to the panel so the token actually
+// takes effect everywhere (client lookup, admin proxy, SSE, etc).
+function panelHeaders(cookie, extra) {
+  return Object.assign({}, extra || {},
+    PANEL_API_TOKEN ? { Authorization: `Bearer ${PANEL_API_TOKEN}` } : { Cookie: cookie });
 }
 
 // ---- Rolling CPU/RAM history buffer ----
@@ -95,7 +123,7 @@ async function resolveClient(id) {
   const cookie = await getSession();
   if (!cookie) return { status: 500, body: { success: false, msg: 'Panel Auth Failed' } };
 
-  const apiRes = await fetch(`${PANEL_URL}/panel/api/inbounds/list`, { headers: { Cookie: cookie } });
+  const apiRes = await fetch(`${PANEL_URL}/panel/api/inbounds/list`, { headers: panelHeaders(cookie) });
   const data = await apiRes.json();
   if (!data || !data.success || !Array.isArray(data.obj)) {
     return { status: 502, body: { success: false, msg: 'Bad response from panel' } };
@@ -118,7 +146,7 @@ async function resolveClient(id) {
     for (const p of ['clients/onlines', 'inbounds/onlines']) {
       try {
         const onRes = await fetch(`${PANEL_URL}/panel/api/${p}`, {
-          method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: JSON.stringify({})
+          method: 'POST', headers: panelHeaders(cookie, { 'Content-Type': 'application/json' }), body: JSON.stringify({})
         });
         const onData = await onRes.json();
         if (onData && onData.success && Array.isArray(onData.obj)) { isOnline = onData.obj.includes(foundClient.email); break; }
@@ -131,7 +159,7 @@ async function resolveClient(id) {
     for (const p of [`clients/ips/${em}`, `inbounds/clientIps/${em}`]) {
       try {
         const ipRes = await fetch(`${PANEL_URL}/panel/api/${p}`, {
-          method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: JSON.stringify({})
+          method: 'POST', headers: panelHeaders(cookie, { 'Content-Type': 'application/json' }), body: JSON.stringify({})
         });
         const ipData = await ipRes.json();
         if (ipData && ipData.success) {
@@ -150,18 +178,18 @@ async function resolveClient(id) {
     return null;
   }).filter(x => x && x.link) : [];
   try {
-    const r = await fetch(`${PANEL_URL}/panel/api/clients/links/${encodeURIComponent(foundClient.email)}`, { headers: { Cookie: cookie, Accept: 'application/json' } });
+    const r = await fetch(`${PANEL_URL}/panel/api/clients/links/${encodeURIComponent(foundClient.email)}`, { headers: panelHeaders(cookie, { Accept: 'application/json' }) });
     const j = await r.json(); if (j && j.success) allLinks = normLinks(j.obj);
   } catch (e) {}
   try {
     if (foundClient.subId) {
-      const r = await fetch(`${PANEL_URL}/panel/api/clients/subLinks/${encodeURIComponent(foundClient.subId)}`, { headers: { Cookie: cookie, Accept: 'application/json' } });
+      const r = await fetch(`${PANEL_URL}/panel/api/clients/subLinks/${encodeURIComponent(foundClient.subId)}`, { headers: panelHeaders(cookie, { Accept: 'application/json' }) });
       const j = await r.json();
       if (j && j.success && Array.isArray(j.obj)) subProtoLinks = j.obj.map(x => typeof x === 'string' ? x : (x && (x.link || x.url || x.uri))).filter(Boolean);
     }
   } catch (e) {}
   try {
-    const r = await fetch(`${PANEL_URL}/panel/api/clients/lastOnline`, { method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+    const r = await fetch(`${PANEL_URL}/panel/api/clients/lastOnline`, { method: 'POST', headers: panelHeaders(cookie, { 'Content-Type': 'application/json' }), body: JSON.stringify({}) });
     const j = await r.json();
     if (j && j.success && j.obj && typeof j.obj === 'object') {
       let ts = Number(j.obj[foundClient.email] || 0);
@@ -247,7 +275,7 @@ async function resolveClient(id) {
   if (subLink) {
     try {
       const siRes = await fetch(`${subLink}?format=info`, {
-        headers: { Cookie: _session.cookie, 'User-Agent': 'ClashforWindows/0.20.0' }
+        headers: panelHeaders(cookie, { 'User-Agent': 'ClashforWindows/0.20.0' })
       });
       const sct = siRes.headers.get('content-type') || '';
       if (sct.includes('json')) {
@@ -347,7 +375,7 @@ app.all('/api/xui/*', requireAdmin, async (req, res) => {
     const subPath = req.path.replace(/^\/api\/xui\//, '').replace(/^\/+/, '');
     const targetUrl = `${PANEL_URL}/panel/api/${subPath}`;
 
-    const headers = { Cookie: cookie, Accept: 'application/json', Referer: `${PANEL_URL}/` };
+    const headers = panelHeaders(cookie, { Accept: 'application/json', Referer: `${PANEL_URL}/` });
     const ct = req.headers['content-type'];
     if (ct) headers['Content-Type'] = ct; // preserve multipart boundary for importDB
 
@@ -370,7 +398,7 @@ app.all('/api/xui/*', requireAdmin, async (req, res) => {
 // ============================ Aggregated admin endpoints ============================
 async function fetchInbounds(cookie) {
   const apiRes = await fetch(`${PANEL_URL}/panel/api/inbounds/list`, {
-    method: 'GET', headers: { Cookie: cookie, Accept: 'application/json', Referer: `${PANEL_URL}/` }
+    method: 'GET', headers: panelHeaders(cookie, { Accept: 'application/json', Referer: `${PANEL_URL}/` })
   });
   return apiRes.json();
 }
@@ -448,7 +476,7 @@ app.get('/api/status', requireAdmin, async (req, res) => {
     const cookie = await getSession();
     if (!cookie) return res.status(401).json({ success: false, msg: 'Panel Auth Failed' });
     const apiRes = await fetch(`${PANEL_URL}/panel/api/server/status`, {
-      method: 'GET', headers: { Cookie: cookie, Accept: 'application/json', Referer: `${PANEL_URL}/` }
+      method: 'GET', headers: panelHeaders(cookie, { Accept: 'application/json', Referer: `${PANEL_URL}/` })
     });
     const data = await apiRes.json();
     if (data && data.obj) pushHistory(data.obj);
@@ -497,7 +525,7 @@ app.get('/api/stream', requireAdmin, async (req, res) => {
     const cookie = await getSession();
     if (!cookie) throw new Error('Panel Auth Failed');
     const apiRes = await fetch(`${PANEL_URL}/panel/api/server/status`, {
-      method: 'GET', headers: { Cookie: cookie, Accept: 'application/json', Referer: `${PANEL_URL}/` }
+      method: 'GET', headers: panelHeaders(cookie, { Accept: 'application/json', Referer: `${PANEL_URL}/` })
     });
     const data = await apiRes.json();
     return { success: true, obj: data.obj || data };
