@@ -299,6 +299,7 @@ let __bulkSelected = new Set();
 let __autoRefreshOntimer = null;
 let __expiryCountdownTimer = null;
 let __currentClientData = null; // last client data for QR / countdown
+let __clientPingTimer = null;
 
 // --- Client SSE ---
 function stopClientSSE() {
@@ -336,6 +337,8 @@ function doLogout() {
     try { clearInterval(clientLoopInterval); } catch(e) {}
     try { clearInterval(__autoRefreshOntimer); } catch(e) {}
     try { clearInterval(__expiryCountdownTimer); } catch(e) {}
+    try { clearInterval(__clientPingTimer); } catch(e) {}
+    __clientPingTimer = null;
     loopInterval = null; clientLoopInterval = null; __autoRefreshOntimer = null;
     __expiryCountdownTimer = null; __currentClientData = null;
     currentRole = null; adminToken = null;
@@ -523,6 +526,13 @@ function updateClientSpeedsFromDelta(nowDown, nowUp) {
     } catch(e) {}
 }
 
+// Tolerate settings/streamSettings returned as objects or JSON strings.
+function parseMaybe(v, fallback) {
+    if (v == null || v === '') return fallback || {};
+    if (typeof v === 'object') return v;
+    try { return JSON.parse(v); } catch (e) { return fallback || {}; }
+}
+
 // --- QR Code & Config Links ---
 function generateQR(text, canvasEl, size) {
     try {
@@ -684,7 +694,12 @@ function applyClientDataToUI(client) {
             const el = document.getElementById('user-last-online');
             if (el) el.textContent = fmtLastSeen(ts, client.isOnline);
         }
-        if (client.ips !== undefined) document.getElementById('user-ips').textContent = Array.isArray(client.ips) ? (client.ips.join(', ') || 'None') : '-';
+        if (client.ips !== undefined) {
+            const arr = Array.isArray(client.ips)
+                ? client.ips.map(x => typeof x === 'string' ? x : (x && (x.ip || x.address)) || '').filter(Boolean)
+                : [];
+            document.getElementById('user-ips').textContent = arr.length ? arr.join(', ') : 'None';
+        }
     } catch(e) {}
 
     animateNumber('#user-used', Number(totalUsed), { decimals: 2, duration: 500 });
@@ -851,7 +866,12 @@ function applyClientDataToUI(client) {
     // Config link + QR (only update if we have a link; SSE ticks omit these,
     // so skip rather than hide the card).
     try {
-        const configLink = client.configLink || client.vlessLink || client.vmessLink || client.trojanLink || null;
+        // Prefer the panel's own link (correct across API versions) over the one
+        // we build manually — fixes the blank Config Link + QR.
+        const panelLink = (Array.isArray(client.allLinks) && client.allLinks[0] && client.allLinks[0].link)
+            || (Array.isArray(client.subProtoLinks) && client.subProtoLinks[0])
+            || null;
+        const configLink = panelLink || client.configLink || client.vlessLink || client.vmessLink || client.trojanLink || null;
         const subLink = client.subLink || null;
         if (configLink) showClientConfig(configLink, subLink);
         if (client.allLinks !== undefined || client.subProtoLinks !== undefined) {
@@ -963,6 +983,13 @@ function startClientApp(client) {
 
     applyClientDataToUI(client);
     requestAnimationFrame(() => { animateClientEntry(); initScrollReveal(); });
+
+    // Auto-measure server latency on entering the client page, then refresh it.
+    try {
+        clearInterval(__clientPingTimer); __clientPingTimer = null;
+        setTimeout(() => { try { window.__pingNow && window.__pingNow(); } catch(e) {} }, 700);
+        __clientPingTimer = setInterval(() => { try { window.__pingNow && window.__pingNow(); } catch(e) {} }, 30000);
+    } catch(e) {}
 
     try {
         const idToCheck = (localStorage.getItem('xui_client_id') || client.email || '').trim();
@@ -1469,13 +1496,13 @@ try {
 function getClientUUID(inboundId, email) {
     const inb = (window.__inboundsCache || []).find(x => Number(x.id) === Number(inboundId));
     if (!inb) return null;
-    try { const s = JSON.parse(inb.settings || '{}'); return (s.clients || []).find(c => c.email === email)?.id || null; } catch(e) { return null; }
+    try { const s = parseMaybe(inb.settings); return (s.clients || []).find(c => c.email === email)?.id || null; } catch(e) { return null; }
 }
 
 function getClientFullConfig(inboundId, email) {
     const inb = (window.__inboundsCache || []).find(x => Number(x.id) === Number(inboundId));
     if (!inb) return null;
-    try { const s = JSON.parse(inb.settings || '{}'); return (s.clients || []).find(c => c.email === email) || null; } catch(e) { return null; }
+    try { const s = parseMaybe(inb.settings); return (s.clients || []).find(c => c.email === email) || null; } catch(e) { return null; }
 }
 
 function openClientDrawer(user) {
@@ -1658,7 +1685,7 @@ try { wireServerTools(); } catch(e) {}
 function buildLinksForClient(inbound, client) {
     try {
         const host = window.location.hostname.replace(/^www\./, '');
-        const stream = JSON.parse(inbound.streamSettings || '{}');
+        const stream = parseMaybe(inbound.streamSettings);
         const port = inbound.port;
         const remark = inbound.remark || String(port);
         const network = stream.network || 'tcp';
@@ -1711,7 +1738,7 @@ function buildLinksForClient(inbound, client) {
             configLink = `trojan://${client.password || client.id}@${host}:${port}?${qs.toString()}#${encodeURIComponent(`${remark}-${client.email}`)}`;
         } else if (protocol === 'shadowsocks') {
             try {
-                const settings = JSON.parse(inbound.settings || '{}');
+                const settings = parseMaybe(inbound.settings);
                 const method = settings.method || 'aes-256-gcm';
                 const password = client.password || settings.password || '';
                 const userInfo = btoa(`${method}:${password}`);
@@ -2121,9 +2148,12 @@ try {
         });
     }
 
-    btn.addEventListener('click', async () => {
+    const card = btn.closest('.card');
+
+    async function runPing() {
         if (btn.classList.contains('pinging')) return;
         btn.classList.add('pinging');
+        if (card) card.classList.add('ping-measuring');
         if (msEl) { msEl.textContent = '…'; msEl.className = 'ping-ms'; }
         if (statusEl) statusEl.textContent = 'Measuring…';
         if (qualityEl) { qualityEl.textContent = ''; qualityEl.className = 'ping-quality'; }
@@ -2139,11 +2169,20 @@ try {
         }
 
         btn.classList.remove('pinging');
+        if (card) card.classList.remove('ping-measuring');
         history.push(latency);
         if (history.length > MAX_BARS) history.shift();
 
         const q = getQuality(latency);
-        if (msEl) { msEl.textContent = latency; msEl.className = 'ping-ms ' + q.cls; }
+        if (msEl) {
+            msEl.className = 'ping-ms ' + q.cls;
+            // Count up to the measured value for a livelier reveal.
+            if (typeof animateNumber === 'function' && !prefersReducedMotion()) {
+                animateNumber(msEl, latency, { decimals: 0, duration: 650, from: 0 });
+            } else {
+                msEl.textContent = latency;
+            }
+        }
         if (unitEl) unitEl.textContent = 'ms';
         if (statusEl) statusEl.textContent = `Last measured ${new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}`;
         if (qualityEl) { qualityEl.textContent = q.label; qualityEl.className = 'ping-quality ' + q.cls; }
@@ -2152,9 +2191,13 @@ try {
 
         // spring bounce on the number
         if (typeof gsap !== 'undefined' && msEl && !prefersReducedMotion()) {
-            gsap.fromTo(msEl, { scale: 1.18 }, { scale: 1, duration: 0.45, ease: 'elastic.out(1, 0.55)' });
+            gsap.fromTo(msEl, { scale: 1.22 }, { scale: 1, duration: 0.5, ease: 'elastic.out(1, 0.5)' });
         }
-    });
+    }
+
+    btn.addEventListener('click', runPing);
+    // Exposed so the client page can auto-measure on entry.
+    window.__pingNow = runPing;
 })();
 
 // ============================================================

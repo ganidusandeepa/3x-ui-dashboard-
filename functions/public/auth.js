@@ -1,3 +1,14 @@
+function parseMaybe(v, fallback) {
+  if (v == null || v === '') return fallback || {};
+  if (typeof v === 'object') return v;
+  try { return JSON.parse(v); } catch (e) { return fallback || {}; }
+}
+function normIp(x) {
+  if (typeof x === 'string') return x;
+  if (x && typeof x === 'object') return x.ip || x.address || x.clientIp || x.remote || '';
+  return '';
+}
+
 export async function onRequestPost(context) {
   const { request, env } = context;
 
@@ -65,7 +76,7 @@ export async function onRequestPost(context) {
     let resolvedUuid = foundClient.uuid;
     if (!resolvedUuid && foundInbound) {
       try {
-        const inbSettings = JSON.parse(foundInbound.settings || '{}');
+        const inbSettings = parseMaybe(foundInbound.settings);
         const clientConf = (inbSettings.clients || []).find(c => c.email === foundClient.email);
         resolvedUuid = clientConf?.id || null;
       } catch (e) {}
@@ -105,7 +116,7 @@ export async function onRequestPost(context) {
           });
           const ipData = await ipRes.json();
           if (ipData && ipData.success) {
-            if (Array.isArray(ipData.obj)) { ips = ipData.obj; break; }
+            if (Array.isArray(ipData.obj)) { ips = ipData.obj.map(normIp).filter(Boolean); break; }
             if (typeof ipData.obj === 'string' && ipData.obj && !/no ip/i.test(ipData.obj)) {
               ips = ipData.obj.split(/[,\s]+/).filter(Boolean); break;
             }
@@ -119,7 +130,7 @@ export async function onRequestPost(context) {
       subLink = foundClient.subId ? `${PANEL_URL}/sub/${foundClient.subId}` : null;
 
       if (foundInbound) {
-        const stream = JSON.parse(foundInbound.streamSettings || '{}');
+        const stream = parseMaybe(foundInbound.streamSettings);
         const port = foundInbound.port;
         const remark = foundInbound.remark || String(port);
         const network = stream.network || 'tcp';

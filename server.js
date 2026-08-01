@@ -29,6 +29,18 @@ const CACHE_TTL_S = Number(process.env.METRICS_CACHE_TTL || 3);
 let _session = { cookie: null, ts: 0 };
 const SESSION_TTL = 18 * 60 * 1000;
 
+// Tolerate settings/streamSettings returned as objects or JSON strings.
+function parseMaybe(v, fallback) {
+  if (v == null || v === '') return fallback || {};
+  if (typeof v === 'object') return v;
+  try { return JSON.parse(v); } catch (e) { return fallback || {}; }
+}
+function normIp(x) {
+  if (typeof x === 'string') return x;
+  if (x && typeof x === 'object') return x.ip || x.address || x.clientIp || x.remote || '';
+  return '';
+}
+
 async function getSession(force = false) {
   const now = Date.now();
   if (!force && _session.cookie && now - _session.ts < SESSION_TTL) {
@@ -119,7 +131,7 @@ async function resolveClient(id) {
         });
         const ipData = await ipRes.json();
         if (ipData && ipData.success) {
-          if (Array.isArray(ipData.obj)) { ips = ipData.obj; break; }
+          if (Array.isArray(ipData.obj)) { ips = ipData.obj.map(normIp).filter(Boolean); break; }
           if (typeof ipData.obj === 'string' && ipData.obj && !/no ip/i.test(ipData.obj)) { ips = ipData.obj.split(/[,\s]+/).filter(Boolean); break; }
         }
       } catch (e) {}
@@ -160,7 +172,7 @@ async function resolveClient(id) {
     subLink = foundClient.subId ? `${PANEL_URL}/sub/${foundClient.subId}` : null;
 
     if (foundInbound) {
-      const stream = JSON.parse(foundInbound.streamSettings || '{}');
+      const stream = parseMaybe(foundInbound.streamSettings);
       const port = foundInbound.port;
       const remark = foundInbound.remark || String(port);
       const network = stream.network || 'tcp';
@@ -205,7 +217,7 @@ async function resolveClient(id) {
       if (protocol === 'vless') {
         const qs = buildQs();
         qs.set('encryption', 'none');
-        const settings = JSON.parse(foundInbound.settings || '{}');
+        const settings = parseMaybe(foundInbound.settings);
         const clientConf = (settings.clients || []).find(c => c.email === foundClient.email);
         if (clientConf?.flow) qs.set('flow', clientConf.flow);
         vlessLink = `vless://${foundClient.uuid}@${host}:${port}?${qs.toString()}#${encodeURIComponent(`${remark}-${foundClient.email}`)}`;

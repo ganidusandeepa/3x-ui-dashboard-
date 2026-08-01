@@ -101,7 +101,9 @@ body.theme-light {
    Reset & Base
    ============================================================ */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { width: 100%; overflow-x: hidden; }
+/* `clip` (not `hidden`) contains horizontal overflow WITHOUT creating a scroll
+   container — `overflow-x: hidden` here breaks the sticky header on mobile. */
+html, body { width: 100%; overflow-x: clip; }
 body {
     font-family: var(--font);
     background: var(--bg);
@@ -1265,6 +1267,12 @@ body.theme-light header { background: rgba(245,245,245,0.85); border-bottom: 1px
     header { margin-bottom: 16px; margin-inline: -14px; padding-inline: 14px; }
     .hdr-label { display: none; }
     .hdr-btn { padding: 8px 10px; }
+    /* Keep header controls reachable: truncate the long email, never clip the
+       theme/BG/logout buttons. */
+    .hdr-right { min-width: 0; flex-shrink: 1; }
+    .user-status { min-width: 0; flex: 0 1 auto; max-width: 44vw; overflow: hidden; }
+    .user-status span { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+    .hdr-actions, .client-top-status, .logo { flex-shrink: 0; }
     .main-value { font-size: 2.2rem; }
     .usage-ring-wrap { width: 120px; height: 120px; }
     .fab { bottom: calc(84px + env(safe-area-inset-bottom)); right: 16px; }
@@ -1602,3 +1610,18 @@ body.theme-light ::selection { background: rgba(0,0,0,0.12); }
     background: #fff; border-radius: 12px; padding: 10px;
 }
 .link-qr canvas { display: block; border-radius: 6px; }
+
+/* ======================================================================
+   Livelier ping while measuring (paired with runPing / .ping-measuring)
+   ====================================================================== */
+@media (prefers-reduced-motion: no-preference) {
+    #btn-ping.pinging { animation: fx-ping-btn 0.9s ease-in-out infinite; }
+    .ping-measuring .ping-ms { animation: fx-ping-flash 0.85s ease-in-out infinite; }
+    .ping-measuring .ping-bar { animation: fx-ping-bar-pulse 0.85s ease-in-out infinite; }
+}
+@keyframes fx-ping-btn {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(124, 92, 255, 0.45); }
+    50%      { box-shadow: 0 0 0 10px rgba(124, 92, 255, 0); }
+}
+@keyframes fx-ping-flash { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+@keyframes fx-ping-bar-pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.9; } }

@@ -2,6 +2,20 @@
 let _session = { cookie: null, ts: 0 };
 const SESSION_TTL = 18 * 60 * 1000; // 18 min
 
+// Newer 3x-ui can return settings/streamSettings/sniffing as nested objects
+// instead of JSON strings — tolerate both so link building never throws.
+function parseMaybe(v, fallback) {
+  if (v == null || v === '') return fallback || {};
+  if (typeof v === 'object') return v;
+  try { return JSON.parse(v); } catch (e) { return fallback || {}; }
+}
+// Normalize a client-IPs response entry (string or {ip}/{address}) to a string.
+function normIp(x) {
+  if (typeof x === 'string') return x;
+  if (x && typeof x === 'object') return x.ip || x.address || x.clientIp || x.remote || '';
+  return '';
+}
+
 // Rolling system history buffer (CPU/RAM over time)
 let _sysHistory = [];
 const HISTORY_MAX = 24;
@@ -179,7 +193,7 @@ export async function onRequest(context) {
                   });
                   const ipData = await ipRes.json();
                   if (ipData && ipData.success) {
-                    if (Array.isArray(ipData.obj)) { ips = ipData.obj; break; }
+                    if (Array.isArray(ipData.obj)) { ips = ipData.obj.map(normIp).filter(Boolean); break; }
                     if (typeof ipData.obj === 'string' && ipData.obj && !/no ip/i.test(ipData.obj)) {
                       ips = ipData.obj.split(/[,\s]+/).filter(Boolean); break;
                     }
@@ -242,7 +256,7 @@ export async function onRequest(context) {
               subLink = foundClient.subId ? `${PANEL_URL}/sub/${foundClient.subId}` : null;
 
               if (foundInbound) {
-                const stream = JSON.parse(foundInbound.streamSettings || '{}');
+                const stream = parseMaybe(foundInbound.streamSettings);
                 const port = foundInbound.port;
                 const remark = foundInbound.remark || String(port);
                 const network = stream.network || 'tcp';
@@ -292,7 +306,7 @@ export async function onRequest(context) {
                 if (protocol === 'vless') {
                   const qs = buildQs();
                   qs.set('encryption', 'none');
-                  const settings = JSON.parse(foundInbound.settings || '{}');
+                  const settings = parseMaybe(foundInbound.settings);
                   const clientConf = (settings.clients || []).find(c => c.email === foundClient.email);
                   if (clientConf?.flow) qs.set('flow', clientConf.flow);
                   vlessLink = `vless://${foundClient.uuid}@${host}:${port}?${qs.toString()}#${encodeURIComponent(`${remark}-${foundClient.email}`)}`;
