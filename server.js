@@ -32,8 +32,19 @@ setGlobalDispatcher(new Agent({
 }));
 
 const app = express();
-// Gzip/brotli-negotiated compression for every response (HTML/JS/CSS/JSON).
-app.use(compression());
+// Gzip/brotli-negotiated compression for every response (HTML/JS/CSS/JSON) —
+// EXCEPT Server-Sent Events. compression() buffers output to build a
+// compression window, so an SSE stream never reaches the client: the browser
+// opens the connection and then receives nothing at all. (This is invisible to
+// curl, which doesn't request gzip unless you pass --compressed.)
+app.use(compression({
+  filter: (req, res) => {
+    if (req.path === '/api/stream' || req.path === '/public/stream') return false;
+    const ct = res.getHeader('Content-Type');
+    if (ct && String(ct).includes('text/event-stream')) return false;
+    return compression.filter(req, res);
+  }
+}));
 
 const PANEL_URL_RAW = process.env.PANEL_URL || 'http://127.0.0.1:2053';
 const PANEL_URL = PANEL_URL_RAW.replace(/\/$/, '');

@@ -323,6 +323,7 @@ let adminToken = null;
 let loopInterval = null;
 let clientLoopInterval = null;
 let __clientLast = null;
+let __clientSpeedEma = { dl: null, ul: null };
 let __clientEventSource = null;
 let __clientSseRetry = null;
 let __vanta = null;
@@ -374,6 +375,7 @@ function doLogout() {
     __clientPingTimer = null;
     loopInterval = null; clientLoopInterval = null; __autoRefreshOntimer = null;
     __expiryCountdownTimer = null; __currentClientData = null;
+    __clientLast = null; __clientSpeedEma = { dl: null, ul: null };
     currentRole = null; adminToken = null;
     try { sessionStorage.removeItem('xui_admin_token'); } catch(e) {}
     document.getElementById('login-overlay').style.display = 'flex';
@@ -573,20 +575,69 @@ async function startAdminApp() {
 }
 
 // --- Client Speed ---
+// The panel flushes traffic counters to its DB far slower than we poll, so most
+// samples repeat the previous byte totals. Re-baselining on every sample (the
+// old behavior) meant: identical samples -> delta 0 -> speed permanently read
+// 0.00, and when the counter finally jumped, an N-second accumulation got
+// divided by one poll interval and overstated the rate several-fold.
+// Instead, only re-baseline when the counters ACTUALLY change, so dt is the
+// true elapsed time between flushes and the Mbps figure is correct.
+const SPEED_IDLE_MS = 20000; // no change for this long => genuinely idle, show 0
 function updateClientSpeedsFromDelta(nowDown, nowUp) {
     try {
         const now = Date.now();
+        const d = Number(nowDown) || 0;
+        const u = Number(nowUp) || 0;
+
         if (!__clientLast) {
-            __clientLast = { downBytes: Number(nowDown)||0, upBytes: Number(nowUp)||0, ts: now };
-            setTextSafe('#user-dl-speed', '0'); setTextSafe('#user-up-speed', '0'); return;
+            __clientLast = { downBytes: d, upBytes: u, ts: now };
+            setTextSafe('#user-dl-speed', '0.00'); setTextSafe('#user-up-speed', '0.00');
+            return;
         }
+
+        const dDown = d - (__clientLast.downBytes || 0);
+        const dUp = u - (__clientLast.upBytes || 0);
+
+        // Counters went backwards => traffic was reset on the panel. Re-baseline.
+        if (dDown < 0 || dUp < 0) {
+            __clientLast = { downBytes: d, upBytes: u, ts: now };
+            __clientSpeedEma = { dl: null, ul: null };
+            animateNumber('#user-dl-speed', 0, { decimals: 2, duration: 300 });
+            animateNumber('#user-up-speed', 0, { decimals: 2, duration: 300 });
+            return;
+        }
+
+        // No change yet: the panel simply hasn't flushed. Hold the current
+        // reading and keep the baseline intact so the next real delta is
+        // divided by the true elapsed time. Only zero it out once the link has
+        // been quiet long enough that "0" is actually the truth.
+        if (dDown === 0 && dUp === 0) {
+            if (now - __clientLast.ts > SPEED_IDLE_MS) {
+                __clientSpeedEma = { dl: null, ul: null };
+                animateNumber('#user-dl-speed', 0, { decimals: 2, duration: 600 });
+                animateNumber('#user-up-speed', 0, { decimals: 2, duration: 600 });
+                __clientLast.ts = now; // restart the idle window
+            }
+            return;
+        }
+
         const dt = (now - __clientLast.ts) / 1000;
         if (dt <= 0) return;
-        const dDown = (Number(nowDown)||0) - (__clientLast.downBytes||0);
-        const dUp = (Number(nowUp)||0) - (__clientLast.upBytes||0);
-        animateNumber('#user-dl-speed', Math.max(0, (dDown * 8) / (dt * 1e6)), { decimals: 2, duration: 500 });
-        animateNumber('#user-up-speed', Math.max(0, (dUp * 8) / (dt * 1e6)), { decimals: 2, duration: 500 });
-        __clientLast = { downBytes: Number(nowDown)||0, upBytes: Number(nowUp)||0, ts: now };
+
+        // We can only measure between DETECTIONS, and our poll interval can't
+        // align with the panel's flush boundary, so each raw reading carries up
+        // to one interval of timing jitter (a steady 4 Mbps link can read
+        // anywhere from ~3.3 to ~6.5). Smooth with an EMA so the figure settles
+        // near the true rate instead of jumping around.
+        const rawDl = (dDown * 8) / (dt * 1e6);
+        const rawUl = (dUp * 8) / (dt * 1e6);
+        const a = 0.4;
+        __clientSpeedEma.dl = (__clientSpeedEma.dl === null) ? rawDl : (__clientSpeedEma.dl * (1 - a) + rawDl * a);
+        __clientSpeedEma.ul = (__clientSpeedEma.ul === null) ? rawUl : (__clientSpeedEma.ul * (1 - a) + rawUl * a);
+
+        animateNumber('#user-dl-speed', __clientSpeedEma.dl, { decimals: 2, duration: 500 });
+        animateNumber('#user-up-speed', __clientSpeedEma.ul, { decimals: 2, duration: 500 });
+        __clientLast = { downBytes: d, upBytes: u, ts: now };
     } catch(e) {}
 }
 
