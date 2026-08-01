@@ -93,14 +93,19 @@ nginx that's already on the box. A ready-to-use config with SSE support is at
 
    Either way it's bound to localhost, so it stays private and needs **no**
    firewall/Security-List change.
-3. **Install the config:**
+3. **Run the automated setup script** (installs nginx/certbot if needed, writes
+   the config, repairs any broken symlink, reloads, and issues the TLS cert):
    ```bash
-   sudo cp deploy/nginx-dashboard.conf /etc/nginx/sites-available/dashboard.conf
-   sudo ln -s /etc/nginx/sites-available/dashboard.conf /etc/nginx/sites-enabled/
-   sudo nginx -t && sudo systemctl reload nginx
-   sudo certbot --nginx -d dashboard.trackydev.site
+   sudo bash deploy/setup-dashboard.sh vps.trackydev.site
+   # optional: sudo bash deploy/setup-dashboard.sh vps.trackydev.site 127.0.0.1:8090 you@mail.com
    ```
-4. Open `https://dashboard.trackydev.site`.
+   Not got the repo on the VPS? Paste the same script inline — see the chat/PR,
+   or `curl` it from your branch. It's idempotent and safe to re-run.
+4. Open `https://vps.trackydev.site`.
+
+   *(Manual equivalent, if you prefer: copy `deploy/nginx-dashboard.conf` to
+   `/etc/nginx/sites-available/`, symlink it into `sites-enabled/`, `nginx -t`,
+   reload, then `certbot --nginx -d <domain>`.)*
 
 ## 📦 Local Installation (Optional)
 1. Install dependencies: `npm install`
