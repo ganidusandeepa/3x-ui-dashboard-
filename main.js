@@ -253,10 +253,21 @@ function animateNumber(elOrSelector, to, opts = {}) {
     const endVal = Number(to);
     if (!Number.isFinite(endVal)) { el.textContent = formatter(0); return; }
 
+    // Brief "settle" pop on the hero total when it lands on a new value.
+    const doPop = () => {
+        try {
+            if (el.id !== 'user-used' || prefersReducedMotion()) return;
+            if (Math.abs(endVal - startVal) <= 0.001) return;
+            el.classList.remove('fx-settle'); void el.offsetWidth;
+            el.classList.add('fx-settle');
+            setTimeout(() => el.classList.remove('fx-settle'), 480);
+        } catch(e) {}
+    };
+
     try {
         if (typeof gsap !== 'undefined') {
             const obj = { v: startVal };
-            gsap.to(obj, { v: endVal, duration: duration / 1000, ease: 'power2.out', onUpdate: () => { el.textContent = formatter(obj.v); } });
+            gsap.to(obj, { v: endVal, duration: duration / 1000, ease: 'power2.out', onUpdate: () => { el.textContent = formatter(obj.v); }, onComplete: doPop });
             return;
         }
     } catch(e) {}
@@ -264,12 +275,13 @@ function animateNumber(elOrSelector, to, opts = {}) {
     try {
         if (typeof anime !== 'undefined') {
             const obj = { v: startVal };
-            anime({ targets: obj, v: endVal, duration, easing: 'easeOutCubic', update: () => { el.textContent = formatter(obj.v); } });
+            anime({ targets: obj, v: endVal, duration, easing: 'easeOutCubic', update: () => { el.textContent = formatter(obj.v); }, complete: doPop });
             return;
         }
     } catch(e) {}
 
     el.textContent = formatter(endVal);
+    doPop();
 }
 
 // --- Global State ---
@@ -407,6 +419,7 @@ document.getElementById('btn-login-admin').addEventListener('click', async () =>
             adminToken = password;
             try { sessionStorage.setItem('xui_admin_token', password); } catch(e) {}
             startAdminApp();
+            try { window.FX && window.FX.celebrate(); } catch(e) {}
         } else {
             const msg = data && data.msg;
             if (msg === 'Panel Auth Failed' || msg === 'Invalid admin credentials') {
@@ -434,7 +447,7 @@ async function doClientLogin() {
             showToast(res.status === 401 ? 'Session expired. Refresh and try again.' : 'Server temporary issue. Try again.', 'error');
         } else {
             const data = await res.json();
-            if (data && data.success) { currentRole = 'client'; startClientApp(data.clientData); return; }
+            if (data && data.success) { currentRole = 'client'; startClientApp(data.clientData); try { window.FX && window.FX.celebrate(); } catch(e) {} return; }
             else {
                 const msg = data && data.msg;
                 if (msg === 'Panel Auth Failed') {
