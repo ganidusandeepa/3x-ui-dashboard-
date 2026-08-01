@@ -714,6 +714,144 @@ app.get('/public/stream', async (req, res) => {
   try { res.end(); } catch (e) {}
 });
 
+// ============================ Node diagnostics ============================
+// Browser-openable checker for PANEL_NODES + the master panel. Because admin
+// login can be in maintenance mode (and browsers don't send Authorization
+// headers on a plain GET), it accepts the admin password via ?key=... too:
+//   https://<dashboard>/api/nodes-check?key=YOUR_PANEL_PASSWORD
+// Add &json=1 for raw JSON. Tokens are masked in the output.
+async function probePanel(baseUrl, authHeaders) {
+  const started = Date.now();
+  try {
+    const r = await fetch(`${baseUrl}/panel/api/inbounds/list`, { headers: authHeaders, signal: AbortSignal.timeout(8000) });
+    const ms = Date.now() - started;
+    let bodyText = '', json = null;
+    try { bodyText = await r.text(); json = JSON.parse(bodyText); } catch (e) {}
+    if (!r.ok) {
+      const extra = (r.status === 401 || r.status === 403) ? ' — token/credentials rejected'
+        : r.status === 404 ? ' — wrong URL or base-path' : '';
+      return { ok: false, httpStatus: r.status, ms, error: `HTTP ${r.status}${extra}` };
+    }
+    if (!json) return { ok: false, httpStatus: r.status, ms, error: 'Non-JSON response (wrong URL / not a 3x-ui API path?)', preview: (bodyText || '').slice(0, 100) };
+    if (!json.success) return { ok: false, httpStatus: r.status, ms, error: 'success:false — ' + (json.msg || 'auth or API error') };
+    const inbounds = Array.isArray(json.obj) ? json.obj.length : 0;
+    let clients = 0;
+    if (Array.isArray(json.obj)) json.obj.forEach(i => { clients += (i.clientStats || []).length; });
+    return { ok: true, httpStatus: r.status, ms, inbounds, clients };
+  } catch (e) {
+    const ms = Date.now() - started;
+    const msg = String(e?.cause?.code || e?.cause?.message || e?.message || e);
+    let hint = '';
+    if (/certificate|self-signed|SELF_SIGNED|UNABLE_TO_VERIFY|CERT/i.test(msg)) hint = ' — TLS cert not trusted; set NODE_TLS_REJECT_UNAUTHORIZED=0 or fix the node cert';
+    else if (/ENOTFOUND|EAI_AGAIN/i.test(msg)) hint = ' — DNS lookup failed (bad hostname)';
+    else if (/ECONNREFUSED/i.test(msg)) hint = ' — connection refused (wrong port / not listening)';
+    else if (/timeout|ETIMEDOUT|aborted/i.test(msg)) hint = ' — timed out (unreachable / firewall / hairpin NAT)';
+    return { ok: false, ms, error: msg + hint };
+  }
+}
+
+function maskToken(t) {
+  const s = String(t || '');
+  if (!s) return '(MISSING)';
+  return s.length <= 12 ? `${s.slice(0, 2)}…(${s.length} ch)` : `${s.slice(0, 6)}…${s.slice(-4)} (${s.length} ch)`;
+}
+
+app.get('/api/nodes-check', async (req, res) => {
+  const key = req.query.key || (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  if (key !== ADMIN_PASS) {
+    return res.status(401).json({ success: false, msg: 'Unauthorized. Open this URL with ?key=YOUR_PANEL_PASSWORD appended.' });
+  }
+
+  const rawSet = !!process.env.PANEL_NODES;
+  const parseError = rawSet && PANEL_NODES.length === 0
+    ? 'PANEL_NODES is set but did NOT parse as a JSON array — check brackets/quotes/commas.' : null;
+
+  // Build targets: master first, then each node.
+  const cookie = await getSession().catch(() => null);
+  const targets = [];
+  targets.push({
+    label: 'MASTER',
+    url: PANEL_URL,
+    auth: PANEL_API_TOKEN ? `API token (${maskToken(PANEL_API_TOKEN)})` : 'cookie login (PANEL_USERNAME/PANEL_PASSWORD)',
+    headers: panelHeaders(cookie),
+    preError: (!PANEL_API_TOKEN && !cookie) ? 'Panel login failed — check PANEL_USERNAME/PANEL_PASSWORD, or that PANEL_URL is reachable.' : null
+  });
+  PANEL_NODES.forEach((n, i) => {
+    const url = String(n?.url || '').replace(/\/$/, '');
+    const tok = String(n?.apiToken || '');
+    targets.push({
+      label: n?.name || `Node ${i + 1}`,
+      url: url || '(missing url)',
+      auth: `API token (${maskToken(tok)})`,
+      headers: { Authorization: `Bearer ${tok}` },
+      preError: (!url || !tok) ? 'Entry is missing "url" or "apiToken".' : null
+    });
+  });
+
+  const results = await Promise.all(targets.map(async (t) => {
+    const base = { label: t.label, url: t.url, auth: t.auth };
+    if (t.preError) return { ...base, ok: false, error: t.preError };
+    return { ...base, ...(await probePanel(t.url, t.headers)) };
+  }));
+
+  const summary = {
+    panelNodesEnvSet: rawSet,
+    panelNodesParsedCount: PANEL_NODES.length,
+    parseError,
+    adminMaintenance: ADMIN_MAINTENANCE,
+    results
+  };
+
+  if (req.query.json) return res.json(summary);
+  res.set('Content-Type', 'text/html; charset=utf-8').send(renderNodesCheck(summary));
+});
+
+function renderNodesCheck(s) {
+  const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const card = (r) => {
+    const good = r.ok;
+    const detail = good
+      ? `<div class="ok">✓ OK — ${r.inbounds} inbound(s), ${r.clients} client(s)</div>`
+      : `<div class="bad">✗ ${esc(r.error)}</div>`;
+    const meta = [
+      r.httpStatus != null ? `HTTP ${r.httpStatus}` : null,
+      r.ms != null ? `${r.ms} ms` : null,
+      r.preview ? `body: ${esc(r.preview)}` : null
+    ].filter(Boolean).join(' · ');
+    return `<div class="c ${good ? 'g' : 'b'}">
+      <div class="t">${esc(r.label)}</div>
+      <div class="u">${esc(r.url)}</div>
+      <div class="a">auth: ${esc(r.auth)}</div>
+      ${detail}
+      ${meta ? `<div class="m">${meta}</div>` : ''}
+    </div>`;
+  };
+  const banner = s.parseError ? `<div class="warn">${esc(s.parseError)}</div>` : '';
+  const mnt = s.adminMaintenance ? `<div class="note">Note: admin sign-in is in maintenance mode. This checker still works via ?key=.</div>` : '';
+  return `<!doctype html><html><head><meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Node check</title><style>
+  body{font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif;background:#0b0b0d;color:#e8e8ea;margin:0;padding:16px;line-height:1.5}
+  h1{font-size:1.15rem;margin:0 0 4px}
+  .sub{color:#9a9aa2;font-size:.82rem;margin-bottom:16px}
+  .warn{background:rgba(230,168,23,.15);border:1px solid rgba(230,168,23,.45);color:#e6a817;padding:10px 12px;border-radius:10px;margin-bottom:14px;font-size:.85rem}
+  .note{color:#9a9aa2;font-size:.78rem;margin-bottom:14px}
+  .c{background:#141418;border:1px solid #26262c;border-radius:14px;padding:14px;margin-bottom:12px}
+  .c.g{border-left:4px solid #34d399}.c.b{border-left:4px solid #f26d6d}
+  .t{font-weight:700;font-size:.95rem}
+  .u{color:#8ab4ff;font-size:.78rem;word-break:break-all;margin:2px 0}
+  .a{color:#9a9aa2;font-size:.75rem;margin-bottom:8px}
+  .ok{color:#34d399;font-weight:600}.bad{color:#f26d6d;font-weight:600}
+  .m{color:#77777f;font-size:.72rem;margin-top:6px;font-family:ui-monospace,monospace}
+  </style></head><body>
+  <h1>Node connectivity check</h1>
+  <div class="sub">PANEL_NODES: ${s.panelNodesEnvSet ? `set, ${s.panelNodesParsedCount} node(s) parsed` : 'not set'}</div>
+  ${banner}${mnt}
+  ${s.results.map(card).join('')}
+  <div class="note">Tokens are masked. A node must use ITS OWN API token (its panel → Settings → Security → API Token), not the master's.</div>
+  </body></html>`;
+}
+
 // ============================ Static assets + SPA fallback ============================
 app.use(express.static(path.join(__dirname), {
   index: 'index.html',
