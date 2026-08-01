@@ -1444,11 +1444,13 @@ body.theme-light .m3-ripple { background: rgba(0,0,0,0.08); }
 }
 .ping-bar {
     flex: 1;
-    height: var(--h, 15%);
+    height: 100%;
     background: var(--surface-2);
     border-radius: 3px 3px 0 0;
-    transition: height 400ms cubic-bezier(0.34, 1.56, 0.64, 1), background 300ms;
+    transform: scaleY(0.1);
     transform-origin: bottom;
+    transition: background 300ms;
+    will-change: transform;
 }
 .ping-bar.active { background: var(--on-bg); }
 .ping-bar.good   { background: var(--good); }
@@ -1490,3 +1492,15 @@ body.theme-light .m3-ripple { background: rgba(0,0,0,0.08); }
 /* Selection */
 ::selection { background: rgba(255,255,255,0.15); }
 body.theme-light ::selection { background: rgba(0,0,0,0.12); }
+
+/* Copy button success flash */
+.copy-success {
+    color: var(--good) !important;
+    border-color: var(--good) !important;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+/* client-top-status subtle transition */
+#client-top-status {
+    transition: opacity 0.2s, transform 0.2s;
+}

@@ -137,13 +137,35 @@ function animateClientEntry() {
         const cards = document.querySelectorAll('#tab-user-view .card');
         if (!cards.length) return;
         const tl = gsap.timeline();
-        tl.from(cards, {
-            y: 28, opacity: 0, duration: 0.55,
-            ease: 'power3.out', stagger: 0.08, clearProps: 'all'
-        });
-        tl.from('#plan-status-pill', {
-            scale: 0.6, opacity: 0, duration: 0.4, ease: 'elastic.out(1, 0.6)'
-        }, '-=0.25');
+
+        const heroCard = document.querySelector('#tab-user-view .data-card-hero');
+        const otherCards = [...cards].filter(c => !c.classList.contains('data-card-hero'));
+
+        // Hero card enters first with a slight scale pop
+        if (heroCard) {
+            tl.from(heroCard, { y: 26, opacity: 0, scale: 0.97, duration: 0.5, ease: 'power3.out', clearProps: 'all' });
+            const heroChildren = heroCard.querySelectorAll('.usage-ring-wrap, .main-value, .traffic-split .split-item');
+            if (heroChildren.length) {
+                tl.from(heroChildren, { y: 14, opacity: 0, duration: 0.34, stagger: 0.08, ease: 'power2.out', clearProps: 'all' }, '-=0.3');
+            }
+        }
+
+        // Remaining cards cascade in
+        if (otherCards.length) {
+            tl.from(otherCards, { y: 22, opacity: 0, duration: 0.42, ease: 'power3.out', stagger: 0.08, clearProps: 'all' }, heroCard ? '-=0.18' : 0);
+        }
+
+        // Plan status pill pops with elastic spring
+        tl.from('#plan-status-pill', { scale: 0.55, opacity: 0, duration: 0.46, ease: 'elastic.out(1, 0.62)' }, '-=0.32');
+
+        // Plan stat trio items stagger up
+        tl.from('.plan-stat-item', { y: 10, opacity: 0, duration: 0.28, stagger: 0.07, ease: 'power2.out', clearProps: 'all' }, '-=0.3');
+
+        // Info rows slide in from left
+        const infoRows = document.querySelectorAll('#tab-user-view .card:not(.data-card-hero) .info-row');
+        if (infoRows.length) {
+            tl.from(infoRows, { x: -10, opacity: 0, duration: 0.22, stagger: 0.04, ease: 'power2.out', clearProps: 'all' }, '-=0.22');
+        }
     } catch(e) {}
 }
 
@@ -156,17 +178,23 @@ function initScrollReveal() {
         __scrollObserver = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
                 if (entry.isIntersecting) {
-                    gsap.to(entry.target, { y: 0, opacity: 1, duration: 0.45, ease: 'power3.out', clearProps: 'all' });
-                    __scrollObserver.unobserve(entry.target);
+                    const card = entry.target;
+                    gsap.to(card, { y: 0, opacity: 1, duration: 0.42, ease: 'power3.out', clearProps: 'all' });
+                    // Stagger inner info-rows as the card slides in
+                    const rows = card.querySelectorAll('.info-row');
+                    if (rows.length) {
+                        gsap.from(rows, { x: -10, opacity: 0, duration: 0.22, stagger: 0.04, ease: 'power2.out', clearProps: 'all', delay: 0.14 });
+                    }
+                    __scrollObserver.unobserve(card);
                 }
             });
-        }, { threshold: 0.12 });
+        }, { threshold: 0.08, rootMargin: '0px 0px -20px 0px' });
 
         const cards = document.querySelectorAll('#tab-user-view .card');
         cards.forEach((card, i) => {
             if (i > 0) {
                 card.style.opacity = '0';
-                card.style.transform = 'translateY(20px)';
+                card.style.transform = 'translateY(18px)';
                 __scrollObserver.observe(card);
             }
         });
@@ -392,35 +420,36 @@ document.getElementById('btn-login-admin').addEventListener('click', async () =>
     btn.disabled = false;
 });
 
-document.getElementById('btn-login-client').addEventListener('click', async () => {
+async function doClientLogin() {
     const id = (document.getElementById('login-email').value || '').trim();
     const btn = document.getElementById('btn-login-client');
     if (!id) { showToast('Enter your email/ID', 'error'); return; }
     scrambleButtonText(btn, 'Checking…');
     btn.disabled = true;
-    try { localStorage.setItem('xui_last_tab', 'client'); localStorage.setItem('xui_client_id', id || ''); } catch(e) {}
+    try { localStorage.setItem('xui_last_tab', 'client'); localStorage.setItem('xui_client_id', id); } catch(e) {}
     try {
-        const res = await fetch('/public/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'client', id }) });
+        const res = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'client', id }) });
         const ct = res.headers.get('Content-Type') || '';
         if (!ct.includes('application/json')) {
-            const txt = await res.text().catch(()=> '');
             showToast(res.status === 401 ? 'Session expired. Refresh and try again.' : 'Server temporary issue. Try again.', 'error');
-            btn.textContent = "Check Traffic"; return;
-        }
-        const data = await res.json();
-        if (data && data.success) { currentRole = 'client'; startClientApp(data.clientData); }
-        else {
-            const msg = data && data.msg;
-            if (msg === 'Panel Auth Failed') {
-                showToast('Panel credentials wrong — update PANEL_USERNAME/PANEL_PASSWORD env vars in Cloudflare Pages.', 'error');
-            } else {
-                showToast(msg || 'User not found', 'error');
+        } else {
+            const data = await res.json();
+            if (data && data.success) { currentRole = 'client'; startClientApp(data.clientData); return; }
+            else {
+                const msg = data && data.msg;
+                if (msg === 'Panel Auth Failed') {
+                    showToast('Panel credentials wrong — update PANEL_USERNAME/PANEL_PASSWORD env vars in Cloudflare Pages.', 'error');
+                } else {
+                    showToast(msg || 'User not found. Check your email/ID.', 'error');
+                }
             }
         }
     } catch(e) { showToast('Network/Server error. Try again.', 'error'); }
     btn.textContent = 'Check Traffic';
     btn.disabled = false;
-});
+}
+document.getElementById('btn-login-client').addEventListener('click', doClientLogin);
+document.getElementById('login-email').addEventListener('keydown', e => { if (e.key === 'Enter') doClientLogin(); });
 
 // --- Admin App Start ---
 async function startAdminApp() {
@@ -489,29 +518,52 @@ function generateQR(text, canvasEl, size) {
     } catch(e) {}
 }
 
+function flashCopyBtn(btn) {
+    if (!btn || typeof gsap === 'undefined' || prefersReducedMotion()) return;
+    gsap.timeline()
+        .to(btn, { scale: 0.88, duration: 0.08, ease: 'power2.in' })
+        .to(btn, { scale: 1.06, duration: 0.14, ease: 'elastic.out(1, 0.5)' })
+        .to(btn, { scale: 1, duration: 0.12, ease: 'power2.out' });
+    btn.classList.add('copy-success');
+    setTimeout(() => btn.classList.remove('copy-success'), 700);
+}
+
 window.copyClientConfig = async function() {
     const val = document.getElementById('client-config-link')?.value || '';
-    try { await navigator.clipboard.writeText(val); showToast('Config link copied'); } catch(e) { showToast('Copy failed', 'error'); }
+    const btn = document.querySelector('#client-config-card button[onclick="copyClientConfig()"]');
+    try { await navigator.clipboard.writeText(val); showToast('Config link copied'); flashCopyBtn(btn); } catch(e) { showToast('Copy failed', 'error'); }
 };
 
 window.copyClientSub = async function() {
     const val = document.getElementById('client-sub-link')?.value || '';
-    try { await navigator.clipboard.writeText(val); showToast('Subscription URL copied'); } catch(e) { showToast('Copy failed', 'error'); }
+    const btn = document.querySelector('#client-sub-row button[onclick="copyClientSub()"]');
+    try { await navigator.clipboard.writeText(val); showToast('Subscription URL copied'); flashCopyBtn(btn); } catch(e) { showToast('Copy failed', 'error'); }
 };
 
 function showClientConfig(configLink, subLink) {
     const card = document.getElementById('client-config-card');
     if (!card) return;
     if (!configLink) { card.style.display = 'none'; return; }
+
+    const wasHidden = card.style.display !== 'block';
     card.style.display = 'block';
+
     const inp = document.getElementById('client-config-link');
     if (inp) inp.value = configLink;
     const canvas = document.getElementById('client-qr-canvas');
     if (canvas) generateQR(configLink, canvas, 200);
     const subRow = document.getElementById('client-sub-row');
     const subInp = document.getElementById('client-sub-link');
+    const subWasHidden = subRow && subRow.style.display !== 'block';
     if (subLink && subRow && subInp) { subRow.style.display = 'block'; subInp.value = subLink; }
     else if (subRow) subRow.style.display = 'none';
+
+    if (!wasHidden || typeof gsap === 'undefined' || prefersReducedMotion()) return;
+    gsap.fromTo(card, { opacity: 0, y: 18, scale: 0.97 }, { opacity: 1, y: 0, scale: 1, duration: 0.42, ease: 'power2.out' });
+    if (canvas) gsap.fromTo(canvas, { scale: 0.78, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.54, ease: 'elastic.out(1, 0.62)', delay: 0.14 });
+    if (subLink && subRow && subWasHidden) {
+        gsap.fromTo(subRow, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.3, ease: 'power2.out', delay: 0.22 });
+    }
 }
 
 // --- SVG Ring Updater ---
@@ -705,9 +757,13 @@ function applyClientDataToUI(client) {
             const topDot = document.getElementById('client-top-dot');
             const topText = document.getElementById('client-top-text');
             if (top && topDot && topText) {
+                const firstShow = top.style.display !== 'inline-flex';
                 top.style.display = 'inline-flex';
                 topText.textContent = isOnline ? 'ONLINE' : (active ? 'ACTIVE' : 'INACTIVE');
                 topDot.style.background = isOnline ? 'var(--good)' : (active ? 'var(--on-mid)' : 'var(--bad)');
+                if (firstShow && typeof gsap !== 'undefined' && !prefersReducedMotion()) {
+                    gsap.fromTo(top, { opacity: 0, x: 10, scale: 0.88 }, { opacity: 1, x: 0, scale: 1, duration: 0.36, ease: 'elastic.out(1, 0.65)' });
+                }
             }
         } catch(e) {}
     } catch(e) {}
@@ -794,7 +850,7 @@ function startClientApp(client) {
         const idToCheck = (localStorage.getItem('xui_client_id') || client.email || '').trim();
         if (idToCheck) {
             clientLoopInterval = setInterval(() => {
-                fetch('/public/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'client', id: idToCheck }) })
+                fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'client', id: idToCheck }) })
                 .then(r => r.json()).then(d => { if (d && d.success) applyClientDataToUI(d.clientData); }).catch(()=>{});
             }, 120000);
         }
@@ -818,7 +874,7 @@ try {
         const id = (localStorage.getItem('xui_client_id') || '').trim();
         if (!id || !__currentClientData) { btn._refreshing = false; return; }
         try {
-            const res = await fetch('/public/auth', {
+            const res = await fetch('/api/auth', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ type: 'client', id })
@@ -1922,16 +1978,19 @@ try {
         const bars = barsEl.querySelectorAll('.ping-bar');
         if (!bars.length) return;
         const max = Math.max(...history, 1);
+        const useGsap = typeof gsap !== 'undefined' && !prefersReducedMotion();
         bars.forEach((bar, i) => {
             const val = history[history.length - MAX_BARS + i] ?? null;
             bar.classList.remove('active', 'good', 'warn', 'bad');
-            if (val === null) {
-                bar.style.setProperty('--h', '10%');
-            } else {
-                const hPct = Math.max(10, Math.min(100, (val / max) * 100));
-                bar.style.setProperty('--h', hPct + '%');
+            const scaleVal = val === null ? 0.1 : Math.max(0.1, Math.min(1, val / max));
+            if (val !== null) {
                 bar.classList.add(getQuality(val).cls);
                 if (i === bars.length - 1) bar.classList.add('active');
+            }
+            if (useGsap) {
+                gsap.to(bar, { scaleY: scaleVal, duration: 0.42, delay: i * 0.04, ease: 'elastic.out(1, 0.55)' });
+            } else {
+                bar.style.transform = `scaleY(${scaleVal})`;
             }
         });
     }
@@ -2025,7 +2084,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         } else if ((lastTab === 'client' && cachedClient) || directAuto) {
             const idToCheck = (directClient || cachedClient || '').trim();
             if (idToCheck) {
-                fetch('/public/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'client', id: idToCheck }) })
+                fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'client', id: idToCheck }) })
                 .then(r => r.json()).then(d => {
                     if (d && d.success) { currentRole = 'client'; startClientApp(d.clientData); }
                     else if (directAuto) showToast((d && d.msg) || 'User not found', 'error');
