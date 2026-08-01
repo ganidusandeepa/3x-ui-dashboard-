@@ -354,8 +354,15 @@ document.addEventListener('click', (e) => {
     if (e.target && (e.target.id === 'btn-logout' || e.target.closest('#btn-logout'))) doLogout();
     try {
         const btn = e.target?.closest?.('button');
-        if (btn && typeof gsap !== 'undefined') gsap.fromTo(btn, { scale: 0.98 }, { scale: 1, duration: 0.14, ease: 'power2.out' });
-        else if (btn && typeof anime !== 'undefined') anime({ targets: btn, scale: [0.98, 1], duration: 160, easing: 'easeOutCubic' });
+        if (!btn || prefersReducedMotion()) return;
+        // Material 3 Expressive spring press — driven by motion.dev (Motion One).
+        if (window.Motion && Motion.animate) {
+            Motion.animate(btn, { scale: [0.94, 1] }, { duration: 0.4, easing: [0.34, 1.56, 0.64, 1] });
+        } else if (typeof gsap !== 'undefined') {
+            gsap.fromTo(btn, { scale: 0.94 }, { scale: 1, duration: 0.4, ease: 'elastic.out(1, 0.5)' });
+        } else if (typeof anime !== 'undefined') {
+            anime({ targets: btn, scale: [0.94, 1], duration: 400, easing: 'easeOutElastic(1, .5)' });
+        }
     } catch(e) {}
 });
 

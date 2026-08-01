@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=28">
+    <link rel="stylesheet" href="styles.css?v=29">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" data-cfasync="false"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js" data-cfasync="false"></script>
@@ -24,6 +24,8 @@
     <!-- Extra animation libs: 3D card tilt + confetti -->
     <script src="https://cdn.jsdelivr.net/npm/vanilla-tilt@1.8.1/dist/vanilla-tilt.min.js" data-cfasync="false"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js" data-cfasync="false"></script>
+    <!-- motion.dev (Motion One) — Material 3 Expressive button/spring motion -->
+    <script src="https://cdn.jsdelivr.net/npm/motion@10.18.0/dist/motion.umd.js" data-cfasync="false"></script>
 </head>
 <body>
     <div id="toast-container"></div>
@@ -172,7 +174,7 @@
                 </div>
 
                 <!-- Progress Line -->
-                <div class="card" style="margin-top:20px;">
+                <div class="card">
                     <div class="consumption-head">
                         <h3 style="margin-bottom:0;">Consumption</h3>
                         <div class="consumption-pct" id="user-progress-pct" style="display:none;">0%</div>
@@ -193,7 +195,7 @@
                 </div>
 
                 <!-- M3 Live Plan Status -->
-                <div class="card m3-plan-card" id="plan-status-card" style="margin-top:20px;">
+                <div class="card m3-plan-card" id="plan-status-card">
 
                     <div class="plan-head">
                         <div class="plan-status-pill" id="plan-status-pill">
@@ -253,7 +255,7 @@
                 </div>
 
                 <!-- Account Details -->
-                <div class="card" style="margin-top:26px;">
+                <div class="card">
                     <h3><i class="fa-solid fa-id-card"></i> Account Details</h3>
                     <div class="info-row"><span>ID/Email:</span> <strong id="user-email">-</strong></div>
                     <div class="info-row"><span>Status:</span> <strong id="user-online">-</strong></div>
@@ -263,7 +265,7 @@
                 </div>
 
                 <!-- Server Ping Card -->
-                <div class="card ping-card" id="ping-card" style="margin-top:26px;">
+                <div class="card ping-card" id="ping-card">
                     <div class="ping-head">
                         <div>
                             <div class="ping-eyebrow">Server Latency</div>
@@ -293,7 +295,7 @@
                 </div>
 
                 <!-- Config Link & QR Code (client view) -->
-                <div id="client-config-card" class="card" style="margin-top:26px; display:none;">
+                <div id="client-config-card" class="card" style="display:none;">
                     <h3><i class="fa-solid fa-qrcode"></i> Connection Config</h3>
                     <p class="subtitle" style="margin-bottom:14px; font-size:0.85rem;">Scan the QR code or copy the config link to your proxy app.</p>
 
@@ -711,7 +713,7 @@
         </div>
     </div>
 
-    <script src="main.js?v=40" data-cfasync="false"></script>
+    <script src="main.js?v=41" data-cfasync="false"></script>
     <script src="fx.js?v=1" data-cfasync="false"></script>
 </body>
 </html>

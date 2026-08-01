@@ -60,6 +60,10 @@
     --m3-std-slow:        750ms cubic-bezier(0.27, 1.06, 0.18, 1.00);
     --m3-effects:         200ms cubic-bezier(0.20, 0.00, 0.00, 1.00);
 
+    /* Material 3 Expressive — springy, overshooting motion */
+    --m3-expressive-fast:    350ms cubic-bezier(0.34, 1.56, 0.64, 1.00);
+    --m3-expressive-default: 500ms cubic-bezier(0.30, 1.40, 0.50, 1.00);
+
     /* Elevation */
     --shadow-1: 0 1px 3px rgba(0,0,0,0.7), 0 1px 2px rgba(0,0,0,0.55);
     --shadow-2: 0 4px 16px rgba(0,0,0,0.55), 0 1px 4px rgba(0,0,0,0.4);
@@ -1015,6 +1019,9 @@ body.theme-light .accent-btn { color: #fff; background: #0a0a0a; }
    ============================================================ */
 .tab-content { display: none; }
 .tab-content.active { display: block; animation: tab-reveal var(--m3-std-fast) both; }
+/* Client view: even, generous spacing between its stacked cards (id beats the
+   .tab-content.active block rule, so flex wins when this tab is active). */
+#tab-user-view.active { display: flex; flex-direction: column; gap: 24px; }
 @keyframes tab-reveal {
     from { opacity: 0; transform: translateY(8px); }
     to   { opacity: 1; transform: translateY(0); }
@@ -1677,9 +1684,12 @@ body.theme-light ::selection { background: rgba(0,0,0,0.12); }
     outline-offset: 2px;
 }
 
-/* Keep label/icon (and the ripple) above the state layer */
-.sys-btn > *, .hdr-btn > *, .ping-btn > *, .login-btn > *, .accent-btn > *, .fab > *,
-.m3-ripple { position: relative; z-index: 1; }
+/* Keep label/icon above the state layer. The ripple must stay ABSOLUTE — making
+   it position:relative turned it into a flex item and shoved the icon sideways. */
+.sys-btn > i, .sys-btn > span, .hdr-btn > i, .hdr-btn > span,
+.ping-btn > i, .ping-btn > span, .login-btn > i, .login-btn > span,
+.accent-btn > i, .accent-btn > span, .fab > i, .fab > span { position: relative; z-index: 1; }
+.m3-ripple { position: absolute; z-index: 1; }
 
 @media (prefers-reduced-motion: reduce) {
     .sys-btn, .hdr-btn, .ping-btn, .login-btn, .accent-btn, .fab { transition: none; }
