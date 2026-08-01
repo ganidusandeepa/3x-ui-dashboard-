@@ -1259,7 +1259,7 @@ body.theme-light header { background: rgba(245,245,245,0.85); border-bottom: 1px
 @media (max-width: 840px) {
     .mobile-nav { display: flex; }
     .dashboard-wrapper { padding: 14px; padding-bottom: calc(var(--nav-height) + 32px + env(safe-area-inset-bottom)); }
-    .overview-grid { grid-template-columns: 1fr; gap: 14px; }
+    .overview-grid { grid-template-columns: 1fr; gap: 18px; }
     .charts-row { display: block; }
     .inbound-grid, .client-container, .system-grid { grid-template-columns: 1fr; }
     .data-card-hero { grid-column: span 1; flex-direction: column; text-align: center; gap: 16px; padding: 20px; }
@@ -1290,7 +1290,7 @@ body.theme-light header { background: rgba(245,245,245,0.85); border-bottom: 1px
     .logo-ext { display: none; }
     .logo-name { font-size: 1.1rem; }
     .card { padding: 16px; border-radius: var(--shape-xl); }
-    .overview-grid { gap: 10px; }
+    .overview-grid { gap: 16px; }
     .data-card-hero { padding: 16px; }
     .data-card-hero .main-value { font-size: 1.8rem; margin: 5px 0; }
     .traffic-split { flex-direction: row; gap: 14px; margin-top: 10px; }
@@ -1625,3 +1625,64 @@ body.theme-light ::selection { background: rgba(0,0,0,0.12); }
 }
 @keyframes fx-ping-flash { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
 @keyframes fx-ping-bar-pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.9; } }
+
+/* ======================================================================
+   Material 3 button interactions — state layer + press spring + focus ring
+   Applied to every button class so dynamically-added buttons get it too.
+   ====================================================================== */
+.sys-btn, .hdr-btn, .ping-btn, .login-btn, .accent-btn, .fab {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    transition: transform var(--m3-spatial-fast),
+                background var(--m3-effects),
+                border-color var(--m3-effects),
+                color var(--m3-effects),
+                box-shadow var(--m3-effects),
+                opacity var(--m3-effects);
+}
+/* Translucent "state layer" of the on-color — the signature M3 feedback. */
+.sys-btn::after, .hdr-btn::after, .ping-btn::after,
+.login-btn::after, .accent-btn::after, .fab::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--m3-effects);
+    z-index: 0;
+}
+@media (hover: hover) {
+    .sys-btn:hover::after, .hdr-btn:hover::after, .ping-btn:hover::after,
+    .login-btn:hover::after, .accent-btn:hover::after, .fab:hover::after { opacity: 0.08; }
+}
+.sys-btn:active::after, .hdr-btn:active::after, .ping-btn:active::after,
+.login-btn:active::after, .accent-btn:active::after, .fab:active::after { opacity: 0.14; }
+
+/* Press-scale spring (overrides the older flat scale) */
+.sys-btn:active, .hdr-btn:active, .ping-btn:active,
+.login-btn:active, .accent-btn:active { transform: scale(0.96); }
+.fab:active { transform: scale(0.92); }
+
+/* Elevation lift on hover for the prominent buttons */
+@media (hover: hover) {
+    .login-btn:hover, .accent-btn:hover, .fab:hover { box-shadow: var(--shadow-2); }
+}
+
+/* Keyboard focus ring (accessibility) */
+.sys-btn:focus-visible, .hdr-btn:focus-visible, .ping-btn:focus-visible,
+.login-btn:focus-visible, .accent-btn:focus-visible, .fab:focus-visible {
+    outline: 2px solid var(--on-mid);
+    outline-offset: 2px;
+}
+
+/* Keep label/icon (and the ripple) above the state layer */
+.sys-btn > *, .hdr-btn > *, .ping-btn > *, .login-btn > *, .accent-btn > *, .fab > *,
+.m3-ripple { position: relative; z-index: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+    .sys-btn, .hdr-btn, .ping-btn, .login-btn, .accent-btn, .fab { transition: none; }
+    .sys-btn:active, .hdr-btn:active, .ping-btn:active,
+    .login-btn:active, .accent-btn:active, .fab:active { transform: none; }
+}
