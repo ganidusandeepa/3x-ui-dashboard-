@@ -71,6 +71,57 @@ function parseMaybe(v, fallback) {
   if (typeof v === 'object') return v;
   try { return JSON.parse(v); } catch (e) { return fallback || {}; }
 }
+
+// Unified client list for one inbound. settings.clients is the source of truth
+// for WHICH clients exist (id/uuid, subId, flow, limits) — clientStats only has
+// a row once a client has an email + initialized traffic stats, so relying on
+// clientStats alone silently drops clients (e.g. added-but-no-traffic-yet, or
+// no email). Merge them by email so every configured client is visible, with
+// usage overlaid when available.
+function inboundClients(inb) {
+  const stats = Array.isArray(inb?.clientStats) ? inb.clientStats : [];
+  const settings = parseMaybe(inb?.settings);
+  const confs = Array.isArray(settings.clients) ? settings.clients : [];
+  const byEmail = new Map();
+
+  for (const c of confs) {
+    const key = c.email || `__id:${c.id || c.password || Math.random()}`;
+    byEmail.set(key, {
+      email: c.email || '',
+      uuid: c.id || c.uuid || null,
+      password: c.password || undefined,
+      subId: c.subId || null,
+      flow: c.flow,
+      enable: c.enable !== false,
+      total: Number(c.totalGB || 0),
+      expiryTime: Number(c.expiryTime || 0),
+      limitIp: c.limitIp,
+      up: 0, down: 0,
+      inboundId: inb.id,
+      hasStats: false
+    });
+  }
+
+  for (const s of stats) {
+    const key = s.email || `__id:${s.id || Math.random()}`;
+    const prev = byEmail.get(key) || {};
+    byEmail.set(key, {
+      ...prev,
+      email: s.email || prev.email || '',
+      uuid: prev.uuid || s.uuid || null,
+      subId: prev.subId || s.subId || null,
+      enable: (s.enable !== undefined) ? s.enable : prev.enable,
+      up: Number(s.up || 0),
+      down: Number(s.down || 0),
+      total: (s.total !== undefined ? Number(s.total) : prev.total) || 0,
+      expiryTime: Number(s.expiryTime || prev.expiryTime || 0),
+      inboundId: inb.id,
+      hasStats: true
+    });
+  }
+
+  return Array.from(byEmail.values());
+}
 // Maintenance mode — when true, admin sign-in is blocked. Flip to false (and in
 // functions/api/[[path]].js + main.js) to re-enable admin access.
 const ADMIN_MAINTENANCE = true;
@@ -159,14 +210,14 @@ async function resolveClientFromPanel(baseUrl, authHeaders, id, sourceLabel) {
   } catch (e) { return null; }
   if (!data || !data.success || !Array.isArray(data.obj)) return null;
 
+  // Search the merged config+stats list, so a client that exists in the
+  // inbound's config but has no traffic-stats row yet is still found.
   let foundClient = null;
   let foundInbound = null;
-  data.obj.forEach(inb => {
-    if (inb.clientStats) {
-      const client = inb.clientStats.find(c => c.email === id);
-      if (client) { foundClient = client; foundInbound = inb; }
-    }
-  });
+  for (const inb of data.obj) {
+    const c = inboundClients(inb).find(x => x.email === id);
+    if (c) { foundClient = c; foundInbound = inb; break; }
+  }
   if (!foundClient) return null;
 
   // These five lookups are all independent of each other — fire them
@@ -556,8 +607,10 @@ app.get('/api/clients', requireAdmin, async (req, res) => {
     const clients = [];
     if (data && data.obj) {
       data.obj.forEach(inb => {
-        (inb.clientStats || []).forEach(c =>
-          clients.push({ ...c, inboundId: inb.id, inboundRemark: inb.remark || String(inb.id), protocol: inb.protocol }));
+        // Merged config+stats list so every configured client shows up, not
+        // just the ones with a traffic-stats row.
+        inboundClients(inb).forEach(c =>
+          clients.push({ ...c, inboundRemark: inb.remark || String(inb.id), protocol: inb.protocol }));
       });
     }
     res.json({ success: true, obj: clients });
@@ -658,10 +711,8 @@ app.get('/public/stream', async (req, res) => {
     if (!inboundsData || !inboundsData.success || !Array.isArray(inboundsData.obj)) return null;
     let found = null;
     inboundsData.obj.forEach(inb => {
-      const stats = inb?.clientStats;
-      if (!Array.isArray(stats)) return;
-      const c = stats.find(x => String(x.email) === id);
-      if (c) found = { ...c, inboundId: inb.id };
+      const c = inboundClients(inb).find(x => String(x.email) === id);
+      if (c) found = c;
     });
     return found;
   };
@@ -735,9 +786,14 @@ async function probePanel(baseUrl, authHeaders) {
     if (!json) return { ok: false, httpStatus: r.status, ms, error: 'Non-JSON response (wrong URL / not a 3x-ui API path?)', preview: (bodyText || '').slice(0, 100) };
     if (!json.success) return { ok: false, httpStatus: r.status, ms, error: 'success:false — ' + (json.msg || 'auth or API error') };
     const inbounds = Array.isArray(json.obj) ? json.obj.length : 0;
-    let clients = 0;
-    if (Array.isArray(json.obj)) json.obj.forEach(i => { clients += (i.clientStats || []).length; });
-    return { ok: true, httpStatus: r.status, ms, inbounds, clients };
+    let statsClients = 0;   // clients with a traffic-stats row
+    let configured = 0;     // clients defined in settings.clients (source of truth)
+    if (Array.isArray(json.obj)) json.obj.forEach(i => {
+      statsClients += (i.clientStats || []).length;
+      const s = parseMaybe(i.settings);
+      configured += Array.isArray(s.clients) ? s.clients.length : 0;
+    });
+    return { ok: true, httpStatus: r.status, ms, inbounds, configured, statsClients, clients: configured };
   } catch (e) {
     const ms = Date.now() - started;
     const msg = String(e?.cause?.code || e?.cause?.message || e?.message || e);
@@ -810,8 +866,12 @@ function renderNodesCheck(s) {
   const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const card = (r) => {
     const good = r.ok;
+    let clientLine = `${r.configured} client(s)`;
+    if (good && r.statsClients != null && r.statsClients !== r.configured) {
+      clientLine = `${r.configured} configured, ${r.statsClients} with traffic stats`;
+    }
     const detail = good
-      ? `<div class="ok">✓ OK — ${r.inbounds} inbound(s), ${r.clients} client(s)</div>`
+      ? `<div class="ok">✓ OK — ${r.inbounds} inbound(s), ${clientLine}</div>`
       : `<div class="bad">✗ ${esc(r.error)}</div>`;
     const meta = [
       r.httpStatus != null ? `HTTP ${r.httpStatus}` : null,
