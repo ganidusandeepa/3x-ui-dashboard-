@@ -1703,3 +1703,17 @@ body.theme-light ::selection { background: rgba(0,0,0,0.12); }
     .sys-btn:active, .hdr-btn:active, .ping-btn:active,
     .login-btn:active, .accent-btn:active, .fab:active { transform: none; }
 }
+
+/* ======================================================================
+   Lazy-load feedback — the BG toggle fetches Three.js/Vanta (~617KB) on
+   first use, so show it's working instead of appearing unresponsive.
+   ====================================================================== */
+.hdr-btn.loading { pointer-events: none; opacity: 0.75; }
+.hdr-btn.loading > i {
+    animation: fx-spin 0.8s linear infinite;
+    transform-origin: 50% 50%;
+}
+@keyframes fx-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+    .hdr-btn.loading > i { animation: none; }
+}

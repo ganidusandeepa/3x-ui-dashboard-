@@ -1,4 +1,37 @@
 // ============================================================
+// PHASE 0 — Lazy script loader
+// ============================================================
+// Heavy libraries are NOT in the initial page load. Three.js + Vanta (~617KB)
+// only matter if the user turns the animated background on, and Chart.js
+// (~208KB) only matters in the admin view — loading them upfront cost every
+// visitor ~825KB for features most never touch. Fetch them on demand instead.
+const __loadedScripts = new Map();
+function loadScriptOnce(src) {
+    if (__loadedScripts.has(src)) return __loadedScripts.get(src);
+    const p = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.async = true;
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error('Failed to load ' + src));
+        document.head.appendChild(s);
+    });
+    __loadedScripts.set(src, p);
+    return p;
+}
+
+// Load several scripts in order (deps first).
+async function loadScriptsSequential(list) {
+    for (const src of list) await loadScriptOnce(src);
+}
+
+const LIB = {
+    three: 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
+    vanta: 'https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.globe.min.js',
+    chart: 'https://cdn.jsdelivr.net/npm/chart.js'
+};
+
+// ============================================================
 // PHASE 1 — Scramble Engine (hacking typing effect)
 // ============================================================
 const GLYPHS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&!?><[]{}|~';
@@ -355,13 +388,10 @@ document.addEventListener('click', (e) => {
     try {
         const btn = e.target?.closest?.('button');
         if (!btn || prefersReducedMotion()) return;
-        // Material 3 Expressive spring press — driven by motion.dev (Motion One).
-        if (window.Motion && Motion.animate) {
-            Motion.animate(btn, { scale: [0.94, 1] }, { duration: 0.4, easing: [0.34, 1.56, 0.64, 1] });
-        } else if (typeof gsap !== 'undefined') {
+        // Material 3 Expressive spring press. GSAP's elastic ease gives the same
+        // overshoot Motion One did, without shipping a second animation engine.
+        if (typeof gsap !== 'undefined') {
             gsap.fromTo(btn, { scale: 0.94 }, { scale: 1, duration: 0.4, ease: 'elastic.out(1, 0.5)' });
-        } else if (typeof anime !== 'undefined') {
-            anime({ targets: btn, scale: [0.94, 1], duration: 400, easing: 'easeOutElastic(1, .5)' });
         }
     } catch(e) {}
 });
@@ -508,7 +538,16 @@ async function startAdminApp() {
         else switchTab('overview');
     } catch(e) { switchTab('overview'); }
 
-    initAdminCharts();
+    // Chart.js (~208KB) is admin-only — load it now rather than on every page
+    // view. Don't block the data render on it; charts fill in when ready.
+    loadScriptOnce(LIB.chart).then(() => {
+        try {
+            initAdminCharts();
+            // Charts arrive after the first data render, so backfill them now
+            // instead of leaving them blank until the next 60s refresh.
+            loadAdminData();
+        } catch(e) {}
+    }).catch(() => {});
     await loadAdminData();
 
     try {
@@ -1081,10 +1120,30 @@ document.getElementById('main-fab').addEventListener('click', () => {
 function isMobileLike() { try { return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 768; } catch(e) { return false; } }
 function prefersReducedMotion() { try { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e) { return false; } }
 
-function startVantaGlobe() {
+let __vantaLoading = false;
+async function startVantaGlobe() {
     try {
         const el = document.getElementById('vanta-bg');
-        if (!el || prefersReducedMotion() || typeof VANTA === 'undefined' || !VANTA.GLOBE) return;
+        if (!el || prefersReducedMotion() || __vantaLoading) return;
+
+        // Three.js + Vanta are ~617KB and this background is off by default —
+        // fetch them only now, the first time it's actually switched on.
+        if (typeof VANTA === 'undefined' || !VANTA.GLOBE) {
+            __vantaLoading = true;
+            const btn = document.getElementById('btn-bg');
+            btn?.classList.add('loading');
+            try {
+                await loadScriptsSequential([LIB.three, LIB.vanta]);
+            } catch (e) {
+                showToast('Could not load background effect', 'error');
+                return;
+            } finally {
+                __vantaLoading = false;
+                btn?.classList.remove('loading');
+            }
+            if (typeof VANTA === 'undefined' || !VANTA.GLOBE) return;
+        }
+
         try { __vanta?.destroy?.(); } catch(e) {}
         const mobile = isMobileLike();
         __vanta = VANTA.GLOBE({ el, mouseControls: !mobile, touchControls: true, gyroControls: false, minHeight: 200, minWidth: 200, scale: mobile ? 0.8 : 1.0, scaleMobile: 0.75, color: 0x00ffcc, color2: 0x0066ff, backgroundColor: 0x000000, size: mobile ? 0.55 : 0.75 });

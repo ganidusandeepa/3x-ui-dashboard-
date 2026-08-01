@@ -7,25 +7,25 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=30">
+    <link rel="stylesheet" href="styles.css?v=31">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <!-- Kept render-blocking on purpose: deferring it makes every icon pop in
+         late on an icon-heavy UI, which looks worse than the ~30KB costs. -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" data-cfasync="false"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js" data-cfasync="false"></script>
-    <!-- Vanta Globe background (WebGL) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" data-cfasync="false"></script>
-    <script src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.globe.min.js" data-cfasync="false"></script>
-    <!-- GSAP plugins (free) -->
-    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/ScrollTrigger.min.js" data-cfasync="false"></script>
-    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/Draggable.min.js" data-cfasync="false"></script>
-    <!-- anime.js fallback -->
-    <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js" data-cfasync="false"></script>
-    <!-- QR code generation -->
-    <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js" data-cfasync="false"></script>
-    <!-- Extra animation libs: 3D card tilt + confetti -->
-    <script src="https://cdn.jsdelivr.net/npm/vanilla-tilt@1.8.1/dist/vanilla-tilt.min.js" data-cfasync="false"></script>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js" data-cfasync="false"></script>
-    <!-- motion.dev (Motion One) — Material 3 Expressive button/spring motion -->
-    <script src="https://cdn.jsdelivr.net/npm/motion@10.18.0/dist/motion.umd.js" data-cfasync="false"></script>
+
+    <!-- Critical-path libraries only. `defer` so they never block HTML parsing.
+         Heavy extras are lazy-loaded on demand from main.js instead:
+           • Three.js + Vanta (~617KB) — only when the BG toggle is switched on
+           • Chart.js (~208KB)         — only when the admin view opens
+         Removed entirely: ScrollTrigger (never used — scroll reveal uses native
+         IntersectionObserver), anime.js (dead fallback; GSAP is always present),
+         Motion One (95KB for one button spring GSAP already handles). -->
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" data-cfasync="false"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/Draggable.min.js" data-cfasync="false"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js" data-cfasync="false"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/vanilla-tilt@1.8.1/dist/vanilla-tilt.min.js" data-cfasync="false"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js" data-cfasync="false"></script>
 </head>
 <body>
     <div id="toast-container"></div>
@@ -716,7 +716,10 @@
         </div>
     </div>
 
-    <script src="main.js?v=42" data-cfasync="false"></script>
-    <script src="fx.js?v=1" data-cfasync="false"></script>
+    <!-- `defer` is REQUIRED here: the CDN libs above are deferred, and deferred
+         scripts run after non-deferred ones. Without defer these would execute
+         before GSAP/QRious existed. Deferred scripts run in document order. -->
+    <script defer src="main.js?v=43" data-cfasync="false"></script>
+    <script defer src="fx.js?v=2" data-cfasync="false"></script>
 </body>
 </html>
