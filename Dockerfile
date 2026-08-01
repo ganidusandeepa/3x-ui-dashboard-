@@ -17,8 +17,9 @@ ENV NODE_ENV=production
 ENV PORT=8080
 EXPOSE 8080
 
-# Simple container healthcheck against the built-in /healthz route
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+ (process.env.PORT||8080) +'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+# NOTE: no Docker HEALTHCHECK here on purpose. A failing container healthcheck
+# makes Coolify mark the app "unhealthy" and its proxy (Traefik) then refuses to
+# route the domain to it. Let Coolify manage health via its own UI setting
+# (Health Check path = /healthz) instead of baking a brittle one into the image.
 
 CMD ["node", "server.js"]
