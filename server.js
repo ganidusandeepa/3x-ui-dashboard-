@@ -97,20 +97,33 @@ async function resolveClient(id) {
 
   let isOnline = null;
   let ips = [];
+  // 3x-ui moved these to /panel/api/clients/*; fall back to legacy /panel/api/inbounds/* on older panels.
   try {
-    const onRes = await fetch(`${PANEL_URL}/panel/api/inbounds/onlines`, {
-      method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: JSON.stringify({})
-    });
-    const onData = await onRes.json();
-    if (onData && onData.success && Array.isArray(onData.obj)) isOnline = onData.obj.includes(foundClient.email);
+    for (const p of ['clients/onlines', 'inbounds/onlines']) {
+      try {
+        const onRes = await fetch(`${PANEL_URL}/panel/api/${p}`, {
+          method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: JSON.stringify({})
+        });
+        const onData = await onRes.json();
+        if (onData && onData.success && Array.isArray(onData.obj)) { isOnline = onData.obj.includes(foundClient.email); break; }
+      } catch (e) {}
+    }
   } catch (e) {}
 
   try {
-    const ipRes = await fetch(`${PANEL_URL}/panel/api/inbounds/clientIps/${encodeURIComponent(foundClient.email)}`, {
-      method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: JSON.stringify({})
-    });
-    const ipData = await ipRes.json();
-    if (ipData && ipData.success && Array.isArray(ipData.obj)) ips = ipData.obj;
+    const em = encodeURIComponent(foundClient.email);
+    for (const p of [`clients/ips/${em}`, `inbounds/clientIps/${em}`]) {
+      try {
+        const ipRes = await fetch(`${PANEL_URL}/panel/api/${p}`, {
+          method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: JSON.stringify({})
+        });
+        const ipData = await ipRes.json();
+        if (ipData && ipData.success) {
+          if (Array.isArray(ipData.obj)) { ips = ipData.obj; break; }
+          if (typeof ipData.obj === 'string' && ipData.obj && !/no ip/i.test(ipData.obj)) { ips = ipData.obj.split(/[,\s]+/).filter(Boolean); break; }
+        }
+      } catch (e) {}
+    }
   } catch (e) {}
 
   let subLink = null, vlessLink = null, vmessLink = null, trojanLink = null, protocol = 'vless';

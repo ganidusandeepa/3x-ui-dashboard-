@@ -150,14 +150,19 @@ export async function onRequest(context) {
               const onHeaders = PANEL_API_TOKEN
                 ? { "Authorization": `Bearer ${PANEL_API_TOKEN}`, "Content-Type": "application/json" }
                 : { "Cookie": cookie, "Content-Type": "application/json" };
-              const onRes = await fetch(`${PANEL_URL}/panel/api/inbounds/onlines`, {
-                method: 'POST',
-                headers: onHeaders,
-                body: JSON.stringify({})
-              });
-              const onData = await onRes.json();
-              if (onData && onData.success && Array.isArray(onData.obj)) {
-                isOnline = onData.obj.includes(foundClient.email);
+              // 3x-ui moved this to /panel/api/clients/onlines; fall back to the
+              // legacy /panel/api/inbounds/onlines for older panels.
+              for (const p of ['clients/onlines', 'inbounds/onlines']) {
+                try {
+                  const onRes = await fetch(`${PANEL_URL}/panel/api/${p}`, {
+                    method: 'POST', headers: onHeaders, body: JSON.stringify({})
+                  });
+                  const onData = await onRes.json();
+                  if (onData && onData.success && Array.isArray(onData.obj)) {
+                    isOnline = onData.obj.includes(foundClient.email);
+                    break;
+                  }
+                } catch (e) {}
               }
             } catch (e) {}
 
@@ -165,14 +170,21 @@ export async function onRequest(context) {
               const ipHeaders = PANEL_API_TOKEN
                 ? { "Authorization": `Bearer ${PANEL_API_TOKEN}`, "Content-Type": "application/json" }
                 : { "Cookie": cookie, "Content-Type": "application/json" };
-              const ipRes = await fetch(`${PANEL_URL}/panel/api/inbounds/clientIps/${encodeURIComponent(foundClient.email)}`, {
-                method: 'POST',
-                headers: ipHeaders,
-                body: JSON.stringify({})
-              });
-              const ipData = await ipRes.json();
-              if (ipData && ipData.success && Array.isArray(ipData.obj)) {
-                ips = ipData.obj;
+              const em = encodeURIComponent(foundClient.email);
+              // New API: /panel/api/clients/ips/{email}; legacy: /panel/api/inbounds/clientIps/{email}
+              for (const p of [`clients/ips/${em}`, `inbounds/clientIps/${em}`]) {
+                try {
+                  const ipRes = await fetch(`${PANEL_URL}/panel/api/${p}`, {
+                    method: 'POST', headers: ipHeaders, body: JSON.stringify({})
+                  });
+                  const ipData = await ipRes.json();
+                  if (ipData && ipData.success) {
+                    if (Array.isArray(ipData.obj)) { ips = ipData.obj; break; }
+                    if (typeof ipData.obj === 'string' && ipData.obj && !/no ip/i.test(ipData.obj)) {
+                      ips = ipData.obj.split(/[,\s]+/).filter(Boolean); break;
+                    }
+                  }
+                } catch (e) {}
               }
             } catch (e) {}
 

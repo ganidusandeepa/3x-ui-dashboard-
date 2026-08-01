@@ -1344,7 +1344,7 @@ try {
         for (const email of __bulkSelected) {
             const user = __clientsCache.find(u => u.email === email);
             if (!user) continue;
-            try { await callXui(`inbounds/${user.inboundId}/delClientByEmail/${encodeURIComponent(email)}`, 'POST', {}); done++; } catch(e) {}
+            try { await callXui(`clients/del/${encodeURIComponent(email)}`, 'POST', {}); done++; } catch(e) {}
         }
         showToast(`Deleted ${done} client(s)`);
         __bulkSelected.clear();
@@ -1891,7 +1891,7 @@ try {
     const getInboundId = () => Number(document.getElementById('addc-inbound')?.value);
     const getEmail = () => (document.getElementById('tool-email')?.value || '').trim();
 
-    document.getElementById('btn-inb-onlines')?.addEventListener('click', async () => { const r = await callXui('inbounds/onlines', 'POST', {}); showResultUI('Online users', r); });
+    document.getElementById('btn-inb-onlines')?.addEventListener('click', async () => { const r = await callXui('clients/onlines', 'POST', {}); showResultUI('Online users', r); });
     document.getElementById('btn-inb-lastonline')?.addEventListener('click', async () => { const r = await callXui('inbounds/lastOnline', 'POST', {}); showResultUI('Last online', r); });
     document.getElementById('btn-inb-reset')?.addEventListener('click', async () => {
         const id = getInboundId(); if (!id) return;
@@ -1908,7 +1908,7 @@ try {
         clearInterval(__autoRefreshOntimer); __autoRefreshOntimer = null;
         if (e.target.checked) {
             __autoRefreshOntimer = setInterval(async () => {
-                const r = await callXui('inbounds/onlines', 'POST', {});
+                const r = await callXui('clients/onlines', 'POST', {});
                 showResultUI('Online users (auto)', r);
             }, 30000);
             showToast('Auto-refresh onlines enabled (every 30s)');
@@ -1917,28 +1917,29 @@ try {
 
     // Client tools
     document.getElementById('btn-client-reset')?.addEventListener('click', async () => {
-        const inboundId = getInboundId(), email = getEmail();
-        if (!inboundId || !email) { showToast('Select inbound + enter email', 'error'); return; }
+        const email = getEmail();
+        if (!email) { showToast('Enter email', 'error'); return; }
         if (!confirm(`Reset traffic for ${email}?`)) return;
-        const r = await callXui(`inbounds/${inboundId}/resetClientTraffic/${encodeURIComponent(email)}`, 'POST', {}); showResultUI(`Reset traffic: ${email}`, r); loadAdminData();
+        // New client-scoped API (email only, inbound no longer required).
+        const r = await callXui(`clients/resetTraffic/${encodeURIComponent(email)}`, 'POST', {}); showResultUI(`Reset traffic: ${email}`, r); loadAdminData();
     });
 
     document.getElementById('btn-client-del')?.addEventListener('click', async () => {
-        const inboundId = getInboundId(), email = getEmail();
-        if (!inboundId || !email) { showToast('Select inbound + enter email', 'error'); return; }
+        const email = getEmail();
+        if (!email) { showToast('Enter email', 'error'); return; }
         if (!confirm(`DELETE client ${email}?`)) return;
-        const r = await callXui(`inbounds/${inboundId}/delClientByEmail/${encodeURIComponent(email)}`, 'POST', {}); showResultUI(`Delete client: ${email}`, r); loadAdminData();
+        const r = await callXui(`clients/del/${encodeURIComponent(email)}`, 'POST', {}); showResultUI(`Delete client: ${email}`, r); loadAdminData();
     });
 
     document.getElementById('btn-client-ips')?.addEventListener('click', async () => {
         const email = getEmail(); if (!email) { showToast('Enter email', 'error'); return; }
-        const r = await callXui(`inbounds/clientIps/${encodeURIComponent(email)}`, 'POST', {}); showResultUI(`Client IPs: ${email}`, r);
+        const r = await callXui(`clients/ips/${encodeURIComponent(email)}`, 'POST', {}); showResultUI(`Client IPs: ${email}`, r);
     });
 
     document.getElementById('btn-client-ips-clear')?.addEventListener('click', async () => {
         const email = getEmail(); if (!email) { showToast('Enter email', 'error'); return; }
         if (!confirm(`Clear IPs for ${email}?`)) return;
-        const r = await callXui(`inbounds/clearClientIps/${encodeURIComponent(email)}`, 'POST', {}); showResultUI(`Clear IPs: ${email}`, r);
+        const r = await callXui(`clients/clearIps/${encodeURIComponent(email)}`, 'POST', {}); showResultUI(`Clear IPs: ${email}`, r);
     });
 
     document.getElementById('btn-client-traffic-history')?.addEventListener('click', async () => {
