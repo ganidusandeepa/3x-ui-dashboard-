@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=33">
+    <link rel="stylesheet" href="styles.css?v=34">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <!-- Kept render-blocking on purpose: deferring it makes every icon pop in
@@ -273,15 +273,44 @@
                 <div class="card ping-card" id="ping-card">
                     <div class="ping-head">
                         <div>
-                            <div class="ping-eyebrow">Server Latency</div>
+                            <div class="ping-eyebrow">Connection Latency</div>
                             <div class="ping-val-row">
                                 <span class="ping-ms" id="ping-ms">—</span>
                                 <span class="ping-unit" id="ping-unit">ms</span>
                             </div>
                         </div>
-                        <button class="ping-btn" id="btn-ping" title="Ping server">
+                        <button class="ping-btn" id="btn-ping" title="Measure latency">
                             <i class="fa-solid fa-signal"></i>
                         </button>
+                    </div>
+
+                    <!-- The two hops this number is made of, shown separately so
+                         it's clear which part is your network and which is ours. -->
+                    <div class="hop-path" id="hop-path">
+                        <div class="hop-node" id="hop-you">
+                            <i class="fa-solid fa-mobile-screen"></i>
+                            <span class="hop-node-lbl">You</span>
+                        </div>
+
+                        <div class="hop-link" id="hop-link-1">
+                            <div class="hop-line"><span class="hop-pulse"></span></div>
+                            <div class="hop-val"><span id="hop-ms-you">—</span><em>ms</em></div>
+                        </div>
+
+                        <div class="hop-node" id="hop-server">
+                            <i class="fa-solid fa-server"></i>
+                            <span class="hop-node-lbl">Server</span>
+                        </div>
+
+                        <div class="hop-link" id="hop-link-2">
+                            <div class="hop-line"><span class="hop-pulse"></span></div>
+                            <div class="hop-val"><span id="hop-ms-panel">—</span><em>ms</em></div>
+                        </div>
+
+                        <div class="hop-node" id="hop-panel">
+                            <i class="fa-solid fa-shield-halved"></i>
+                            <span class="hop-node-lbl">Panel</span>
+                        </div>
                     </div>
                     <div class="ping-bars" id="ping-bars">
                         <div class="ping-bar"></div>
@@ -721,7 +750,7 @@
     <!-- `defer` is REQUIRED here: the CDN libs above are deferred, and deferred
          scripts run after non-deferred ones. Without defer these would execute
          before GSAP/QRious existed. Deferred scripts run in document order. -->
-    <script defer src="main.js?v=45" data-cfasync="false"></script>
+    <script defer src="main.js?v=46" data-cfasync="false"></script>
     <script defer src="fx.js?v=2" data-cfasync="false"></script>
 </body>
 </html>

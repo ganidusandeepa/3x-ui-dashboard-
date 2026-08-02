@@ -1926,3 +1926,113 @@ body.theme-light .ring-fill { filter: none; }
     .spd-arrow { animation: none !important; opacity: 1; }
     .ring-spark-dot { display: none; }
 }
+
+/* ======================================================================
+   Latency hop path:  You --> Server --> Panel
+   Two separate measurements so it's obvious which leg is the client's own
+   network and which is ours.
+   ====================================================================== */
+.hop-path {
+    display: grid;
+    grid-template-columns: auto 1fr auto 1fr auto;
+    align-items: center;
+    gap: 6px;
+    margin: 16px 0 4px;
+}
+
+.hop-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    min-width: 46px;
+    will-change: transform;
+}
+.hop-node > i {
+    width: 34px; height: 34px;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--on-mid);
+    font-size: 0.82rem;
+    transition: color var(--m3-effects), border-color var(--m3-effects), box-shadow var(--m3-effects);
+}
+.hop-node-lbl {
+    font-size: 0.6rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--on-dim);
+    font-weight: 600;
+}
+.hop-node.offline > i {
+    color: var(--bad);
+    border-color: var(--bad);
+    box-shadow: 0 0 0 3px rgba(217, 83, 79, 0.14);
+}
+
+/* --- The connecting leg: a rail, a travelling pulse, and its own value --- */
+.hop-link { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
+.hop-line {
+    position: relative;
+    width: 100%; height: 2px;
+    border-radius: 2px;
+    background: var(--border);
+    overflow: hidden;
+    transition: background var(--m3-effects);
+}
+.hop-pulse {
+    position: absolute; inset: 0;
+    width: 38%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, transparent, currentColor, transparent);
+    opacity: 0;
+    color: var(--on-mid);
+}
+.hop-val {
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--on-mid);
+    display: flex; align-items: baseline; gap: 2px;
+    font-variant-numeric: tabular-nums;
+    transition: color var(--m3-effects);
+}
+.hop-val em { font-style: normal; font-size: 0.58rem; color: var(--on-dim); }
+
+/* Quality grading, applied per-leg */
+.hop-link.good .hop-line { background: color-mix(in srgb, var(--good) 55%, transparent); }
+.hop-link.warn .hop-line { background: color-mix(in srgb, var(--warn) 55%, transparent); }
+.hop-link.bad  .hop-line { background: color-mix(in srgb, var(--bad)  55%, transparent); }
+.hop-link.good .hop-val,  .hop-link.good .hop-pulse { color: var(--good); }
+.hop-link.warn .hop-val,  .hop-link.warn .hop-pulse { color: var(--warn); }
+.hop-link.bad  .hop-val,  .hop-link.bad  .hop-pulse { color: var(--bad);  }
+.hop-link.dead .hop-line { background: repeating-linear-gradient(90deg, var(--border) 0 4px, transparent 4px 8px); }
+.hop-link.dead .hop-val  { color: var(--on-dim); }
+
+/* Idle: a slow pulse drifts along each leg so the path feels alive.
+   Measuring: it speeds up and brightens. */
+@media (prefers-reduced-motion: no-preference) {
+    .hop-pulse { animation: hop-travel 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite; opacity: 0.5; }
+    .hop-link:nth-of-type(4) .hop-pulse { animation-delay: 0.45s; }
+    .ping-measuring .hop-pulse { animation-duration: 0.75s; opacity: 0.95; }
+    .ping-measuring .hop-node > i {
+        color: var(--on-bg);
+        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
+    }
+}
+@keyframes hop-travel {
+    0%   { transform: translateX(-110%); }
+    100% { transform: translateX(290%); }
+}
+
+@media (max-width: 380px) {
+    .hop-path { gap: 3px; }
+    .hop-node { min-width: 38px; }
+    .hop-node > i { width: 29px; height: 29px; font-size: 0.72rem; }
+    .hop-val { font-size: 0.7rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .hop-pulse { animation: none; opacity: 0.4; }
+}

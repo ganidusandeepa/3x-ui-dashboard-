@@ -482,10 +482,21 @@ app.post('/public/auth', (req, res) => {
 });
 
 // ============================ Public ping ============================
+// Browser -> this server round-trip probe. Deliberately does NO upstream work
+// so the number reflects only the client's own network path; timing /api/ping
+// instead would fold the server->panel hop into it.
+app.get('/api/rtt', (req, res) => {
+  res.set('Cache-Control', 'no-store').json({ t: Date.now() });
+});
+
+// This server -> 3x-ui panel latency (measured server-side).
 app.get('/api/ping', async (req, res) => {
   const t0 = Date.now();
-  try { await fetch(`${PANEL_URL}/`, { method: 'HEAD', signal: AbortSignal.timeout(6000) }); } catch (e) {}
-  res.set('Cache-Control', 'no-store').json({ latency: Date.now() - t0, ts: t0 });
+  let reachable = true;
+  try {
+    await fetch(`${PANEL_URL}/`, { method: 'HEAD', signal: AbortSignal.timeout(6000) });
+  } catch (e) { reachable = false; }
+  res.set('Cache-Control', 'no-store').json({ latency: Date.now() - t0, reachable, ts: t0 });
 });
 
 // ============================ Settings (admin) ============================

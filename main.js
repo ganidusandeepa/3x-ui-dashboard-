@@ -2406,6 +2406,41 @@ try {
 
     const card = btn.closest('.card');
 
+    // Paint the two hops: your network path, and ours to the panel. Each link
+    // is colour-graded by its own quality and animates a pulse along the line.
+    function renderHops(youMs, panelMs, panelUp) {
+        const set = (valId, linkId, ms, ok) => {
+            const v = document.getElementById(valId);
+            const link = document.getElementById(linkId);
+            if (!v || !link) return;
+            link.classList.remove('good', 'warn', 'bad', 'dead');
+            if (!ok || ms === null || ms === undefined) {
+                v.textContent = '—';
+                link.classList.add('dead');
+                return;
+            }
+            const q = getQuality(ms);
+            link.classList.add(q.cls);
+            if (typeof animateNumber === 'function' && !prefersReducedMotion()) {
+                animateNumber(v, ms, { decimals: 0, duration: 600, from: 0 });
+            } else {
+                v.textContent = Math.round(ms);
+            }
+        };
+        set('hop-ms-you', 'hop-link-1', youMs, true);
+        set('hop-ms-panel', 'hop-link-2', panelMs, panelUp);
+
+        const panelNode = document.getElementById('hop-panel');
+        panelNode?.classList.toggle('offline', !panelUp);
+
+        // Ripple the nodes left-to-right so the path reads as a flow.
+        if (typeof gsap !== 'undefined' && !prefersReducedMotion()) {
+            gsap.fromTo('#hop-path .hop-node',
+                { scale: 0.86, opacity: 0.45 },
+                { scale: 1, opacity: 1, duration: 0.45, stagger: 0.09, ease: 'elastic.out(1, 0.6)', clearProps: 'all' });
+        }
+    }
+
     async function runPing() {
         if (btn.classList.contains('pinging')) return;
         btn.classList.add('pinging');
@@ -2414,18 +2449,35 @@ try {
         if (statusEl) statusEl.textContent = 'Measuring…';
         if (qualityEl) { qualityEl.textContent = ''; qualityEl.className = 'ping-quality'; }
 
-        const t0 = performance.now();
+        // --- Hop 1: browser -> server. Best of 3 against a do-nothing endpoint,
+        // so one unlucky sample (GC pause, radio wake-up) doesn't skew it. ---
         let latency = null;
+        const samples = [];
+        for (let i = 0; i < 3; i++) {
+            const t0 = performance.now();
+            try {
+                await fetch('/api/rtt?_=' + Date.now(), { cache: 'no-store' });
+                samples.push(performance.now() - t0);
+            } catch (e) {}
+        }
+        latency = samples.length ? Math.round(Math.min(...samples)) : null;
+
+        // --- Hop 2: server -> panel, measured server-side. ---
+        let panelMs = null, panelUp = true;
         try {
             const res = await fetch('/api/ping', { cache: 'no-store' });
             const data = await res.json().catch(() => null);
-            latency = data && typeof data.latency === 'number' ? data.latency : Math.round(performance.now() - t0);
-        } catch(e) {
-            latency = Math.round(performance.now() - t0);
-        }
+            if (data && typeof data.latency === 'number') {
+                panelMs = data.latency;
+                panelUp = data.reachable !== false;
+            }
+        } catch (e) { panelUp = false; }
+
+        if (latency === null) latency = 0;
 
         btn.classList.remove('pinging');
         if (card) card.classList.remove('ping-measuring');
+        renderHops(latency, panelMs, panelUp);
         history.push(latency);
         if (history.length > MAX_BARS) history.shift();
 
