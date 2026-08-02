@@ -775,7 +775,7 @@ app.get('/public/stream', async (req, res) => {
         sseSend(res, 'client', {
           ts: Date.now(), email: client.email, down: client.down, up: client.up,
           total: client.total, enable: client.enable, isOnline, lastOnline: client.lastOnline,
-          uuid: client.uuid, subId: client.subId
+          uuid: client.uuid, subId: client.subId, expiryTime: client.expiryTime
         });
       }
       res.write(`: ping ${Date.now()}\n\n`);

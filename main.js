@@ -899,6 +899,10 @@ function startExpiryCountdown(expiryTime) {
 // --- Apply Client Data to UI ---
 function applyClientDataToUI(client) {
     if (!client) return;
+    // SSE ticks send a partial payload (live down/up/isOnline). Merge it onto the
+    // last full snapshot so omitted fields (expiryTime, subInfo, links, protocol)
+    // are not wiped — otherwise the countdown/plan card flashes then disappears.
+    client = Object.assign({}, __currentClientData || {}, client);
     __currentClientData = client;
     updateClientSpeedsFromDelta(client.down, client.up);
 
