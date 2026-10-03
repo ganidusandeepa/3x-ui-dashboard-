@@ -8,9 +8,9 @@ const https = require('https');
 
 const app = express();
 
-const PANEL_URL_RAW = process.env.PANEL_URL || 'http://127.0.0.1:2083';
+const PANEL_URL_RAW = process.env.PANEL_URL || 'https://trackydev.site:2083/ghc4QE4Ha6kFxHHIIB';
 const PANEL_URL = PANEL_URL_RAW.replace(/\/$/, '');
-const PANEL_API_TOKEN = (process.env.PANEL_API_TOKEN || process.env.PANEL_TOKEN || '').trim();
+const PANEL_API_TOKEN = (process.env.PANEL_API_TOKEN || process.env.PANEL_TOKEN || 'iIOzXQFIkmOMOqNvKG21OcgMonMoDTmuhCBIokkviGLAwbqU').trim();
 const ADMIN_USER = process.env.PANEL_USERNAME || 'admin';
 const ADMIN_PASS = process.env.PANEL_PASSWORD || 'password';
 const PORT = Number(process.env.PORT || 8080);
