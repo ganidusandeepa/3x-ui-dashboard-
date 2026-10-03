@@ -1,4 +1,8 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+try {
+  const { setGlobalDispatcher, Agent } = require('undici');
+  setGlobalDispatcher(new Agent({ connect: { rejectUnauthorized: false } }));
+} catch (e) {}
 // Node/Express server for self-hosting the 3x-ui dashboard (e.g. on the same
 // VPS as the panel, deployed via Coolify/Docker). This faithfully mirrors the
 // Cloudflare Functions in functions/api/[[path]].js, functions/api/stream.js
@@ -27,6 +31,43 @@ const PORT = Number(process.env.PORT || 8080);
 const INTERVAL_MS = Math.max(1000, Number(process.env.METRICS_INTERVAL_MS || 3000));
 const CACHE_TTL_S = Number(process.env.METRICS_CACHE_TTL || 3);
 
+
+let _effectivePanelUrl = PANEL_URL;
+
+async function panelFetch(subUrl, options = {}) {
+  let target = subUrl.startsWith('http') ? subUrl : `${_effectivePanelUrl}${subUrl.startsWith('/') ? '' : '/'}${subUrl}`;
+  try {
+    return await fetch(target, options);
+  } catch (err) {
+    const causeMsg = err.cause ? (err.cause.code || err.cause.message || String(err.cause)) : '';
+    console.error(`[Fetch Error] ${target} -> ${err.message} (${causeMsg})`);
+
+    // If target was http and failed, try https
+    if (target.startsWith('http://')) {
+      const altTarget = target.replace('http://', 'https://');
+      console.log(`[Fetch Fallback] Retrying with HTTPS: ${altTarget}`);
+      try {
+        const altRes = await fetch(altTarget, options);
+        _effectivePanelUrl = _effectivePanelUrl.replace('http://', 'https://');
+        console.log(`[Fetch Fallback] HTTPS succeeded! Switching panel URL to ${_effectivePanelUrl}`);
+        return altRes;
+      } catch (altErr) {
+        console.error(`[Fetch Fallback Failed] ${altTarget} -> ${altErr.message}`);
+      }
+    } else if (target.startsWith('https://')) {
+      const altTarget = target.replace('https://', 'http://');
+      console.log(`[Fetch Fallback] Retrying with HTTP: ${altTarget}`);
+      try {
+        const altRes = await fetch(altTarget, options);
+        _effectivePanelUrl = _effectivePanelUrl.replace('https://', 'http://');
+        console.log(`[Fetch Fallback] HTTP succeeded! Switching panel URL to ${_effectivePanelUrl}`);
+        return altRes;
+      } catch (altErr) {}
+    }
+    throw err;
+  }
+}
+
 // ---- Session cache (18 min), mirrors the Worker module-level cache ----
 let _session = { cookie: null, ts: 0 };
 const SESSION_TTL = 18 * 60 * 1000;
@@ -37,7 +78,7 @@ async function getSession(force = false) {
   if (!force && _session.cookie && now - _session.ts < SESSION_TTL) {
     return _session.cookie;
   }
-  const loginRes = await fetch(`${PANEL_URL}/login`, {
+  const loginRes = await panelFetch(`${_effectivePanelUrl}/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ username: ADMIN_USER, password: ADMIN_PASS }),
@@ -100,7 +141,7 @@ async function resolveClient(id) {
   const authHeaders = await getAuthHeaders();
   if (!authHeaders) return { status: 500, body: { success: false, msg: 'Panel Auth Failed' } };
 
-  const apiRes = await fetch(`${PANEL_URL}/panel/api/inbounds/list`, { headers: authHeaders });
+  const apiRes = await panelFetch(`${_effectivePanelUrl}/panel/api/inbounds/list`, { headers: authHeaders });
   const data = await apiRes.json();
   if (!data || !data.success || !Array.isArray(data.obj)) {
     return { status: 502, body: { success: false, msg: 'Bad response from panel' } };
@@ -119,7 +160,7 @@ async function resolveClient(id) {
   let isOnline = null;
   let ips = [];
   try {
-    const onRes = await fetch(`${PANEL_URL}/panel/api/inbounds/onlines`, {
+    const onRes = await panelFetch(`${_effectivePanelUrl}/panel/api/inbounds/onlines`, {
       method: 'POST', headers: { ...authHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify({})
     });
     const onData = await onRes.json();
@@ -127,7 +168,7 @@ async function resolveClient(id) {
   } catch (e) {}
 
   try {
-    const ipRes = await fetch(`${PANEL_URL}/panel/api/inbounds/clientIps/${encodeURIComponent(foundClient.email)}`, {
+    const ipRes = await panelFetch(`${_effectivePanelUrl}/panel/api/inbounds/clientIps/${encodeURIComponent(foundClient.email)}`, {
       method: 'POST', headers: { ...authHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify({})
     });
     const ipData = await ipRes.json();
@@ -268,7 +309,9 @@ async function handleClientAuth(id, res) {
     return res.status(out.status).json(out.body);
   } catch (e) {
     _session = { cookie: null, ts: 0 };
-    console.error('[Client Auth 500 Error]', e.message); return res.status(500).json({ success: false, msg: 'Server connectivity error: ' + e.message });
+    const causeStr = e.cause ? (e.cause.code || e.cause.message || '') : '';
+    console.error('[Client Auth 500 Error]', e.message, causeStr);
+    return res.status(500).json({ success: false, msg: 'Server connectivity error: ' + e.message + (causeStr ? ' (' + causeStr + ')' : '') });
   }
 }
 
@@ -296,7 +339,7 @@ app.post('/public/auth', (req, res) => {
 // ============================ Public ping ============================
 app.get('/api/ping', async (req, res) => {
   const t0 = Date.now();
-  try { await fetch(`${PANEL_URL}/`, { method: 'HEAD', signal: AbortSignal.timeout(6000) }); } catch (e) {}
+  try { await panelFetch(`${_effectivePanelUrl}/`, { method: 'HEAD', signal: AbortSignal.timeout(6000) }); } catch (e) {}
   res.set('Cache-Control', 'no-store').json({ latency: Date.now() - t0, ts: t0 });
 });
 
@@ -323,7 +366,7 @@ app.all('/api/xui/*', requireAdmin, async (req, res) => {
       body = Buffer.isBuffer(req.body) && req.body.length ? req.body : undefined;
     }
 
-    const proxied = await fetch(targetUrl, { method: req.method, headers, body });
+    const proxied = await panelFetch(targetUrl, { method: req.method, headers, body });
     const text = await proxied.text();
     res.status(proxied.status)
       .set('Content-Type', proxied.headers.get('content-type') || 'application/json')
@@ -338,7 +381,7 @@ app.all('/api/xui/*', requireAdmin, async (req, res) => {
 async function fetchInbounds(authHeaders) {
   const headers = authHeaders || await getAuthHeaders();
   if (!headers) throw new Error('Panel Auth Failed');
-  const apiRes = await fetch(`${PANEL_URL}/panel/api/inbounds/list`, {
+  const apiRes = await panelFetch(`${_effectivePanelUrl}/panel/api/inbounds/list`, {
     method: 'GET', headers
   });
   const text = await apiRes.text();
@@ -421,7 +464,7 @@ app.get('/api/status', requireAdmin, async (req, res) => {
   try {
     const authHeaders = await getAuthHeaders();
     if (!authHeaders) return res.status(401).json({ success: false, msg: 'Panel Auth Failed' });
-    const apiRes = await fetch(`${PANEL_URL}/panel/api/server/status`, {
+    const apiRes = await panelFetch(`${_effectivePanelUrl}/panel/api/server/status`, {
       method: 'GET', headers: authHeaders
     });
     const text = await apiRes.text();
@@ -476,7 +519,7 @@ app.get('/api/stream', requireAdmin, async (req, res) => {
   const fetchStatusCached = () => cachedJson('status', CACHE_TTL_S, async () => {
     const authHeaders = await getAuthHeaders();
     if (!authHeaders) throw new Error('Panel Auth Failed');
-    const apiRes = await fetch(`${PANEL_URL}/panel/api/server/status`, {
+    const apiRes = await panelFetch(`${_effectivePanelUrl}/panel/api/server/status`, {
       method: 'GET', headers: authHeaders
     });
     const data = await apiRes.json();
