@@ -5,20 +5,16 @@ echo "========================================="
 echo "  Upgrading 3x-ui Dashboard from GitHub  "
 echo "========================================="
 
-# Navigate to script directory
 cd "$(dirname "$0")"
 
-# Pull latest code
 echo "--> Pulling latest changes from main branch..."
 git pull origin main
 
-# Install any updated dependencies
 echo "--> Updating dependencies..."
 npm install
 
-# Restart PM2 process with updated environment
-echo "--> Restarting dashboard in PM2..."
-pm2 restart 3x-dashboard --update-env
+echo "--> Restarting dashboard in PM2 with lenient parser..."
+pm2 restart 3x-dashboard --node-args="--insecure-http-parser" --update-env
 
 echo "========================================="
 echo "  Upgrade Complete! Showing live logs:   "
