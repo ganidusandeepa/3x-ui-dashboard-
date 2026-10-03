@@ -27,12 +27,14 @@ export async function onRequest(context) {
 
   const PANEL_URL_RAW = env.PANEL_URL || "http://127.0.0.1:2053";
   const PANEL_URL = PANEL_URL_RAW.replace(/\/$/, "");
+  const PANEL_API_TOKEN = (env.PANEL_API_TOKEN || env.PANEL_TOKEN || "").trim();
   const ADMIN_USER = env.PANEL_USERNAME || "admin";
   const ADMIN_PASS = env.PANEL_PASSWORD || "password";
 
   const path = url.pathname.replace('/api/', '');
 
   async function getSession() {
+    if (PANEL_API_TOKEN) return null;
     const now = Date.now();
     if (_session.cookie && (now - _session.ts) < SESSION_TTL) {
       return _session.cookie;
@@ -50,6 +52,23 @@ export async function onRequest(context) {
     return cookie;
   }
 
+  async function getAuthHeaders() {
+    if (PANEL_API_TOKEN) {
+      return {
+        "Authorization": `Bearer ${PANEL_API_TOKEN}`,
+        "Accept": "application/json",
+        "Referer": `${PANEL_URL}/`
+      };
+    }
+    const cookie = await getSession();
+    if (!cookie) return null;
+    return {
+      "Cookie": cookie,
+      "Accept": "application/json",
+      "Referer": `${PANEL_URL}/`
+    };
+  }
+
   const cfUserRecord = request.headers.get('Cf-Access-Authenticated-User-Email');
 
   // Authentication endpoint
@@ -62,7 +81,9 @@ export async function onRequest(context) {
           headers: { "Content-Type": "application/json" }
         });
       }
-      if (body.username === ADMIN_USER && body.password === ADMIN_PASS) {
+      const matchesUserPass = body.username === ADMIN_USER && body.password === ADMIN_PASS;
+      const matchesToken = PANEL_API_TOKEN && (body.password === PANEL_API_TOKEN || body.token === PANEL_API_TOKEN || body.username === PANEL_API_TOKEN);
+      if (matchesUserPass || matchesToken) {
         return new Response(JSON.stringify({ success: true, role: 'admin' }), {
           headers: { "Content-Type": "application/json" }
         });
@@ -75,8 +96,8 @@ export async function onRequest(context) {
 
     if (body.type === 'client') {
       try {
-        const cookie = await getSession();
-        if (!cookie) {
+        const authHeaders = await getAuthHeaders();
+        if (!authHeaders) {
           return new Response(JSON.stringify({ success: false, msg: 'Panel Auth Failed' }), {
             status: 500,
             headers: { "Content-Type": "application/json" }
@@ -84,7 +105,7 @@ export async function onRequest(context) {
         }
 
         const apiRes = await fetch(`${PANEL_URL}/panel/api/inbounds/list`, {
-          headers: { "Cookie": cookie }
+          headers: authHeaders
         });
         const data = await apiRes.json();
 
@@ -105,7 +126,7 @@ export async function onRequest(context) {
             try {
               const onRes = await fetch(`${PANEL_URL}/panel/api/inbounds/onlines`, {
                 method: 'POST',
-                headers: { "Cookie": cookie, "Content-Type": "application/json" },
+                headers: { ...authHeaders, "Content-Type": "application/json" },
                 body: JSON.stringify({})
               });
               const onData = await onRes.json();
@@ -117,7 +138,7 @@ export async function onRequest(context) {
             try {
               const ipRes = await fetch(`${PANEL_URL}/panel/api/inbounds/clientIps/${encodeURIComponent(foundClient.email)}`, {
                 method: 'POST',
-                headers: { "Cookie": cookie, "Content-Type": "application/json" },
+                headers: { ...authHeaders, "Content-Type": "application/json" },
                 body: JSON.stringify({})
               });
               const ipData = await ipRes.json();
@@ -215,7 +236,7 @@ export async function onRequest(context) {
             if (subLink) {
               try {
                 const siRes = await fetch(`${subLink}?format=info`, {
-                  headers: { Cookie: cookie, 'User-Agent': 'ClashforWindows/0.20.0' }
+                  headers: { ...authHeaders, 'User-Agent': 'ClashforWindows/0.20.0' }
                 });
                 const sct = siRes.headers.get('content-type') || '';
                 if (sct.includes('json')) {
@@ -278,7 +299,7 @@ export async function onRequest(context) {
   const hasCfAuthCookie = /(?:^|;\s*)CF_Authorization=/.test(cookieHdr);
   const isZeroTrustAdmin = hasEmailHeader || hasJwtAssertion || hasCfAuthCookie;
 
-  if (authHeader !== `Bearer ${ADMIN_PASS}` && !isZeroTrustAdmin) {
+  if (authHeader !== `Bearer ${ADMIN_PASS}` && !(PANEL_API_TOKEN && authHeader === `Bearer ${PANEL_API_TOKEN}`) && !isZeroTrustAdmin) {
     return new Response(JSON.stringify({ success: false, msg: 'Unauthorized' }), {
       status: 401,
       headers: { "Content-Type": "application/json" }
@@ -287,14 +308,14 @@ export async function onRequest(context) {
 
   // Settings — read-only (returns env-backed values, no cookie needed)
   if (path === "settings" && request.method === "GET") {
-    return new Response(JSON.stringify({ success: true, panelUrl: PANEL_URL, username: ADMIN_USER }), {
+    return new Response(JSON.stringify({ success: true, panelUrl: PANEL_URL, username: ADMIN_USER, hasApiToken: !!PANEL_API_TOKEN }), {
       headers: { "Content-Type": "application/json" }
     });
   }
 
   try {
-    const cookie = await getSession();
-    if (!cookie) {
+    const authHeaders = await getAuthHeaders();
+    if (!authHeaders) {
       return new Response(JSON.stringify({ success: false, msg: "Panel Auth Failed" }), {
         status: 401,
         headers: { "Content-Type": "application/json" }
@@ -307,9 +328,7 @@ export async function onRequest(context) {
       const targetUrl = `${PANEL_URL}/panel/api/${subPath}`;
 
       const headers = {
-        "Cookie": cookie,
-        "Accept": "application/json",
-        "Referer": `${PANEL_URL}/`
+        ...authHeaders
       };
 
       const ct = request.headers.get('Content-Type');
@@ -342,7 +361,7 @@ export async function onRequest(context) {
     const fetchInbounds = async () => {
       const apiRes = await fetch(`${PANEL_URL}/panel/api/inbounds/list`, {
         method: "GET",
-        headers: { "Cookie": cookie, "Accept": "application/json", "Referer": `${PANEL_URL}/` }
+        headers: authHeaders
       });
       return await apiRes.json();
     };
@@ -426,7 +445,7 @@ export async function onRequest(context) {
 
     const apiRes = await fetch(targetUrl, {
       method: "GET",
-      headers: { "Cookie": cookie, "Accept": "application/json", "Referer": `${PANEL_URL}/` }
+      headers: authHeaders
     });
 
     const data = await apiRes.json();
