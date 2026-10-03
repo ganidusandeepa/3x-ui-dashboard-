@@ -16,10 +16,12 @@ export async function onRequest(context) {
 
   const PANEL_URL_RAW = env.PANEL_URL || 'http://127.0.0.1:2053';
   const PANEL_URL = PANEL_URL_RAW.replace(/\/$/, '');
+  const PANEL_API_TOKEN = (env.PANEL_API_TOKEN || env.PANEL_TOKEN || "").trim();
   const ADMIN_USER = env.PANEL_USERNAME || 'admin';
   const ADMIN_PASS = env.PANEL_PASSWORD || 'password';
 
   async function getSession() {
+    if (PANEL_API_TOKEN) return null;
     const loginRes = await fetch(`${PANEL_URL}/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -29,21 +31,34 @@ export async function onRequest(context) {
     return loginRes.headers.get('set-cookie');
   }
 
+  async function getAuthHeaders() {
+    if (PANEL_API_TOKEN) {
+      return {
+        'Authorization': `Bearer ${PANEL_API_TOKEN}`,
+        'Accept': 'application/json',
+        'Referer': `${PANEL_URL}/`
+      };
+    }
+    const cookie = await getSession();
+    if (!cookie) return null;
+    return {
+      'Cookie': cookie,
+      'Accept': 'application/json',
+      'Referer': `${PANEL_URL}/`
+    };
+  }
+
   const cacheTtlSeconds = Number(env.METRICS_CACHE_TTL || 3);
   const cacheKey = new Request('https://cache.local/xui/inbounds/list');
 
-  async function fetchInboundsCached(cookie) {
+  async function fetchInboundsCached(authHeaders) {
     const cache = caches.default;
     const hit = await cache.match(cacheKey);
     if (hit) return await hit.json();
 
     const apiRes = await fetch(`${PANEL_URL}/panel/api/inbounds/list`, {
       method: 'GET',
-      headers: {
-        Cookie: cookie,
-        Accept: 'application/json',
-        Referer: `${PANEL_URL}/`
-      }
+      headers: authHeaders
     });
     const data = await apiRes.json();
 
@@ -95,14 +110,14 @@ export async function onRequest(context) {
       await send('hello', { ok: true, intervalMs, cacheTtlSeconds, ts: Date.now() });
 
       while (!closed) {
-        const cookie = await getSession();
-        if (!cookie) {
+        const authHeaders = await getAuthHeaders();
+        if (!authHeaders) {
           await send('error', { msg: 'Panel Auth Failed' });
           await new Promise((r) => setTimeout(r, intervalMs));
           continue;
         }
 
-        const inbounds = await fetchInboundsCached(cookie);
+        const inbounds = await fetchInboundsCached(authHeaders);
         const client = findClient(inbounds);
 
         if (!client) {
