@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=24">
+    <link rel="stylesheet" href="styles.css?v=25">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" data-cfasync="false"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js" data-cfasync="false"></script>
@@ -132,6 +132,15 @@
         <main>
             <!-- USER VIEW TAB -->
             <section id="tab-user-view" class="tab-content">
+                
+                <!-- Live Server Health Bar -->
+                <div class="live-strip-row" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;">
+                    <div class="live-pill" id="pill-xray-status"><span class="status-dot online"></span> Xray <strong id="strip-xray-ver">-</strong></div>
+                    <div class="live-pill"><i class="fa-solid fa-arrows-up-down"></i> <strong id="live-net-speed" style="color:var(--good)">↓ 0 KB/s ↑ 0 KB/s</strong></div>
+                    <div class="live-pill"><i class="fa-solid fa-network-wired"></i> Conns: <strong id="live-conns">-</strong></div>
+                    <div class="live-pill"><i class="fa-solid fa-clock"></i> Uptime: <strong id="live-uptime">-</strong></div>
+                    <div class="live-pill"><i class="fa-solid fa-hard-drive"></i> Disk: <strong id="live-disk">-</strong></div>
+                </div>
                 <div class="overview-grid">
                     <div class="card data-card-hero">
                         <div class="data-text">
@@ -715,6 +724,6 @@
         </div>
     </div>
 
-    <script src="main.js?v=33" data-cfasync="false"></script>
+    <script src="main.js?v=34" data-cfasync="false"></script>
 </body>
 </html>
