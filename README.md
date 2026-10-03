@@ -33,7 +33,7 @@ A modern, responsive, and glassmorphic web dashboard for monitoring and managing
 Before setting up the dashboard, ensure you have:
 1. A running **3x-ui panel** (e.g. from [MHSanaei/3x-ui](https://github.com/MHSanaei/3x-ui)).
 2. Your panel's **IP address / Domain** and **Port** (default: `2053`).
-3. Your panel's **Admin Username** and **Password**.
+3. An **API Token** from 3x-ui (**Panel Settings → API Token** / **API Tokens**) — *Recommended*, or your admin username and password.
 
 ---
 
@@ -59,8 +59,9 @@ Cloudflare Pages hosts the frontend and executes the API proxy on Cloudflare Edg
      | Variable | Description | Example |
      | :--- | :--- | :--- |
      | `PANEL_URL` | Base URL of your 3x-ui panel | `http://1.2.3.4:2053` or `https://panel.yourdomain.com` |
-     | `PANEL_USERNAME` | Your 3x-ui admin username | `admin` |
-     | `PANEL_PASSWORD` | Your 3x-ui admin password | `your_secure_password` |
+     | `PANEL_API_TOKEN` | *(Recommended)* 3x-ui API Token (Settings → API Token) | `your_api_token_here` |
+     | `PANEL_USERNAME` | *(Alternative)* 3x-ui admin username | `admin` |
+     | `PANEL_PASSWORD` | *(Alternative)* 3x-ui admin password | `your_password` |
 5. **Deploy**:
    - Click **Save and Deploy**.
    - Cloudflare will automatically build the site and provide you with a `.pages.dev` URL.
@@ -82,8 +83,8 @@ docker run -d \
   --restart unless-stopped \
   --network host \
   -e PANEL_URL="http://127.0.0.1:2053" \
-  -e PANEL_USERNAME="your_admin_user" \
-  -e PANEL_PASSWORD="your_admin_password" \
+  -e PANEL_API_TOKEN="your_3xui_api_token" \
+  -e PANEL_PASSWORD="dashboard_admin_password" \
   -e PORT="8080" \
   3x-ui-dashboard
 ```
@@ -94,8 +95,8 @@ docker run -d \
 3. Coolify will auto-detect the `Dockerfile`.
 4. Add the required environment variables in the Coolify UI:
    - `PANEL_URL`: `http://127.0.0.1:2053` *(or container name if bridged: `http://3x-ui:2053`)*
-   - `PANEL_USERNAME`: your 3x-ui admin user
-   - `PANEL_PASSWORD`: your 3x-ui admin password
+   - `PANEL_API_TOKEN`: your 3x-ui API token (or `PANEL_USERNAME` & `PANEL_PASSWORD`)
+   - `PANEL_PASSWORD`: dashboard admin password
    - `PORT`: `8080`
 5. Map host port `8080` (or a custom port like `8090:8080` if 8080 is taken).
 6. Click **Deploy**.
@@ -118,16 +119,14 @@ docker run -d \
 3. **Set Environment Variables:**
    - **Linux / macOS:**
      ```bash
-     export PANEL_URL="http://YOUR_SERVER_IP:2053"
-     export PANEL_USERNAME="admin"
-     export PANEL_PASSWORD="your_password"
+     export PANEL_URL="http://127.0.0.1:2083"
+     export PANEL_API_TOKEN="your_3xui_api_token"
      export PORT=8080
      ```
    - **Windows (PowerShell):**
      ```powershell
-     $env:PANEL_URL="http://YOUR_SERVER_IP:2053"
-     $env:PANEL_USERNAME="admin"
-     $env:PANEL_PASSWORD="your_password"
+     $env:PANEL_URL="http://127.0.0.1:2083"
+     $env:PANEL_API_TOKEN="your_3xui_api_token"
      $env:PORT="8080"
      ```
 
@@ -145,8 +144,9 @@ docker run -d \
 | Variable | Required | Default | Description |
 | :--- | :---: | :---: | :--- |
 | `PANEL_URL` | **Yes** | `http://127.0.0.1:2053` | Address and port of your 3x-ui panel |
-| `PANEL_USERNAME` | **Yes** | — | Admin username for 3x-ui |
-| `PANEL_PASSWORD` | **Yes** | — | Admin password for 3x-ui |
+| `PANEL_API_TOKEN` | **Recommended** | — | 3x-ui API Token (from **Settings → API Token**). Directly authorizes requests with `Authorization: Bearer <token>`. |
+| `PANEL_USERNAME` | Optional | `admin` | Fallback 3x-ui admin username (if not using API Token) |
+| `PANEL_PASSWORD` | Optional | `password` | Fallback 3x-ui admin password (or dashboard admin password) |
 | `PORT` | No | `8080` | Port for the Node.js dashboard server |
 | `METRICS_INTERVAL_MS` | No | `2000` | Polling frequency for server metrics (ms) |
 | `METRICS_CACHE_TTL` | No | `1000` | In-memory cache duration for metrics |
