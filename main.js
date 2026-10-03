@@ -327,7 +327,7 @@ function doLogout() {
     loopInterval = null; clientLoopInterval = null; __autoRefreshOntimer = null;
     __expiryCountdownTimer = null; __currentClientData = null;
     currentRole = null; adminToken = null;
-    try { sessionStorage.removeItem('xui_admin_token'); } catch(e) {}
+    try { sessionStorage.removeItem('xui_admin_token'); localStorage.removeItem('xui_admin_token'); } catch(e) {}
     document.getElementById('login-overlay').style.display = 'flex';
     try { document.querySelector('.desktop-nav')?.style && (document.querySelector('.desktop-nav').style.display = 'none'); } catch(e) {}
     try { document.querySelector('.mobile-nav')?.style && (document.querySelector('.mobile-nav').style.display = 'none'); } catch(e) {}
@@ -404,8 +404,8 @@ document.getElementById('btn-login-admin').addEventListener('click', async () =>
         const data = await res.json();
         if (data && data.success) {
             currentRole = 'admin';
-            adminToken = password;
-            try { sessionStorage.setItem('xui_admin_token', password); } catch(e) {}
+            adminToken = data.token || password;
+            try { sessionStorage.setItem('xui_admin_token', adminToken); localStorage.setItem('xui_admin_token', adminToken); } catch(e) {}
             startAdminApp();
         } else {
             const msg = data && data.msg;
@@ -942,11 +942,11 @@ try {
 
 try {
     const btnBg = document.getElementById('btn-bg');
-    try { if ((localStorage.getItem('xui_bg') || 'off') === 'on') startVantaGlobe(); } catch(e) {}
+    try { if ((localStorage.getItem('xui_bg') || 'on') === 'on') startVantaGlobe(); } catch(e) {}
     btnBg?.addEventListener('click', () => toggleVantaGlobe());
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) stopVantaGlobe();
-        else { try { if ((localStorage.getItem('xui_bg') || 'off') === 'on') startVantaGlobe(); } catch(e) {} }
+        else { try { if ((localStorage.getItem('xui_bg') || 'on') === 'on') startVantaGlobe(); } catch(e) {} }
     });
 } catch(e) {}
 
@@ -1030,6 +1030,8 @@ function switchTab(tabId) {
             currentlyActive.classList.remove('active'); currentlyActive.style.opacity = ''; currentlyActive.style.transform = '';
             target.classList.add('active');
             gsap.fromTo(target, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.26, ease: 'power2.out' });
+            const cards = target.querySelectorAll('.card, .resource-card');
+            if (cards.length) gsap.fromTo(cards, { opacity: 0, y: 12, scale: 0.98 }, { opacity: 1, y: 0, scale: 1, duration: 0.32, stagger: 0.04, ease: 'power2.out' });
         }});
         return;
     }
@@ -1080,7 +1082,39 @@ function applyAdminStatusToUI(stat) {
     const memCur = Number(s.mem?.current), memTot = Number(s.mem?.total);
     const ramPct = (Number.isFinite(memCur) && Number.isFinite(memTot) && memTot > 0) ? Math.max(0, Math.min(100, (memCur / memTot) * 100)) : 0;
     animateNumber('#ram-percent', ramPct, { decimals: 1, duration: 500, formatter: (v) => `${Number(v).toFixed(1)}%` });
-    try { document.getElementById('node-ip').textContent = s.publicIP?.ipv4 || s.publicIP?.ipv6 || '-'; document.getElementById('node-region').textContent = s.publicIP?.country || '-'; document.getElementById('xray-version').textContent = s.xray?.version || '-'; } catch(e) {}
+    try {
+        document.getElementById('node-ip').textContent = s.publicIP?.ipv4 || s.publicIP?.ipv6 || '-';
+        document.getElementById('node-region').textContent = s.publicIP?.country || '-';
+        document.getElementById('xray-version').textContent = s.xray?.version || '-';
+        if (s.xray?.version) { const el = document.getElementById('strip-xray-ver'); if (el) el.textContent = s.xray.version; }
+        if (s.netIO) {
+            const dVal = Number(s.netIO.down) || 0;
+            const uVal = Number(s.netIO.up) || 0;
+            const dSpd = dVal > 1048576 ? (dVal / 1048576).toFixed(1) + ' MB/s' : (dVal / 1024).toFixed(0) + ' KB/s';
+            const uSpd = uVal > 1048576 ? (uVal / 1048576).toFixed(1) + ' MB/s' : (uVal / 1024).toFixed(0) + ' KB/s';
+            const spdEl = document.getElementById('live-net-speed');
+            if (spdEl) spdEl.textContent = `↓ ${dSpd} ↑ ${uSpd}`;
+        }
+        if (s.tcpCount !== undefined || s.udpCount !== undefined) {
+            const connsEl = document.getElementById('live-conns');
+            if (connsEl) connsEl.textContent = `${(s.tcpCount || 0) + (s.udpCount || 0)} (${s.tcpCount || 0}T/${s.udpCount || 0}U)`;
+        }
+        if (s.uptime) {
+            const upEl = document.getElementById('live-uptime');
+            const h = Math.floor(s.uptime / 3600);
+            const m = Math.floor((s.uptime % 3600) / 60);
+            const d = Math.floor(h / 24);
+            const remH = h % 24;
+            if (upEl) upEl.textContent = d > 0 ? `${d}d ${remH}h` : `${h}h ${m}m`;
+        }
+        if (s.disk && s.disk.total) {
+            const diskEl = document.getElementById('live-disk');
+            const curGB = (s.disk.current / 1073741824).toFixed(1);
+            const totGB = (s.disk.total / 1073741824).toFixed(1);
+            const diskPct = Math.round((s.disk.current / s.disk.total) * 100);
+            if (diskEl) diskEl.textContent = `${curGB}/${totGB} GB (${diskPct}%)`;
+        }
+    } catch(e) {}
     // SVG usage ring for global traffic (show download % of total)
     try {
         const dlNum = parseFloat(down), upNum = parseFloat(up), tot = dlNum + upNum;
@@ -2074,13 +2108,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         else if (lastTab === 'admin') document.getElementById('tab-login-admin').click();
         else document.getElementById('tab-login-client').click();
 
-        const tok = sessionStorage.getItem('xui_admin_token');
+        const tok = sessionStorage.getItem('xui_admin_token') || localStorage.getItem('xui_admin_token');
         if (tok) {
             const headers = (tok === 'zero-trust-secured') ? {} : { Authorization: `Bearer ${tok}` };
             fetch('/api/status', { headers }).then(r => r.json()).then(j => {
                 if (j && j.success) { currentRole = 'admin'; adminToken = tok; startAdminApp(); }
-                else sessionStorage.removeItem('xui_admin_token');
-            }).catch(() => { sessionStorage.removeItem('xui_admin_token'); });
+                else { sessionStorage.removeItem('xui_admin_token'); localStorage.removeItem('xui_admin_token'); }
+            }).catch(() => { sessionStorage.removeItem('xui_admin_token'); localStorage.removeItem('xui_admin_token'); });
         } else if ((lastTab === 'client' && cachedClient) || directAuto) {
             const idToCheck = (directClient || cachedClient || '').trim();
             if (idToCheck) {
