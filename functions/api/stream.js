@@ -10,6 +10,7 @@ export async function onRequest(context) {
 
   const PANEL_URL_RAW = env.PANEL_URL || 'http://127.0.0.1:2053';
   const PANEL_URL = PANEL_URL_RAW.replace(/\/$/, '');
+  const PANEL_API_TOKEN = (env.PANEL_API_TOKEN || env.PANEL_TOKEN || "").trim();
   const ADMIN_USER = env.PANEL_USERNAME || 'admin';
   const ADMIN_PASS = env.PANEL_PASSWORD || 'password';
 
@@ -22,7 +23,7 @@ export async function onRequest(context) {
   const hasCfAuthCookie = /(?:^|;\s*)CF_Authorization=/.test(cookieHdr);
   const isZeroTrustAdmin = hasEmailHeader || hasJwtAssertion || hasCfAuthCookie;
 
-  if (authHeader !== `Bearer ${ADMIN_PASS}` && !isZeroTrustAdmin) {
+  if (authHeader !== `Bearer ${ADMIN_PASS}` && !(PANEL_API_TOKEN && authHeader === `Bearer ${PANEL_API_TOKEN}`) && !isZeroTrustAdmin) {
     return new Response(JSON.stringify({ success: false, msg: 'Unauthorized' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' }
@@ -30,6 +31,7 @@ export async function onRequest(context) {
   }
 
   async function getSession() {
+    if (PANEL_API_TOKEN) return null;
     const loginRes = await fetch(`${PANEL_URL}/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -37,6 +39,23 @@ export async function onRequest(context) {
       redirect: 'follow'
     });
     return loginRes.headers.get('set-cookie');
+  }
+
+  async function getAuthHeaders() {
+    if (PANEL_API_TOKEN) {
+      return {
+        'Authorization': `Bearer ${PANEL_API_TOKEN}`,
+        'Accept': 'application/json',
+        'Referer': `${PANEL_URL}/`
+      };
+    }
+    const cookie = await getSession();
+    if (!cookie) return null;
+    return {
+      'Cookie': cookie,
+      'Accept': 'application/json',
+      'Referer': `${PANEL_URL}/`
+    };
   }
 
   // Cache panel status for a few seconds to prevent hammering your origin.
@@ -51,16 +70,12 @@ export async function onRequest(context) {
         return await hit.json();
       }
 
-      const cookie = await getSession();
-      if (!cookie) throw new Error('Panel Auth Failed');
+      const authHeaders = await getAuthHeaders();
+      if (!authHeaders) throw new Error('Panel Auth Failed');
 
       const apiRes = await fetch(`${PANEL_URL}/panel/api/server/status`, {
         method: 'GET',
-        headers: {
-          Cookie: cookie,
-          Accept: 'application/json',
-          Referer: `${PANEL_URL}/`
-        }
+        headers: authHeaders
       });
 
       const data = await apiRes.json();
