@@ -1,88 +1,171 @@
-# 3x-ui Premium Dashboard
+# ⚡ 3x-ui Premium Dashboard
 
-A modern, animated, and mobile-responsive dashboard for managing your 3x-ui panel. Built with GSAP, Three.js, and Chart.js.
+A modern, responsive, and glassmorphic web dashboard for monitoring and managing your **3x-ui** (Xray-core) proxy servers. Designed with sleek animations, real-time metrics, and zero-CORS proxy architecture.
 
-![Dashboard Preview](https://raw.githubusercontent.com/iamhelitha/3xui-api-client/main/preview.png) *(Placeholder for your preview)*
+---
 
-## Features
-- **Modern UI**: Glassmorphism aesthetic with dark mode.
-- **Mobile First**: Bottom navigation and optimized cards for phones.
-- **Real-time Metrics**: Dynamic charts for CPU, RAM, and Traffic.
-- **Proxy Server**: Secure Node.js backend to communicate with your panel.
+## ✨ Features
 
-## ☁️ Cloudflare Deployment (Recommended)
+- **🎨 Modern Glassmorphism UI**: High-end dark theme with smooth animations powered by GSAP and Three.js.
+- **📱 100% Mobile Responsive**: Dedicated mobile bottom navigation bar and touch-friendly cards.
+- **📊 Real-Time Metrics**: Live interactive charts for CPU, RAM, and inbound/outbound bandwidth consumption (Chart.js).
+- **🔒 Secure API Proxy**: Built-in backend proxy (Node.js / Cloudflare Functions) to eliminate CORS issues and protect your 3x-ui credentials.
+- **⚡ Flexible Deployment**: Deploy in minutes to **Cloudflare Pages** (Serverless), **Docker / Coolify**, or directly via **Node.js**.
 
-This dashboard is ready to be hosted on **Cloudflare Pages**.
+---
 
-1. **Upload to GitHub**: Push this folder to your GitHub.
-2. **Setup Cloudflare Pages**:
-   - Go to the Cloudflare Dashboard -> Workers & Pages -> Create -> Pages -> Connect to Git.
-   - Select your repository.
-   - **Build Settings**: Leave everything blank (Build command and Build output directory should be empty if your files are in the root).
-3. **Set Environment Variables**:
-   - Inside your Cloudflare Pages project, go to **Settings** -> **Variables and Secrets**.
-   - Add these three variables so the backend can talk to your server:
-     - `PANEL_URL` : (e.g., `http://1.2.3.4:2053`)
-     - `PANEL_USERNAME` : (your admin user)
-     - `PANEL_PASSWORD` : (your admin pass)
-4. **Deploy**: Cloudflare will automatically detect the `functions` folder and use it as your backend!
+## 🛠️ Architecture
 
-## 🐳 Coolify / Docker Deployment (Same VPS as 3x-ui)
+```text
+[ Browser / Mobile Client ]
+            │
+            ▼
+[ Dashboard Proxy (Cloudflare Functions / Node.js) ]
+            │  (Proxies requests & handles session cookies)
+            ▼
+[ 3x-ui Panel API (http://your-server:2053) ]
+```
 
-Run the dashboard on the **same VPS** as your 3x-ui panel using Coolify. The
-included `Dockerfile` and `server.js` mirror the Cloudflare Functions exactly,
-so behavior is identical — Coolify builds and runs it straight from this repo,
-no extra setup files needed.
+---
 
-1. **Coolify → New Resource → Application → Public/Private Repository.**
-   - Select this repository and your branch.
-   - **Build Pack:** `Dockerfile` (Coolify auto-detects the `Dockerfile` in the repo root).
-2. **Environment Variables** (Coolify → your app → Environment Variables):
-   - `PANEL_URL` = `http://127.0.0.1:2053` — since the dashboard runs on the same
-     VPS, point it at the panel's local address. If both run as Docker containers,
-     use the panel's container name instead (e.g. `http://3x-ui:2053`).
-   - `PANEL_USERNAME` = your panel admin username.
-   - `PANEL_PASSWORD` = your panel admin password (also the dashboard admin token).
-   - *(optional)* `PORT` (default `8080`), `METRICS_INTERVAL_MS`, `METRICS_CACHE_TTL`.
-3. **Networking:**
-   - The container listens on **`8080`** — set this as the exposed/port mapping.
-   - Add your **Domain** (e.g. `dashboard.example.com`); Coolify issues a Let's
-     Encrypt certificate automatically.
-   - If using `PANEL_URL=http://127.0.0.1:2053`, enable **host networking** (or
-     map the host) so the container can reach the panel on localhost. Otherwise
-     put the panel and dashboard on the same Coolify/Docker network and use the
-     container name.
-4. **Deploy.** Coolify builds the image and starts it. A built-in `/healthz`
-   route is available for Coolify's Health Check setting. Every push to the
-   selected branch auto-redeploys.
+## 📋 Prerequisites
 
-### If ports 80/443 are already taken (run on a custom port, no proxy)
+Before setting up the dashboard, ensure you have:
+1. A running **3x-ui panel** (e.g. from [MHSanaei/3x-ui](https://github.com/MHSanaei/3x-ui)).
+2. Your panel's **IP address / Domain** and **Port** (default: `2053`).
+3. Your panel's **Admin Username** and **Password**.
 
-If your 3x-ui panel (or another app) already owns `80`/`443`, Coolify's built-in
-proxy can't route a domain to the dashboard. In that case, skip the proxy and
-publish the container on a **direct custom port** instead:
+---
 
-1. **Coolify → your app → Configuration → Network → "Ports Mappings"**
-   - Set `8090:8080` (host `8090` → container `8080`). Pick any free, non-common
-     host port; confirm it's free first: `sudo ss -tulpn | grep :8090`.
-   - Leave the **Domains** field empty (you're not using the proxy).
-2. **Open the port in your firewall.** On Oracle Cloud (and most VPS) the port is
-   blocked by default at two layers:
-   - **Cloud Security List / firewall:** add an Ingress rule allowing TCP `8090`
-     from `0.0.0.0/0` (Oracle Cloud → VCN → Security Lists).
-   - **Host iptables:** `sudo iptables -I INPUT -p tcp --dport 8090 -j ACCEPT`
-     then persist (`sudo netfilter-persistent save`, or use `ufw allow 8090/tcp`).
-3. **Redeploy**, then open `http://YOUR_VPS_IP:8090`.
+## 🚀 Deployment Methods
 
-The dashboard's env vars stay the same (`PANEL_URL`, `PANEL_USERNAME`,
-`PANEL_PASSWORD`) — only the external port changes.
+Choose the deployment method that fits your setup:
 
-## 📦 Local Installation (Optional)
-1. Install dependencies: `npm install`
-2. Set env vars: `PANEL_URL`, `PANEL_USERNAME`, `PANEL_PASSWORD` (defaults target `http://127.0.0.1:2053`).
-3. Start: `npm start` — serves the dashboard and panel proxy on port `8080` (override with `PORT`).
+### Method 1: Cloudflare Pages (Recommended — Fast & Free)
 
-## 🎨 Features
-- **Zero-Latency Monitoring**: Hosted on Cloudflare's Edge.
-- **Mobile Optimized**: Home, Nodes, Users, and System tabs.
-- **GSAP & Three.js**: High-end animations and 3D backgrounds.
+Cloudflare Pages hosts the frontend and executes the API proxy on Cloudflare Edge with zero maintenance.
+
+1. **Fork or Push** this repository to your GitHub account.
+2. In the **[Cloudflare Dashboard](https://dash.cloudflare.com/)**:
+   - Navigate to **Workers & Pages** → **Create** → **Pages** → **Connect to Git**.
+   - Select your repository (`3x-ui-dashboard-`).
+3. **Build Configuration**:
+   - **Framework preset**: None
+   - **Build command**: *(leave empty)*
+   - **Build output directory**: *(leave empty)*
+4. **Configure Environment Variables**:
+   - Go to **Settings** → **Variables and Secrets** → **Environment Variables** (Production).
+   - Add the following variables:
+     | Variable | Description | Example |
+     | :--- | :--- | :--- |
+     | `PANEL_URL` | Base URL of your 3x-ui panel | `http://1.2.3.4:2053` or `https://panel.yourdomain.com` |
+     | `PANEL_USERNAME` | Your 3x-ui admin username | `admin` |
+     | `PANEL_PASSWORD` | Your 3x-ui admin password | `your_secure_password` |
+5. **Deploy**:
+   - Click **Save and Deploy**.
+   - Cloudflare will automatically build the site and provide you with a `.pages.dev` URL.
+
+---
+
+### Method 2: Docker / Coolify (On the Same VPS as 3x-ui)
+
+If you want to run the dashboard on the same VPS hosting your 3x-ui panel, use Docker or Coolify.
+
+#### Running with Docker CLI:
+```bash
+# Build the Docker image
+docker build -t 3x-ui-dashboard .
+
+# Run container (uses host networking to communicate with local 3x-ui)
+docker run -d \
+  --name 3x-ui-dashboard \
+  --restart unless-stopped \
+  --network host \
+  -e PANEL_URL="http://127.0.0.1:2053" \
+  -e PANEL_USERNAME="your_admin_user" \
+  -e PANEL_PASSWORD="your_admin_password" \
+  -e PORT="8080" \
+  3x-ui-dashboard
+```
+
+#### Running with Coolify:
+1. Go to **Coolify** → **New Resource** → **Application** → **Public/Private Repository**.
+2. Select this repository and the `main` branch.
+3. Coolify will auto-detect the `Dockerfile`.
+4. Add the required environment variables in the Coolify UI:
+   - `PANEL_URL`: `http://127.0.0.1:2053` *(or container name if bridged: `http://3x-ui:2053`)*
+   - `PANEL_USERNAME`: your 3x-ui admin user
+   - `PANEL_PASSWORD`: your 3x-ui admin password
+   - `PORT`: `8080`
+5. Map host port `8080` (or a custom port like `8090:8080` if 8080 is taken).
+6. Click **Deploy**.
+
+---
+
+### Method 3: Local or VPS Setup with Node.js
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/ganidusandeepa/3x-ui-dashboard-.git
+   cd 3x-ui-dashboard-
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+3. **Set Environment Variables:**
+   - **Linux / macOS:**
+     ```bash
+     export PANEL_URL="http://YOUR_SERVER_IP:2053"
+     export PANEL_USERNAME="admin"
+     export PANEL_PASSWORD="your_password"
+     export PORT=8080
+     ```
+   - **Windows (PowerShell):**
+     ```powershell
+     $env:PANEL_URL="http://YOUR_SERVER_IP:2053"
+     $env:PANEL_USERNAME="admin"
+     $env:PANEL_PASSWORD="your_password"
+     $env:PORT="8080"
+     ```
+
+4. **Start the application:**
+   ```bash
+   npm start
+   ```
+
+5. Open your browser at `http://localhost:8080`.
+
+---
+
+## ⚙️ Environment Variables Reference
+
+| Variable | Required | Default | Description |
+| :--- | :---: | :---: | :--- |
+| `PANEL_URL` | **Yes** | `http://127.0.0.1:2053` | Address and port of your 3x-ui panel |
+| `PANEL_USERNAME` | **Yes** | — | Admin username for 3x-ui |
+| `PANEL_PASSWORD` | **Yes** | — | Admin password for 3x-ui |
+| `PORT` | No | `8080` | Port for the Node.js dashboard server |
+| `METRICS_INTERVAL_MS` | No | `2000` | Polling frequency for server metrics (ms) |
+| `METRICS_CACHE_TTL` | No | `1000` | In-memory cache duration for metrics |
+
+---
+
+## 🔍 Troubleshooting
+
+### 1. Panel Connection Error / 502 Bad Gateway
+- Ensure `PANEL_URL` is reachable from the server running the dashboard.
+- If running in Docker on the same machine as 3x-ui, use `--network host` and `PANEL_URL=http://127.0.0.1:2053`.
+- Verify the 3x-ui port (default `2053`) is not blocked by your cloud firewall (e.g. AWS Security Group, Oracle Cloud Ingress rules, or `ufw`).
+
+### 2. Login Failed / Unauthorized
+- Verify that `PANEL_USERNAME` and `PANEL_PASSWORD` match your 3x-ui credentials.
+- If you configured a custom web base path in 3x-ui (e.g., `/myadmin/`), append it to `PANEL_URL` (e.g., `http://1.2.3.4:2053/myadmin/`).
+
+---
+
+## 📄 License
+
+This project is licensed under the [GNU General Public License v3.0](LICENSE).
