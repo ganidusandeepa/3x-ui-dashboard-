@@ -68,43 +68,67 @@ async function panelFetch(subUrl, options = {}) {
   }
 }
 
-// ---- Session cache (18 min), mirrors the Worker module-level cache ----
+// ---- Session cache (18 min) for cookie-based fallback ----
 let _session = { cookie: null, ts: 0 };
 const SESSION_TTL = 18 * 60 * 1000;
 
 async function getSession(force = false) {
-  if (PANEL_API_TOKEN) return null; // Using API token directly
   const now = Date.now();
   if (!force && _session.cookie && now - _session.ts < SESSION_TTL) {
     return _session.cookie;
   }
-  const loginRes = await panelFetch(`${_effectivePanelUrl}/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ username: ADMIN_USER, password: ADMIN_PASS }),
-    redirect: 'follow'
-  });
-  const cookie = loginRes.headers.get('set-cookie');
-  if (cookie) _session = { cookie, ts: now };
-  return cookie;
+  try {
+    const loginRes = await panelFetch(`${_effectivePanelUrl}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ username: ADMIN_USER, password: ADMIN_PASS }),
+      redirect: 'follow'
+    });
+    const cookie = loginRes.headers.get('set-cookie');
+    if (cookie) {
+      _session = { cookie, ts: now };
+      console.log('[Auth] Obtained panel session cookie successfully');
+    } else {
+      console.log(`[Auth] Login attempt returned status ${loginRes.status} without set-cookie`);
+    }
+    return cookie;
+  } catch (err) {
+    console.error('[Auth] Login request failed:', err.message);
+    return null;
+  }
 }
 
-// Unified auth headers for 3x-ui API (API Token or Session Cookie)
+// Unified auth headers for 3x-ui API (API Token + Session Cookie support)
 async function getAuthHeaders() {
-  if (PANEL_API_TOKEN) {
-    return {
-      'Authorization': `Bearer ${PANEL_API_TOKEN}`,
-      'Accept': 'application/json',
-      'Referer': `${PANEL_URL}/`
-    };
-  }
-  const cookie = await getSession();
-  if (!cookie) return null;
-  return {
-    'Cookie': cookie,
+  const headers = {
     'Accept': 'application/json',
-    'Referer': `${PANEL_URL}/`
+    'Referer': `${_effectivePanelUrl}/`
   };
+  if (PANEL_API_TOKEN) {
+    headers['Authorization'] = `Bearer ${PANEL_API_TOKEN}`;
+  }
+  if (_session.cookie) {
+    headers['Cookie'] = _session.cookie;
+  } else if (ADMIN_USER && ADMIN_PASS && !PANEL_API_TOKEN) {
+    const cookie = await getSession();
+    if (cookie) headers['Cookie'] = cookie;
+  }
+  return headers;
+}
+
+// Safe JSON parser helper
+async function parseResponseJson(res, context = '') {
+  const text = await res.text();
+  console.log(`[Panel Response] ${context} -> HTTP ${res.status}, length: ${text.length}`);
+  if (!text || !text.trim()) {
+    throw new Error(`Panel returned empty body (HTTP ${res.status})`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    const snippet = text.slice(0, 150).replace(/\s+/g, ' ');
+    throw new Error(`Panel returned non-JSON (HTTP ${res.status}): ${snippet}`);
+  }
 }
 
 // ---- Rolling CPU/RAM history buffer ----
@@ -141,8 +165,16 @@ async function resolveClient(id) {
   const authHeaders = await getAuthHeaders();
   if (!authHeaders) return { status: 500, body: { success: false, msg: 'Panel Auth Failed' } };
 
-  const apiRes = await panelFetch(`${_effectivePanelUrl}/panel/api/inbounds/list`, { headers: authHeaders });
-  const data = await apiRes.json();
+  let apiRes = await panelFetch(`${_effectivePanelUrl}/panel/api/inbounds/list`, { headers: authHeaders });
+  if ((apiRes.status === 401 || apiRes.status === 302) && ADMIN_USER && ADMIN_PASS) {
+    console.log('[Auth Fallback in resolveClient] Got ' + apiRes.status + ', trying /login session cookie fallback...');
+    const cookie = await getSession(true);
+    if (cookie) {
+      authHeaders['Cookie'] = cookie;
+      apiRes = await panelFetch(`${_effectivePanelUrl}/panel/api/inbounds/list`, { headers: authHeaders });
+    }
+  }
+  const data = await parseResponseJson(apiRes, 'resolveClient/inbounds');
   if (!data || !data.success || !Array.isArray(data.obj)) {
     return { status: 502, body: { success: false, msg: 'Bad response from panel' } };
   }
@@ -381,15 +413,19 @@ app.all('/api/xui/*', requireAdmin, async (req, res) => {
 async function fetchInbounds(authHeaders) {
   const headers = authHeaders || await getAuthHeaders();
   if (!headers) throw new Error('Panel Auth Failed');
-  const apiRes = await panelFetch(`${_effectivePanelUrl}/panel/api/inbounds/list`, {
+  let apiRes = await panelFetch(`${_effectivePanelUrl}/panel/api/inbounds/list`, {
     method: 'GET', headers
   });
-  const text = await apiRes.text();
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    throw new Error(`Panel returned non-JSON (HTTP ${apiRes.status}): ${text.slice(0, 150)}`);
+  // If 401 or empty, and we have credentials, try refreshing session cookie
+  if ((apiRes.status === 401 || apiRes.status === 302) && ADMIN_USER && ADMIN_PASS) {
+    console.log('[Auth Fallback] Got ' + apiRes.status + ', trying /login session cookie fallback...');
+    const cookie = await getSession(true);
+    if (cookie) {
+      headers['Cookie'] = cookie;
+      apiRes = await panelFetch(`${_effectivePanelUrl}/panel/api/inbounds/list`, { method: 'GET', headers });
+    }
   }
+  return await parseResponseJson(apiRes, 'inbounds/list');
 }
 
 app.get('/api/expiry-alerts', requireAdmin, async (req, res) => {
@@ -464,16 +500,17 @@ app.get('/api/status', requireAdmin, async (req, res) => {
   try {
     const authHeaders = await getAuthHeaders();
     if (!authHeaders) return res.status(401).json({ success: false, msg: 'Panel Auth Failed' });
-    const apiRes = await panelFetch(`${_effectivePanelUrl}/panel/api/server/status`, {
+    let apiRes = await panelFetch(`${_effectivePanelUrl}/panel/api/server/status`, {
       method: 'GET', headers: authHeaders
     });
-    const text = await apiRes.text();
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch (e) {
-      throw new Error(`Panel returned non-JSON (HTTP ${apiRes.status}): ${text.slice(0, 150)}`);
+    if ((apiRes.status === 401 || apiRes.status === 302) && ADMIN_USER && ADMIN_PASS) {
+      const cookie = await getSession(true);
+      if (cookie) {
+        authHeaders['Cookie'] = cookie;
+        apiRes = await panelFetch(`${_effectivePanelUrl}/panel/api/server/status`, { method: 'GET', headers: authHeaders });
+      }
     }
+    const data = await parseResponseJson(apiRes, 'server/status');
     if (data && data.obj) pushHistory(data.obj);
     res.json({ success: true, obj: data.obj || data });
   } catch (err) {
