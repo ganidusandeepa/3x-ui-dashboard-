@@ -328,6 +328,73 @@ function getClientTrafficMetrics(email, rawUp, rawDown, limitBytes) {
   };
 }
 
+async function getClientIpLogs(email, authHeaders) {
+  if (!email || !authHeaders) return [];
+  const encodedEmail = encodeURIComponent(email);
+  const candidates = [
+    { url: `${PANEL_URL}/panel/api/clients/ips/${encodedEmail}`, method: 'POST' },
+    { url: `${PANEL_URL}/panel/api/inbounds/clientIps/${encodedEmail}`, method: 'POST' },
+    { url: `${PANEL_URL}/panel/api/clients/ips/${encodedEmail}`, method: 'GET' },
+    { url: `${PANEL_URL}/panel/api/inbounds/clientIps/${encodedEmail}`, method: 'GET' }
+  ];
+
+  for (const c of candidates) {
+    try {
+      const res = await panelFetch(c.url, { method: c.method, headers: authHeaders });
+      if (res && (res.status === 200 || res.ok)) {
+        const text = await res.text();
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch(e) {}
+        let list = null;
+        if (parsed && typeof parsed === 'object') {
+          if (Array.isArray(parsed.obj)) list = parsed.obj;
+          else if (Array.isArray(parsed.data)) list = parsed.data;
+          else if (typeof parsed.obj === 'string' && parsed.obj.trim()) list = parsed.obj.split(/[\r\n,]+/);
+          else if (typeof parsed.data === 'string' && parsed.data.trim()) list = parsed.data.split(/[\r\n,]+/);
+        } else if (text && typeof text === 'string' && text.trim() && !text.includes('<html')) {
+          list = text.split(/[\r\n,]+/);
+        }
+
+        if (Array.isArray(list) && list.length > 0) {
+          const ips = list.map(item => {
+            if (!item) return '';
+            if (typeof item === 'string') return item.trim();
+            if (typeof item === 'object') return String(item.ip || item.clientIp || item.addr || item.address || '').trim();
+            return String(item).trim();
+          }).filter(Boolean);
+
+          if (ips.length > 0) {
+            console.log(`[IP Logs] Found ${ips.length} IPs for ${email} via ${c.method} ${c.url}`);
+            return ips;
+          }
+        }
+      }
+    } catch(e) {}
+  }
+
+  // Fallback: check global /panel/api/server/clientIps
+  try {
+    const sRes = await panelFetch(`${PANEL_URL}/panel/api/server/clientIps`, { method: 'GET', headers: authHeaders });
+    if (sRes && (sRes.status === 200 || sRes.ok)) {
+      const sData = await sRes.json().catch(() => null);
+      const list = (sData && (Array.isArray(sData.obj) ? sData.obj : Array.isArray(sData.data) ? sData.data : null)) || [];
+      const matched = list.filter(item => {
+        if (!item || typeof item !== 'object') return false;
+        return String(item.email || item.clientEmail || item.remark || '').toLowerCase() === email.toLowerCase();
+      });
+      if (matched.length > 0) {
+        const ips = matched.map(m => m.ip || m.clientIp || m.addr).filter(Boolean);
+        if (ips.length > 0) {
+          console.log(`[IP Logs] Found ${ips.length} IPs for ${email} via server/clientIps`);
+          return ips;
+        }
+      }
+    }
+  } catch(e) {}
+
+  return [];
+}
+
 // Shared client lookup
 async function resolveClient(id) {
   const authHeaders = await getAuthHeaders();
@@ -361,28 +428,7 @@ async function resolveClient(id) {
   const lastOnlineTs = Number(foundClient.lastOnline) || 0;
   // If user was active within last 3 minutes (180,000 ms), they are ONLINE / CONNECTED
   const isOnline = lastOnlineTs > 0 ? ((now - lastOnlineTs) < 180000) : false;
-  let ips = [];
-  try {
-    const ipRes = await panelFetch(`${PANEL_URL}/panel/api/inbounds/clientIps/${encodeURIComponent(foundClient.email)}`, {
-      method: 'POST',
-      headers: authHeaders
-    });
-    if (ipRes && ipRes.ok) {
-      const ipData = await ipRes.json().catch(() => null);
-      if (ipData) {
-        if (Array.isArray(ipData.obj)) {
-          ips = ipData.obj.filter(Boolean);
-        } else if (typeof ipData.obj === 'string' && ipData.obj.trim()) {
-          ips = ipData.obj.split(/[\r\n,]+/).map(s => s.trim()).filter(Boolean);
-        } else if (Array.isArray(ipData.data)) {
-          ips = ipData.data.filter(Boolean);
-        } else if (typeof ipData.data === 'string' && ipData.data.trim()) {
-          ips = ipData.data.split(/[\r\n,]+/).map(s => s.trim()).filter(Boolean);
-        }
-      }
-    }
-  } catch (e) {}
-
+  const ips = await getClientIpLogs(foundClient.email, authHeaders);
   const ipCount = ips.length;
   // If IP logs has entries (e.g. 74), show that count as users; otherwise fallback to active session
   const onlineUsers = ipCount > 0 ? ipCount : (isOnline ? 1 : 0);
@@ -608,7 +654,7 @@ app.get('/api/server-info', async (req, res) => {
 });
 
 app.get('/healthz', (req, res) => res.json({ ok: true }));
-app.get('/api/version', (req, res) => res.json({ ok: true, version: 'v42', updated: '2026-10-04' }));
+app.get('/api/version', (req, res) => res.json({ ok: true, version: 'v43', updated: '2026-10-04' }));
 
 async function handleClientAuth(id, res) {
   try {
@@ -924,28 +970,7 @@ app.get('/public/stream', async (req, res) => {
           client.down,
           client.total
         );
-        let sseIps = [];
-        try {
-          const ipRes = await panelFetch(`${PANEL_URL}/panel/api/inbounds/clientIps/${encodeURIComponent(client.email)}`, {
-            method: 'POST',
-            headers: authHeaders
-          });
-          if (ipRes && ipRes.ok) {
-            const ipData = await ipRes.json().catch(() => null);
-            if (ipData) {
-              if (Array.isArray(ipData.obj)) {
-                sseIps = ipData.obj.filter(Boolean);
-              } else if (typeof ipData.obj === 'string' && ipData.obj.trim()) {
-                sseIps = ipData.obj.split(/[\r\n,]+/).map(s => s.trim()).filter(Boolean);
-              } else if (Array.isArray(ipData.data)) {
-                sseIps = ipData.data.filter(Boolean);
-              } else if (typeof ipData.data === 'string' && ipData.data.trim()) {
-                sseIps = ipData.data.split(/[\r\n,]+/).map(s => s.trim()).filter(Boolean);
-              }
-            }
-          }
-        } catch (e) {}
-
+        const sseIps = await getClientIpLogs(client.email, authHeaders);
         const sseCount = sseIps.length;
         const onlineUsers = sseCount > 0 ? sseCount : (isOnline ? 1 : 0);
 
