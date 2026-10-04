@@ -317,6 +317,7 @@ function startClientSSE(idToCheck) {
     });
 }
 
+window.doLogout = doLogout; window.handleLogout = doLogout;
 function doLogout() {
     try { stopAdminSSE(); } catch(e) {}
     try { stopClientSSE(); } catch(e) {}
@@ -328,7 +329,9 @@ function doLogout() {
     __expiryCountdownTimer = null; __currentClientData = null;
     currentRole = null; adminToken = null;
     try { sessionStorage.removeItem('xui_admin_token'); localStorage.removeItem('xui_admin_token'); } catch(e) {}
+    try { document.body.classList.remove('is-admin', 'is-client'); } catch(e) {}
     document.getElementById('login-overlay').style.display = 'flex';
+    try { document.getElementById('btn-logout').style.display = 'none'; } catch(e) {}
     try { document.querySelector('.desktop-nav')?.style && (document.querySelector('.desktop-nav').style.display = 'none'); } catch(e) {}
     try { document.querySelector('.mobile-nav')?.style && (document.querySelector('.mobile-nav').style.display = 'none'); } catch(e) {}
     document.getElementById('main-fab').style.display = 'none';
@@ -453,6 +456,7 @@ document.getElementById('login-email').addEventListener('keydown', e => { if (e.
 
 // --- Admin App Start ---
 async function startAdminApp() {
+    document.body.classList.add('is-admin'); document.body.classList.remove('is-client');
     document.getElementById('login-overlay').style.display = 'none';
     try { document.getElementById('btn-logout').style.display = 'inline-flex'; } catch(e) {}
     document.getElementById('tab-user-view').style.display = 'none';
@@ -827,6 +831,7 @@ function applyClientDataToUI(client) {
 }
 
 function startClientApp(client) {
+    document.body.classList.add('is-client'); document.body.classList.remove('is-admin');
     document.getElementById('login-overlay').style.display = 'none';
     try { document.getElementById('btn-logout').style.display = 'inline-flex'; } catch(e) {}
     try { const sel = document.getElementById('admin-tab-select'); if (sel) sel.style.display = 'none'; } catch(e) {}
@@ -1018,7 +1023,11 @@ function stopAdminSSE() {
 }
 
 function switchTab(tabId) {
-    try { document.querySelectorAll('.nav-btn, .m-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId)); } catch(e) {}
+    try {
+        document.querySelectorAll('.nav-btn, .m-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
+        const sel = document.getElementById('admin-tab-select');
+        if (sel && sel.value !== tabId) sel.value = tabId;
+    } catch(e) {}
     const allTabs = Array.from(document.querySelectorAll('.tab-content'));
     const targetId = `tab-${tabId}`;
     const target = document.getElementById(targetId);
