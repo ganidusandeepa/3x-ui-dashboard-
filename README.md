@@ -7,11 +7,14 @@ A modern, responsive, and glassmorphic web dashboard for monitoring and managing
 ## ✨ Features
 
 - **🎨 Modern Glassmorphism UI**: High-end dark theme with smooth animations powered by GSAP and Three.js.
+- **📊 Total Consumption Meter**: Displays all-time cumulative bandwidth (Total Used, Total Remaining, and Quota %) with full animated progress fill and leading-edge plasma flare.
+- **📅 Monthly Period Cycle (1st to 30th/31st)**: Automatic calendar month period tracker (e.g. 1st – 31st Oct) with days-left countdown and cycle end dates.
 - **📡 3-Node Interactive Latency Pipeline**: Visual packet travel across **Client ➔ VPS Proxy ➔ Internet** with individual hop latencies, jitter tracking, and quality badges.
 - **⚡ Dynamic Network Speed Flow**: Realtime EMA-smoothed download and upload indicators featuring frequency-scaled directional arrow animations.
 - **✨ Smart Consumption Flares**: Glowing white plasma flare radiating at the tip of the usage meter for limited quotas (automatically hidden for unlimited data).
+- **🛡️ 100% Zero-Leak Privacy**: Clean repository with zero private credentials, no VPS IP disclosures, and sanitized environment templates.
 - **📱 100% Mobile Responsive**: Dedicated mobile bottom navigation bar, touch-friendly cards, and adaptive topology controls.
-- **📊 Real-Time Metrics**: Live interactive charts for CPU, RAM, and inbound/outbound bandwidth consumption (Chart.js).
+- **📊 Real-Time Server Metrics**: Live interactive charts for CPU, RAM, and inbound/outbound bandwidth consumption (Chart.js).
 - **🔑 Native API Token Support**: Fully compatible with 3x-ui scoped Bearer tokens ([official docs](https://docs.sanaei.dev/docs/reference/api/api-tokens/)).
 - **🔒 Secure API Proxy**: Built-in backend proxy (Node.js / Cloudflare Functions) to eliminate CORS issues and protect your 3x-ui credentials.
 - **⚡ Flexible Deployment**: Deploy in minutes to **Cloudflare Pages** (Serverless), **Docker / Coolify**, or directly via **Node.js (PM2)**.
