@@ -44,7 +44,7 @@
 
             <div class="login-seg">
                 <button id="tab-login-client" class="login-seg-btn active">Client</button>
-                <button id="tab-login-admin" class="login-seg-btn">Admin</button>
+                <button id="tab-login-admin" class="login-seg-btn" title="Admin login temporarily disabled">Admin <span style="font-size:0.68rem;opacity:0.75;">(Off)</span></button>
             </div>
 
             <div id="login-form-client">
@@ -59,23 +59,26 @@
             </div>
 
             <div id="login-form-admin" style="display:none;">
-                <div class="login-field">
+                <div class="admin-off-banner" style="background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.28); color:#fca5a5; padding:10px 14px; border-radius:12px; font-size:0.8rem; margin-bottom:14px; text-align:center;">
+                    <i class="fa-solid fa-lock"></i> Admin login is temporarily disabled.
+                </div>
+                <div class="login-field" style="opacity:0.6;">
                     <label class="login-field-label">Panel Username</label>
                     <div class="login-field-wrap">
                         <i class="fa-regular fa-user login-field-icon"></i>
-                        <input type="text" id="admin-login-user" class="login-field-input" placeholder="admin" autocomplete="username">
+                        <input type="text" id="admin-login-user" class="login-field-input" placeholder="admin" autocomplete="username" disabled>
                     </div>
                 </div>
-                <div class="login-field">
+                <div class="login-field" style="opacity:0.6;">
                     <label class="login-field-label">Panel Password</label>
                     <div class="login-field-wrap">
                         <i class="fa-solid fa-lock login-field-icon"></i>
-                        <input type="password" id="admin-login-pass" class="login-field-input" placeholder="••••••••" autocomplete="current-password">
+                        <input type="password" id="admin-login-pass" class="login-field-input" placeholder="••••••••" autocomplete="current-password" disabled>
                     </div>
                 </div>
-                <button class="login-btn" id="btn-login-admin">Sign In</button>
-                <p class="login-hint">
-                    If sign-in fails, update <code>PANEL_USERNAME</code> &amp; <code>PANEL_PASSWORD</code> in Cloudflare Pages env vars.
+                <button class="login-btn" id="btn-login-admin" disabled style="opacity:0.5; cursor:not-allowed;">Sign In Disabled</button>
+                <p class="login-hint" style="color:var(--text-dim); text-align:center;">
+                    Admin portal is currently closed for maintenance. Client access remains active.
                 </p>
             </div>
 
