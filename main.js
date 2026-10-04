@@ -2117,7 +2117,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         else if (lastTab === 'admin') document.getElementById('tab-login-admin').click();
         else document.getElementById('tab-login-client').click();
 
-        const tok = sessionStorage.getItem('xui_admin_token') || localStorage.getItem('xui_admin_token');
+        // Admin login is temporarily off: clear cached admin token to enforce lockdown
+        try { sessionStorage.removeItem('xui_admin_token'); localStorage.removeItem('xui_admin_token'); } catch(e) {}
+        const tok = null;
         if (tok) {
             const headers = (tok === 'zero-trust-secured') ? {} : { Authorization: `Bearer ${tok}` };
             fetch('/api/status', { headers }).then(r => r.json()).then(j => {
