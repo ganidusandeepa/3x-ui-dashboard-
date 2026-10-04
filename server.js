@@ -217,6 +217,115 @@ async function cachedJson(key, ttlS, producer) {
   return value;
 }
 
+// --- Persistent Monthly Client Traffic Tracker ---
+// Tracks baseline usage per client to distinguish Lifetime Total from Monthly Period (1st - 30/31st)
+const TRAFFIC_STORE_PATH = path.join(__dirname, 'traffic_history.json');
+let _trafficRecords = {};
+
+function loadTrafficRecords() {
+  try {
+    if (fs.existsSync(TRAFFIC_STORE_PATH)) {
+      const raw = fs.readFileSync(TRAFFIC_STORE_PATH, 'utf8');
+      _trafficRecords = JSON.parse(raw || '{}') || {};
+    }
+  } catch (err) {
+    console.error('[Traffic Tracker] Failed to load records:', err.message);
+    _trafficRecords = {};
+  }
+}
+
+let _saveTimeout = null;
+function scheduleSaveTrafficRecords() {
+  if (_saveTimeout) return;
+  _saveTimeout = setTimeout(() => {
+    _saveTimeout = null;
+    try {
+      fs.writeFileSync(TRAFFIC_STORE_PATH, JSON.stringify(_trafficRecords, null, 2), 'utf8');
+    } catch (err) {
+      console.error('[Traffic Tracker] Failed to persist records:', err.message);
+    }
+  }, 1000);
+}
+
+loadTrafficRecords();
+
+function getClientTrafficMetrics(email, rawUp, rawDown, limitBytes) {
+  const up = Math.max(0, Number(rawUp) || 0);
+  const down = Math.max(0, Number(rawDown) || 0);
+  const rawTotal = up + down;
+
+  if (!email) {
+    return { lifetimeUsed: rawTotal, monthlyUsed: rawTotal, rawTotal, baselineRaw: 0 };
+  }
+
+  const normEmail = String(email).trim().toLowerCase();
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  let rec = _trafficRecords[normEmail];
+  let dirty = false;
+
+  if (!rec) {
+    rec = {
+      currentMonth,
+      baselineRaw: rawTotal,
+      lastRaw: rawTotal,
+      archivedLifetime: 0,
+      createdAt: now.getTime(),
+      updatedAt: now.getTime()
+    };
+    _trafficRecords[normEmail] = rec;
+    dirty = true;
+  } else {
+    // 1. Calendar month rollover check (1st of month at 00:00:00)
+    if (rec.currentMonth !== currentMonth) {
+      if (rawTotal >= (rec.lastRaw || 0)) {
+        // 3x-ui did NOT auto-reset: baseline for the new month is the raw counter at rollover
+        rec.baselineRaw = rawTotal;
+      } else {
+        // 3x-ui DID auto-reset on the 1st: archive previous months
+        rec.archivedLifetime = (rec.archivedLifetime || 0) + (rec.lastRaw || 0);
+        rec.baselineRaw = 0;
+      }
+      rec.currentMonth = currentMonth;
+      rec.lastRaw = rawTotal;
+      rec.updatedAt = now.getTime();
+      dirty = true;
+    } else {
+      // 2. Mid-month check: if 3x-ui or admin manually reset traffic (counter dropped by > 2MB)
+      if (rawTotal < (rec.lastRaw || 0) - 2097152) {
+        rec.archivedLifetime = (rec.archivedLifetime || 0) + (rec.lastRaw || 0);
+        rec.baselineRaw = 0;
+        rec.lastRaw = rawTotal;
+        rec.updatedAt = now.getTime();
+        dirty = true;
+      } else if (rawTotal !== rec.lastRaw) {
+        rec.lastRaw = rawTotal;
+        rec.updatedAt = now.getTime();
+        dirty = true;
+      }
+    }
+  }
+
+  if (dirty) {
+    scheduleSaveTrafficRecords();
+  }
+
+  const lifetimeUsed = (rec.archivedLifetime || 0) + rawTotal;
+  const monthlyUsed = Math.max(0, rawTotal - (rec.baselineRaw || 0));
+
+  return {
+    lifetimeUsed,
+    monthlyUsed,
+    rawTotal,
+    baselineRaw: rec.baselineRaw || 0,
+    month: rec.currentMonth,
+    up,
+    down,
+    limit: Number(limitBytes) || 0
+  };
+}
+
 // Shared client lookup
 async function resolveClient(id) {
   const authHeaders = await getAuthHeaders();
@@ -380,6 +489,13 @@ async function resolveClient(id) {
     } catch (e) {}
   }
 
+  const trafficMetrics = getClientTrafficMetrics(
+    foundClient.email,
+    foundClient.up,
+    foundClient.down,
+    foundClient.total
+  );
+
   return {
     status: 200,
     body: {
@@ -403,7 +519,8 @@ async function resolveClient(id) {
         trojanLink,
         configLink,
         protocol,
-        subInfo
+        subInfo,
+        traffic: trafficMetrics
       }
     }
   };
@@ -771,11 +888,18 @@ app.get('/public/stream', async (req, res) => {
         sseSend(res, 'notfound', { id, ts: Date.now() });
       } else {
         const isOnline = client.lastOnline > 0 && ((Date.now() - Number(client.lastOnline)) < 180000);
+        const trafficMetrics = getClientTrafficMetrics(
+          client.email,
+          client.up,
+          client.down,
+          client.total
+        );
         sseSend(res, 'client', {
           ts: Date.now(), email: client.email, down: client.down, up: client.up,
           total: client.total, enable: client.enable, lastOnline: client.lastOnline,
           isOnline: isOnline,
-          uuid: client.uuid, subId: client.subId
+          uuid: client.uuid, subId: client.subId,
+          traffic: trafficMetrics
         });
       }
       res.write(`: ping ${Date.now()}\n\n`);
@@ -785,6 +909,21 @@ app.get('/public/stream', async (req, res) => {
     await new Promise(r => setTimeout(r, INTERVAL_MS));
   }
   try { res.end(); } catch (e) {}
+});
+
+// Dedicated client traffic endpoint
+app.get('/api/clients/traffic/:email', async (req, res) => {
+  try {
+    const email = (req.params.email || '').trim();
+    if (!email) return res.status(400).json({ success: false, msg: 'Missing email' });
+    const out = await resolveClient(email);
+    if (out.status === 200 && out.body?.clientData) {
+      return res.json({ success: true, traffic: out.body.clientData.traffic, client: out.body.clientData });
+    }
+    return res.status(out.status).json(out.body);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 app.use(express.static(path.join(__dirname), { index: 'index.html', extensions: ['html'] }));
