@@ -72,6 +72,8 @@ function panelFetch(urlStr, options = {}) {
       }
       if (bodyData && !headers['Content-Length']) {
         headers['Content-Length'] = Buffer.byteLength(bodyData);
+      } else if (!bodyData && (method === 'POST' || method === 'PUT')) {
+        headers['Content-Length'] = 0;
       }
 
       const reqOptions = {
@@ -334,8 +336,13 @@ async function getClientIpLogs(email, authHeaders) {
   const candidates = [
     { url: `${PANEL_URL}/panel/api/clients/ips/${encodedEmail}`, method: 'POST' },
     { url: `${PANEL_URL}/panel/api/inbounds/clientIps/${encodedEmail}`, method: 'POST' },
+    { url: `${PANEL_URL}/panel/inbound/clientIps/${encodedEmail}`, method: 'POST' },
+    { url: `${PANEL_URL}/panel/api/clients/ips/${email}`, method: 'POST' },
+    { url: `${PANEL_URL}/panel/api/inbounds/clientIps/${email}`, method: 'POST' },
     { url: `${PANEL_URL}/panel/api/clients/ips/${encodedEmail}`, method: 'GET' },
-    { url: `${PANEL_URL}/panel/api/inbounds/clientIps/${encodedEmail}`, method: 'GET' }
+    { url: `${PANEL_URL}/panel/api/inbounds/clientIps/${encodedEmail}`, method: 'GET' },
+    { url: `${PANEL_URL}/panel/inbound/clientIps/${encodedEmail}`, method: 'GET' },
+    { url: `${PANEL_URL}/panel/api/inbounds/clientIps?email=${encodedEmail}`, method: 'POST' }
   ];
 
   for (const c of candidates) {
@@ -654,7 +661,40 @@ app.get('/api/server-info', async (req, res) => {
 });
 
 app.get('/healthz', (req, res) => res.json({ ok: true }));
-app.get('/api/version', (req, res) => res.json({ ok: true, version: 'v43', updated: '2026-10-04' }));
+app.get('/api/version', (req, res) => res.json({ ok: true, version: 'v44', updated: '2026-10-04' }));
+
+app.get('/api/debug-iplogs/:id', async (req, res) => {
+  const id = (req.params.id || '').trim();
+  const authHeaders = await getAuthHeaders();
+  const report = [];
+  const encoded = encodeURIComponent(id);
+  const testList = [
+    { url: `${PANEL_URL}/panel/api/clients/ips/${encoded}`, method: 'POST' },
+    { url: `${PANEL_URL}/panel/api/inbounds/clientIps/${encoded}`, method: 'POST' },
+    { url: `${PANEL_URL}/panel/inbound/clientIps/${encoded}`, method: 'POST' },
+    { url: `${PANEL_URL}/panel/api/clients/ips/${id}`, method: 'POST' },
+    { url: `${PANEL_URL}/panel/api/inbounds/clientIps/${id}`, method: 'POST' },
+    { url: `${PANEL_URL}/panel/api/clients/ips/${encoded}`, method: 'GET' },
+    { url: `${PANEL_URL}/panel/api/inbounds/clientIps/${encoded}`, method: 'GET' },
+    { url: `${PANEL_URL}/panel/inbound/clientIps/${encoded}`, method: 'GET' },
+    { url: `${PANEL_URL}/panel/api/server/clientIps`, method: 'GET' }
+  ];
+  for (const t of testList) {
+    try {
+      const resp = await panelFetch(t.url, { method: t.method, headers: authHeaders });
+      const text = await resp.text();
+      report.push({
+        url: t.url,
+        method: t.method,
+        status: resp.status,
+        preview: text.slice(0, 400)
+      });
+    } catch(e) {
+      report.push({ url: t.url, method: t.method, error: e.message });
+    }
+  }
+  return res.json({ id, ok: true, report });
+});
 
 async function handleClientAuth(id, res) {
   try {
