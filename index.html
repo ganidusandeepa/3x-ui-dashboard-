@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=30">
+    <link rel="stylesheet" href="styles.css?v=31">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" data-cfasync="false"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js" data-cfasync="false"></script>
@@ -150,7 +150,7 @@
             <!-- Live Server Health Bar (Visible on all views) -->
             <div class="live-strip-row" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;">
                 <div class="live-pill" id="pill-xray-status"><span class="status-dot online"></span> Xray <strong id="strip-xray-ver">-</strong></div>
-                <div class="live-pill"><i class="fa-solid fa-network-wired"></i> Conns: <strong id="live-conns">-</strong></div>
+                <div class="live-pill" id="pill-live-users"><i class="fa-solid fa-users"></i> Users: <strong id="live-users">-</strong></div>
                 <div class="live-pill"><i class="fa-solid fa-clock"></i> Uptime: <strong id="live-uptime">-</strong></div>
                 <div class="live-pill"><i class="fa-solid fa-hard-drive"></i> Disk: <strong id="live-disk">-</strong></div>
             </div>
@@ -205,7 +205,7 @@
                 </div>
 
                 <!-- Progress Line: Total Consumption -->
-                <div class="card" style="margin-top:20px;">
+                <div class="card user-view-card">
                     <div class="consumption-head">
                         <h3 style="margin-bottom:0;"><i class="fa-solid fa-chart-pie"></i> Total Consumption</h3>
                         <div class="consumption-pct" id="user-progress-pct" style="display:none;">0%</div>
@@ -229,7 +229,7 @@
                 </div>
 
                 <!-- M3 Live Plan Status: This Period (1st to 30th/31st) -->
-                <div class="card m3-plan-card" id="plan-status-card" style="margin-top:20px;">
+                <div class="card m3-plan-card user-view-card" id="plan-status-card">
 
                     <div class="plan-head">
                         <div class="plan-status-pill" id="plan-status-pill">
@@ -292,10 +292,11 @@
                 </div>
 
                 <!-- Account Details -->
-                <div class="card" style="margin-top:20px;">
+                <div class="card user-view-card">
                     <h3><i class="fa-solid fa-id-card"></i> Account Details</h3>
                     <div class="info-row"><span>ID/Email:</span> <strong id="user-email">-</strong></div>
                     <div class="info-row"><span>Status:</span> <strong id="user-online">-</strong></div>
+                    <div class="info-row"><span>Active Users / Devices:</span> <strong id="user-active-count" style="color:var(--good);">-</strong></div>
                     <div class="info-row"><span>Last Online:</span> <strong id="user-last-online">-</strong></div>
                     <div class="info-row"><span>UUID:</span> <strong id="user-uuid" style="word-break:break-all;font-size:0.85rem;">-</strong></div>
                     <div class="info-row"><span>Subscription ID:</span> <strong id="user-subid">-</strong></div>
@@ -303,7 +304,7 @@
                 </div>
 
                 <!-- Server Ping Card: 3-Node Interactive Network Pipeline -->
-                <div class="card ping-card" id="ping-card" style="margin-top:20px;">
+                <div class="card ping-card user-view-card" id="ping-card">
                     <div class="ping-head">
                         <div>
                             <div class="ping-eyebrow"><i class="fa-solid fa-network-wired"></i> Network Latency Pipeline</div>
@@ -403,7 +404,7 @@
                 </div>
 
                 <!-- Config Link & QR Code (client view) -->
-                <div id="client-config-card" class="card" style="margin-top:20px; display:none;">
+                <div id="client-config-card" class="card user-view-card" style="display:none;">
                     <h3><i class="fa-solid fa-qrcode"></i> Connection Config</h3>
                     <p class="subtitle" style="margin-bottom:14px; font-size:0.85rem;">Scan the QR code or copy the config link to your proxy app.</p>
 
@@ -854,6 +855,6 @@
         </button>
     </nav>
 
-    <script src="main.js?v=39" data-cfasync="false"></script>
+    <script src="main.js?v=40" data-cfasync="false"></script>
 </body>
 </html>
