@@ -40,8 +40,8 @@ Before setting up the dashboard, ensure you have:
 
 > [!IMPORTANT]
 > **Web Base Path Requirement:**  
-> If your 3x-ui panel uses a custom URL path (e.g. `https://trackydev.site:2083/ghc4QE4Ha6kFxHHIIB/`), you **MUST** include the subpath in `PANEL_URL`:  
-> `PANEL_URL="https://trackydev.site:2083/ghc4QE4Ha6kFxHHIIB"`  
+> If your 3x-ui panel uses a custom URL path (e.g. `https://your-domain.com:2083/your_web_base_path/`), you **MUST** include the subpath in `PANEL_URL`:  
+> `PANEL_URL="https://your-domain.com:2083/your_web_base_path"`  
 > Omitting the web base path will result in `HTTP 404 Not Found`.
 
 ---
@@ -55,7 +55,7 @@ Run the dashboard directly on your VPS as a persistent background process.
 1. **Clone the repository and install dependencies:**
    ```bash
    cd /var/www || cd ~
-   git clone https://github.com/ganidusandeepa/3x-ui-dashboard-.git
+   git clone https://github.com/your_usernamesandeepa/3x-ui-dashboard-.git
    cd 3x-ui-dashboard-
    npm install
    ```
@@ -124,6 +124,29 @@ docker run -d \
 
 ---
 
+
+---
+
+## 🔒 Security & Privacy Hardening
+
+This dashboard includes enterprise-grade privacy and security protections:
+
+1. **Zero Hardcoded Secrets**: All URLs, API tokens, and credentials are read strictly from private environment variables or a local `.env` file. No credentials are ever saved in the Git repository.
+2. **Access Lockdown (`ADMIN_LOGIN_ENABLED`)**:
+   - By default, **admin login is temporarily turned OFF** (`ADMIN_LOGIN_ENABLED=false`).
+   - When disabled, any administrative sign-in attempts are rejected with `HTTP 403 Forbidden`, while client traffic lookups remain fully functional.
+   - To re-enable admin sign-in, simply set `ADMIN_LOGIN_ENABLED=true` in your `.env` file.
+3. **VPS Privacy Masking (`MASK_VPS_DETAILS`)**:
+   - Strips the panel's secret **Web Base Path** from all client subscription and connection links so clients never learn the internal panel path.
+   - Masks the real backend VPS IP address from public status queries.
+4. **Environment File Security**:
+   - `.env` is listed in `.gitignore` and will never be committed to GitHub.
+   - Use `.env.example` as your template:
+     ```bash
+     cp .env.example .env
+     nano .env
+     ```
+
 ## 🔄 One-Command Upgrade
 
 Whenever updates are pushed to GitHub, you can upgrade your dashboard in 1 second:
@@ -139,10 +162,12 @@ cd ~/3x-ui-dashboard- || cd /var/www/3x-ui-dashboard-
 
 | Variable | Required | Default | Description |
 | :--- | :---: | :---: | :--- |
-| `PANEL_URL` | **Yes** | — | Full URL to 3x-ui, including protocol, port, and Web Base Path (e.g. `https://trackydev.site:2083/ghc4QE4Ha6kFxHHIIB`) |
+| `PANEL_URL` | **Yes** | — | Full URL to 3x-ui, including protocol, port, and Web Base Path (e.g. `https://your-domain.com:2083/your_web_base_path`) |
 | `PANEL_API_TOKEN` | **Recommended** | — | 3x-ui API Token (from **Settings → Security → API Token**). Authenticates with `Authorization: Bearer <token>`. |
 | `PANEL_USERNAME` | Optional | `admin` | Fallback 3x-ui admin username (if not using API Token) |
-| `PANEL_PASSWORD` | Optional | `password` | Fallback 3x-ui admin password (or dashboard admin password) |
+| `PANEL_PASSWORD` | Optional | — | Fallback 3x-ui admin password (or dashboard admin password) |
+| `ADMIN_LOGIN_ENABLED` | No | `false` | Enable or disable admin sign-in portal (default: false for lockdown) |
+| `MASK_VPS_DETAILS` | No | `true` | Protect backend VPS IP and hide secret panel paths from clients |
 | `PORT` | No | `8080` | Port for the dashboard web server |
 | `METRICS_INTERVAL_MS` | No | `3000` | Frequency for server metrics SSE updates (ms) |
 | `METRICS_CACHE_TTL` | No | `3` | Cache duration for metrics in seconds |
