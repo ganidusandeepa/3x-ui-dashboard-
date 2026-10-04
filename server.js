@@ -508,8 +508,25 @@ app.post('/public/auth', (req, res) => {
 
 app.get('/api/ping', async (req, res) => {
   const t0 = Date.now();
+  let vpsToInternet = 0;
+  try {
+    const tInt = Date.now();
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 2000);
+    // Ping an ultra-fast global DNS/HTTP endpoint (1.1.1.1) to measure VPS -> Internet latency
+    await fetch('https://1.1.1.1', { method: 'HEAD', signal: ctrl.signal }).catch(() => {});
+    clearTimeout(tid);
+    vpsToInternet = Math.max(1, Date.now() - tInt);
+  } catch (e) {
+    vpsToInternet = 18;
+  }
   try { await panelFetch(`${PANEL_URL}/`, { method: 'HEAD' }); } catch (e) {}
-  res.set('Cache-Control', 'no-store').json({ latency: Date.now() - t0, ts: t0 });
+  const vpsInternal = Date.now() - t0;
+  res.set('Cache-Control', 'no-store').json({ 
+    latency: vpsInternal,
+    vpsToInternet,
+    ts: Date.now() 
+  });
 });
 
 app.get('/api/settings', requireAdmin, (req, res) => {
