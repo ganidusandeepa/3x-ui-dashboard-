@@ -706,15 +706,36 @@ function setFlipDigit(id, val) {
     }
 }
 
+// --- Monthly Period Helper (1st to 30th/31st of every month) ---
+function getMonthPeriodInfo() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth(); // 0-11
+    const lastDayOfMonth = new Date(year, month + 1, 0).getDate(); // 28, 29, 30, or 31
+    const monthName = now.toLocaleString('default', { month: 'short' });
+    const nextMonthReset = new Date(year, month + 1, 1, 0, 0, 0).getTime();
+    const daysLeft = Math.max(0, Math.ceil((nextMonthReset - Date.now()) / 86400000));
+    
+    return {
+        rangeStr: `1st – ${lastDayOfMonth}th ${monthName}`,
+        cycleEndStr: `${monthName} ${lastDayOfMonth}, ${year}`,
+        daysLeft,
+        nextMonthReset
+    };
+}
+
 function startExpiryCountdown(expiryTime) {
     try { clearInterval(__expiryCountdownTimer); } catch(e) {}
     const el = document.getElementById('expiry-countdown');
     if (!el) return;
     const exp = Number(expiryTime);
-    if (!exp || exp <= 0) { el.style.display = 'none'; return; }
-    const urgent = exp - Date.now() < 7 * 86400000;
+    const periodInfo = getMonthPeriodInfo();
+    // If client has custom expiryTime, use it; otherwise target monthly cycle reset (1st of next month 00:00:00)
+    const targetTime = (exp && exp > 0) ? exp : periodInfo.nextMonthReset;
+    const urgent = targetTime - Date.now() < 7 * 86400000;
+    
     const tick = () => {
-        const diff = exp - Date.now();
+        const diff = targetTime - Date.now();
         if (diff <= 0) {
             el.style.display = 'block';
             ['flip-d','flip-h','flip-m','flip-s'].forEach(id => setFlipDigit(id, 0));
@@ -727,8 +748,8 @@ function startExpiryCountdown(expiryTime) {
         setFlipDigit('flip-m', Math.floor((diff % 3600000) / 60000));
         setFlipDigit('flip-s', Math.floor((diff % 60000) / 1000));
         ['flip-d','flip-h','flip-m','flip-s'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.style.color = urgent ? 'var(--warn)' : '';
+            const digitEl = document.getElementById(id);
+            if (digitEl) digitEl.style.color = urgent ? 'var(--warn)' : '';
         });
     };
     tick();
@@ -797,7 +818,10 @@ function applyClientDataToUI(client) {
             }
         }
 
-        // Period usage bar — prefer subInfo from ?format=info, fall back to clientStats
+        // Period usage bar (1st to 30th/31st of every month)
+        const periodInfo = getMonthPeriodInfo();
+        setTextSafe('#plan-period-range', periodInfo.rangeStr);
+
         const si = client.subInfo || null;
         const siUp   = si ? Number(si.upload ?? 0) : 0;
         const siDown = si ? Number(si.download ?? 0) : 0;
@@ -847,14 +871,16 @@ function applyClientDataToUI(client) {
         const daysEl   = document.getElementById('plan-days-val');
         if (expiryEl && daysEl) {
             if (!expiryMs || expiryMs <= 0) {
-                expiryEl.textContent = 'Never';
-                daysEl.textContent = '∞';
+                expiryEl.textContent = periodInfo.cycleEndStr;
+                daysEl.textContent = `${periodInfo.daysLeft}`;
                 daysEl.classList.remove('warn', 'bad');
+                if (periodInfo.daysLeft <= 3) daysEl.classList.add('bad');
+                else if (periodInfo.daysLeft <= 7) daysEl.classList.add('warn');
             } else {
                 const d = new Date(expiryMs);
                 expiryEl.textContent = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
                 const daysLeft = Math.max(0, Math.ceil((expiryMs - Date.now()) / 86400000));
-                daysEl.textContent = daysLeft;
+                daysEl.textContent = `${daysLeft}`;
                 daysEl.classList.remove('warn', 'bad');
                 if (daysLeft <= 3) daysEl.classList.add('bad');
                 else if (daysLeft <= 7) daysEl.classList.add('warn');
@@ -887,7 +913,7 @@ function applyClientDataToUI(client) {
         }
     } catch(e) {}
 
-    // Hero consumption bar (legacy, keep for hero card)
+    // Total Consumption bar (hero / overview) - explicitly animates width and positions white flare
     try {
         const bar = document.getElementById('user-progress');
         const pctEl = document.getElementById('user-progress-pct');
@@ -903,11 +929,22 @@ function applyClientDataToUI(client) {
                 const pct = Math.min(100, (Number(totalUsed) / limit) * 100);
                 if (pct >= 90) bar.classList.add('level-bad');
                 else if (pct >= 70) bar.classList.add('level-warn');
-                requestAnimationFrame(() => bar.style.setProperty('--bar-w', `${pct}%`));
+                
+                if (typeof gsap !== 'undefined' && !prefersReducedMotion()) {
+                    gsap.to(bar, { width: pct.toFixed(1) + '%', duration: 0.9, ease: 'elastic.out(1, 0.45)' });
+                } else {
+                    requestAnimationFrame(() => { bar.style.width = pct.toFixed(1) + '%'; });
+                }
+                bar.style.setProperty('--bar-w', `${pct.toFixed(1)}%`);
                 if (pctEl) { pctEl.style.display = 'inline-flex'; pctEl.textContent = `${pct.toFixed(1)}%`; }
                 if (remEl) { const r = formatGB(Math.max(0, Number(limit) - Number(totalUsed))); remEl.textContent = `${r.value} ${r.unit}`; }
                 if (barFlare) barFlare.style.display = pct > 0 ? 'block' : 'none';
             } else {
+                if (typeof gsap !== 'undefined' && !prefersReducedMotion()) {
+                    gsap.to(bar, { width: '100%', duration: 0.9, ease: 'power2.out' });
+                } else {
+                    bar.style.width = '100%';
+                }
                 bar.style.setProperty('--bar-w', '100%');
                 if (pctEl) pctEl.style.display = 'none';
                 if (remEl) remEl.textContent = 'Unlimited';
