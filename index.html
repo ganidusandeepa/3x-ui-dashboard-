@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=25">
+    <link rel="stylesheet" href="styles.css?v=26">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" data-cfasync="false"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js" data-cfasync="false"></script>
@@ -121,11 +121,12 @@
                         <i class="fa-solid fa-earth-asia"></i>
                         <span class="hdr-label">BG</span>
                     </button>
-                    <button id="btn-logout" class="hdr-btn hdr-logout" title="Logout">
-                        <i class="fa-solid fa-right-from-bracket"></i>
-                        <span class="hdr-label">Logout</span>
-                    </button>
                 </div>
+
+                <button id="btn-logout" class="hdr-btn hdr-logout" title="Logout" style="display:none;">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                    <span class="hdr-label">Logout</span>
+                </button>
             </div>
         </header>
 
@@ -133,14 +134,6 @@
             <!-- USER VIEW TAB -->
             <section id="tab-user-view" class="tab-content">
                 
-                <!-- Live Server Health Bar -->
-                <div class="live-strip-row" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;">
-                    <div class="live-pill" id="pill-xray-status"><span class="status-dot online"></span> Xray <strong id="strip-xray-ver">-</strong></div>
-                    <div class="live-pill"><i class="fa-solid fa-arrows-up-down"></i> <strong id="live-net-speed" style="color:var(--good)">↓ 0 KB/s ↑ 0 KB/s</strong></div>
-                    <div class="live-pill"><i class="fa-solid fa-network-wired"></i> Conns: <strong id="live-conns">-</strong></div>
-                    <div class="live-pill"><i class="fa-solid fa-clock"></i> Uptime: <strong id="live-uptime">-</strong></div>
-                    <div class="live-pill"><i class="fa-solid fa-hard-drive"></i> Disk: <strong id="live-disk">-</strong></div>
-                </div>
                 <div class="overview-grid">
                     <div class="card data-card-hero">
                         <div class="data-text">
@@ -324,10 +317,25 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Client Mobile Logout -->
+                <div class="client-logout-wrap" style="margin-top:20px; text-align:center;">
+                    <button class="sys-btn danger" onclick="doLogout()" style="width:100%; max-width:280px; margin:0 auto; padding:12px 20px; font-size:0.9rem; border-radius:var(--shape-full);">
+                        <i class="fa-solid fa-right-from-bracket"></i> Sign Out
+                    </button>
+                </div>
             </section>
 
             <!-- OVERVIEW TAB -->
             <section id="tab-overview" class="tab-content active">
+                <!-- Live Server Health Bar -->
+                <div class="live-strip-row">
+                    <div class="live-pill" id="pill-xray-status"><span class="status-dot online"></span> Xray <strong id="strip-xray-ver">-</strong></div>
+                    <div class="live-pill"><i class="fa-solid fa-arrows-up-down"></i> <strong id="live-net-speed" style="color:var(--good)">↓ 0 KB/s ↑ 0 KB/s</strong></div>
+                    <div class="live-pill"><i class="fa-solid fa-network-wired"></i> Conns: <strong id="live-conns">-</strong></div>
+                    <div class="live-pill"><i class="fa-solid fa-clock"></i> Uptime: <strong id="live-uptime">-</strong></div>
+                    <div class="live-pill"><i class="fa-solid fa-hard-drive"></i> Disk: <strong id="live-disk">-</strong></div>
+                </div>
                 <!-- Expiry Alerts Widget -->
                 <div id="expiry-alerts-card" class="card" style="margin-bottom:20px; display:none;">
                     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
@@ -724,6 +732,26 @@
         </div>
     </div>
 
-    <script src="main.js?v=34" data-cfasync="false"></script>
+        <!-- Mobile Bottom Navigation Bar (Admin) -->
+    <nav class="mobile-nav" id="admin-mobile-nav">
+        <button class="m-nav-btn active" data-tab="overview">
+            <i class="fa-solid fa-chart-line"></i>
+            <span>Overview</span>
+        </button>
+        <button class="m-nav-btn" data-tab="inbounds">
+            <i class="fa-solid fa-network-wired"></i>
+            <span>Inbounds</span>
+        </button>
+        <button class="m-nav-btn" data-tab="clients">
+            <i class="fa-solid fa-users"></i>
+            <span>Clients</span>
+        </button>
+        <button class="m-nav-btn" data-tab="system">
+            <i class="fa-solid fa-microchip"></i>
+            <span>System</span>
+        </button>
+    </nav>
+
+    <script src="main.js?v=35" data-cfasync="false"></script>
 </body>
 </html>
