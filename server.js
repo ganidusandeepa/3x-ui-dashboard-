@@ -369,13 +369,23 @@ async function resolveClient(id) {
     });
     if (ipRes && ipRes.ok) {
       const ipData = await ipRes.json().catch(() => null);
-      if (ipData && Array.isArray(ipData.obj)) {
-        ips = ipData.obj.filter(Boolean);
+      if (ipData) {
+        if (Array.isArray(ipData.obj)) {
+          ips = ipData.obj.filter(Boolean);
+        } else if (typeof ipData.obj === 'string' && ipData.obj.trim()) {
+          ips = ipData.obj.split(/[\r\n,]+/).map(s => s.trim()).filter(Boolean);
+        } else if (Array.isArray(ipData.data)) {
+          ips = ipData.data.filter(Boolean);
+        } else if (typeof ipData.data === 'string' && ipData.data.trim()) {
+          ips = ipData.data.split(/[\r\n,]+/).map(s => s.trim()).filter(Boolean);
+        }
       }
     }
   } catch (e) {}
 
-  const onlineUsers = ips.length > 0 ? ips.length : (isOnline ? 1 : 0);
+  const ipCount = ips.length;
+  // If IP logs has entries (e.g. 74), show that count as users; otherwise fallback to active session
+  const onlineUsers = ipCount > 0 ? ipCount : (isOnline ? 1 : 0);
 
   let serverInfo = null;
   try {
@@ -530,6 +540,7 @@ async function resolveClient(id) {
         isOnline,
         onlineUsers,
         userCount: onlineUsers,
+        ipCount: ipCount,
         ips: MASK_VPS_DETAILS ? [] : ips,
         subLink,
         vlessLink,
@@ -597,7 +608,7 @@ app.get('/api/server-info', async (req, res) => {
 });
 
 app.get('/healthz', (req, res) => res.json({ ok: true }));
-app.get('/api/version', (req, res) => res.json({ ok: true, version: 'v41.2', updated: '2026-10-04' }));
+app.get('/api/version', (req, res) => res.json({ ok: true, version: 'v42', updated: '2026-10-04' }));
 
 async function handleClientAuth(id, res) {
   try {
@@ -913,7 +924,7 @@ app.get('/public/stream', async (req, res) => {
           client.down,
           client.total
         );
-        let onlineUsers = isOnline ? 1 : 0;
+        let sseIps = [];
         try {
           const ipRes = await panelFetch(`${PANEL_URL}/panel/api/inbounds/clientIps/${encodeURIComponent(client.email)}`, {
             method: 'POST',
@@ -921,11 +932,22 @@ app.get('/public/stream', async (req, res) => {
           });
           if (ipRes && ipRes.ok) {
             const ipData = await ipRes.json().catch(() => null);
-            if (ipData && Array.isArray(ipData.obj) && ipData.obj.length > 0) {
-              onlineUsers = ipData.obj.length;
+            if (ipData) {
+              if (Array.isArray(ipData.obj)) {
+                sseIps = ipData.obj.filter(Boolean);
+              } else if (typeof ipData.obj === 'string' && ipData.obj.trim()) {
+                sseIps = ipData.obj.split(/[\r\n,]+/).map(s => s.trim()).filter(Boolean);
+              } else if (Array.isArray(ipData.data)) {
+                sseIps = ipData.data.filter(Boolean);
+              } else if (typeof ipData.data === 'string' && ipData.data.trim()) {
+                sseIps = ipData.data.split(/[\r\n,]+/).map(s => s.trim()).filter(Boolean);
+              }
             }
           }
         } catch (e) {}
+
+        const sseCount = sseIps.length;
+        const onlineUsers = sseCount > 0 ? sseCount : (isOnline ? 1 : 0);
 
         sseSend(res, 'client', {
           ts: Date.now(), email: client.email, down: client.down, up: client.up,
@@ -933,6 +955,7 @@ app.get('/public/stream', async (req, res) => {
           isOnline: isOnline,
           onlineUsers: onlineUsers,
           userCount: onlineUsers,
+          ipCount: sseCount,
           uuid: client.uuid, subId: client.subId,
           traffic: trafficMetrics
         });
