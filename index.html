@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=27">
+    <link rel="stylesheet" href="styles.css?v=28">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" data-cfasync="false"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js" data-cfasync="false"></script>
@@ -151,28 +151,39 @@
                             <div class="main-value"><span id="user-used">0.00</span> <span class="unit">GB</span></div>
                             <p class="subtitle" style="font-size: 1.1rem; color:var(--text-dim);">Total Limit: <strong id="user-total" style="color:#fff;">0.00 GB</strong></p>
 
-                            <div class="traffic-split" style="margin-top: 30px;">
+                            <div class="traffic-split" style="margin-top: 24px;">
                                 <div class="split-item down">
                                     <span class="label">DOWNLOAD</span>
-                                    <span class="val"><i class="fa-solid fa-arrow-down"></i> <span id="user-dl">0.00</span> GB</span>
+                                    <span class="val"><i class="fa-solid fa-arrow-down split-arrow down-arrow" id="user-total-arrow-dl"></i> <span id="user-dl">0.00</span> GB</span>
                                 </div>
                                 <div class="split-item up">
                                     <span class="label">UPLOAD</span>
-                                    <span class="val"><i class="fa-solid fa-arrow-up"></i> <span id="user-up">0.00</span> GB</span>
+                                    <span class="val"><i class="fa-solid fa-arrow-up split-arrow up-arrow" id="user-total-arrow-up"></i> <span id="user-up">0.00</span> GB</span>
                                 </div>
                             </div>
-                            <p style="margin-top: 20px; color: var(--text-dim);">Status: <strong id="user-status-text" class="status-badge active" style="margin-left:10px;">Active</strong></p>
-                            <p style="margin-top: 10px; color: var(--text-dim);">
-                                Speed:
-                                <strong style="color:var(--blue)">↓ <span id="user-dl-speed">0</span> Mbps</strong>
-                                &nbsp;&nbsp;
-                                <strong style="color:var(--accent)">↑ <span id="user-up-speed">0</span> Mbps</strong>
+                            <p style="margin-top: 18px; color: var(--text-dim); display:flex; align-items:center;">
+                                Status: <strong id="user-status-text" class="status-badge active" style="margin-left:10px;">Active</strong>
                             </p>
+                            <div class="user-live-speed-row" style="margin-top: 14px;">
+                                <div class="live-speed-label"><i class="fa-solid fa-gauge-high"></i> Speed:</div>
+                                <div class="live-speed-badges">
+                                    <div class="speed-pill down" id="user-speed-pill-dl">
+                                        <span class="speed-arrow-box"><i class="fa-solid fa-arrow-down speed-arrow-icon" id="user-arrow-dl"></i></span>
+                                        <span class="speed-num"><strong id="user-dl-speed">0.00</strong> <span class="unit">Mbps</span></span>
+                                    </div>
+                                    <div class="speed-pill up" id="user-speed-pill-up">
+                                        <span class="speed-arrow-box"><i class="fa-solid fa-arrow-up speed-arrow-icon" id="user-arrow-up"></i></span>
+                                        <span class="speed-num"><strong id="user-up-speed">0.00</strong> <span class="unit">Mbps</span></span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <div class="usage-ring-wrap" style="width:160px;height:160px;">
                             <svg id="user-ring" class="usage-ring" viewBox="0 0 120 120" aria-hidden="true">
                                 <circle class="ring-track" cx="60" cy="60" r="52"/>
                                 <circle class="ring-fill" cx="60" cy="60" r="52" id="user-ring-fill"/>
+                                <!-- Luminous white flare (limited data only) -->
+                                <circle class="ring-flare-spark" cx="60" cy="8" r="4.5" id="user-ring-flare" style="display:none;"/>
                                 <text class="ring-pct-text" x="60" y="57" id="user-ring-pct">0%</text>
                                 <text class="ring-sub-text" x="60" y="71" id="user-ring-sub">USED</text>
                             </svg>
@@ -187,7 +198,10 @@
                         <div class="consumption-pct" id="user-progress-pct" style="display:none;">0%</div>
                     </div>
                     <div class="consumption-track">
-                        <div id="user-progress" class="consumption-bar" style="width: 0%; height:100%; transition:width 700ms;"></div>
+                        <div id="user-progress" class="consumption-bar" style="width: 0%; height:100%; transition:width 700ms;">
+                            <!-- Dynamic white flare at bar tip (limited data only) -->
+                            <div class="flare-spark" id="user-progress-flare" style="display:none;"></div>
+                        </div>
                     </div>
                     <div class="consumption-meta">
                         <div class="consumption-line">
@@ -221,7 +235,10 @@
                             <span class="plan-usage-pct" id="plan-pct">—</span>
                         </div>
                         <div class="plan-bar-track">
-                            <div class="plan-bar-fill" id="plan-bar-fill"></div>
+                            <div class="plan-bar-fill" id="plan-bar-fill">
+                                <!-- Dynamic white flare at plan bar tip (limited data only) -->
+                                <div class="flare-spark" id="plan-bar-flare" style="display:none;"></div>
+                            </div>
                         </div>
                         <div class="plan-usage-nums">
                             <span><span id="plan-used-num">—</span> <span class="plan-unit">used</span></span>
@@ -272,33 +289,103 @@
                     <div class="info-row"><span>IPs:</span> <strong id="user-ips">-</strong></div>
                 </div>
 
-                <!-- Server Ping Card -->
+                <!-- Server Ping Card: 3-Node Interactive Network Pipeline -->
                 <div class="card ping-card" id="ping-card" style="margin-top:20px;">
                     <div class="ping-head">
                         <div>
-                            <div class="ping-eyebrow">Server Latency</div>
+                            <div class="ping-eyebrow"><i class="fa-solid fa-network-wired"></i> Network Latency Pipeline</div>
                             <div class="ping-val-row">
                                 <span class="ping-ms" id="ping-ms">—</span>
                                 <span class="ping-unit" id="ping-unit">ms</span>
+                                <span class="ping-quality" id="ping-quality"></span>
                             </div>
                         </div>
-                        <button class="ping-btn" id="btn-ping" title="Ping server">
-                            <i class="fa-solid fa-signal"></i>
+                        <button class="ping-btn" id="btn-ping" title="Run network latency test">
+                            <i class="fa-solid fa-bolt"></i> <span class="ping-btn-lbl">Test Ping</span>
                         </button>
                     </div>
-                    <div class="ping-bars" id="ping-bars">
-                        <div class="ping-bar"></div>
-                        <div class="ping-bar"></div>
-                        <div class="ping-bar"></div>
-                        <div class="ping-bar"></div>
-                        <div class="ping-bar"></div>
-                        <div class="ping-bar"></div>
-                        <div class="ping-bar"></div>
-                        <div class="ping-bar"></div>
+
+                    <!-- 3-Node Topology: Client -> VPS -> Internet -->
+                    <div class="ping-topology" id="ping-topology">
+                        <!-- Node 1: Client -->
+                        <div class="topo-node" id="topo-node-client">
+                            <div class="topo-icon-wrap client-glow">
+                                <i class="fa-solid fa-laptop topo-icon"></i>
+                                <div class="node-pulse-ring"></div>
+                            </div>
+                            <div class="topo-meta">
+                                <span class="topo-name">Client</span>
+                                <span class="topo-sub">Device</span>
+                            </div>
+                        </div>
+
+                        <!-- Connector 1: Client -> VPS -->
+                        <div class="topo-connector" id="topo-conn-1">
+                            <div class="topo-track">
+                                <div class="topo-beam" id="topo-beam-1"></div>
+                                <div class="topo-packet" id="topo-packet-1"></div>
+                            </div>
+                            <div class="topo-hop-badge" id="topo-hop-1" title="Client to VPS Latency">
+                                <i class="fa-solid fa-arrow-right topo-hop-arr"></i>
+                                <span class="topo-hop-val" id="topo-hop-1-val">— ms</span>
+                            </div>
+                        </div>
+
+                        <!-- Node 2: VPS Server -->
+                        <div class="topo-node" id="topo-node-vps">
+                            <div class="topo-icon-wrap vps-glow">
+                                <i class="fa-solid fa-server topo-icon"></i>
+                                <div class="node-pulse-ring"></div>
+                            </div>
+                            <div class="topo-meta">
+                                <span class="topo-name">VPS Proxy</span>
+                                <span class="topo-sub">3x-ui Server</span>
+                            </div>
+                        </div>
+
+                        <!-- Connector 2: VPS -> Internet -->
+                        <div class="topo-connector" id="topo-conn-2">
+                            <div class="topo-track">
+                                <div class="topo-beam" id="topo-beam-2"></div>
+                                <div class="topo-packet" id="topo-packet-2"></div>
+                            </div>
+                            <div class="topo-hop-badge" id="topo-hop-2" title="VPS to Internet Latency">
+                                <i class="fa-solid fa-arrow-right topo-hop-arr"></i>
+                                <span class="topo-hop-val" id="topo-hop-2-val">— ms</span>
+                            </div>
+                        </div>
+
+                        <!-- Node 3: Internet Target -->
+                        <div class="topo-node" id="topo-node-internet">
+                            <div class="topo-icon-wrap internet-glow">
+                                <i class="fa-solid fa-globe topo-icon"></i>
+                                <div class="node-pulse-ring"></div>
+                            </div>
+                            <div class="topo-meta">
+                                <span class="topo-name">Internet</span>
+                                <span class="topo-sub">Global Web</span>
+                            </div>
+                        </div>
                     </div>
+
+                    <!-- Stability / History Bars -->
+                    <div class="ping-history-section">
+                        <div class="ping-bars-label">Latency Stability History</div>
+                        <div class="ping-bars" id="ping-bars">
+                            <div class="ping-bar"></div>
+                            <div class="ping-bar"></div>
+                            <div class="ping-bar"></div>
+                            <div class="ping-bar"></div>
+                            <div class="ping-bar"></div>
+                            <div class="ping-bar"></div>
+                            <div class="ping-bar"></div>
+                            <div class="ping-bar"></div>
+                        </div>
+                    </div>
+
                     <div class="ping-footer">
-                        <span class="ping-status" id="ping-status">Tap to measure latency</span>
-                        <span class="ping-quality" id="ping-quality"></span>
+                        <span class="ping-status" id="ping-status">Ready to test connection</span>
+                        <span class="ping-summary-chip" id="ping-summary-chip">Round-Trip: —</span>
                     </div>
                 </div>
 
@@ -754,6 +841,6 @@
         </button>
     </nav>
 
-    <script src="main.js?v=36" data-cfasync="false"></script>
+    <script src="main.js?v=37" data-cfasync="false"></script>
 </body>
 </html>
