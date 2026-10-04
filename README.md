@@ -14,8 +14,8 @@ A modern, responsive, and glassmorphic web dashboard for monitoring and managing
 - **📡 3-Node Interactive Latency Pipeline**: Visual packet travel across **Client ➔ VPS Proxy ➔ Internet** with individual hop latencies, jitter tracking, and quality badges.
 - **⚡ Dynamic Network Speed Flow**: Realtime EMA-smoothed download and upload indicators featuring frequency-scaled directional arrow animations.
 - **✨ Smart Consumption Flares**: Glowing white plasma flare radiating at the tip of the usage meter for limited quotas (automatically hidden for unlimited data).
-- **🛡️ 100% Zero-Leak Privacy**: Clean repository with zero private credentials, no VPS IP disclosures, and sanitized environment templates.
-- **📱 100% Mobile Responsive**: Dedicated mobile bottom navigation bar, touch-friendly cards, and adaptive topology controls.
+- **👥 Active Users / Device Tracking**: Live status indicator and client details displaying the number of active devices and online users connected using that client account.
+- **📱 100% Mobile Responsive**: Generous card breathing room, spacious conduit padding in the 3-node latency pipeline, mobile bottom navigation, and vertical stats cards.
 - **📊 Real-Time Server Metrics**: Live interactive charts for CPU, RAM, and inbound/outbound bandwidth consumption (Chart.js).
 - **🔑 Native API Token Support**: Fully compatible with 3x-ui scoped Bearer tokens ([official docs](https://docs.sanaei.dev/docs/reference/api/api-tokens/)).
 - **🔒 Secure API Proxy**: Built-in backend proxy (Node.js / Cloudflare Functions) to eliminate CORS issues and protect your 3x-ui credentials.
