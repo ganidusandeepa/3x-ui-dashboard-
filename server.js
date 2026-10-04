@@ -226,7 +226,18 @@ function loadTrafficRecords() {
   try {
     if (fs.existsSync(TRAFFIC_STORE_PATH)) {
       const raw = fs.readFileSync(TRAFFIC_STORE_PATH, 'utf8');
-      _trafficRecords = JSON.parse(raw || '{}') || {};
+      const loaded = JSON.parse(raw || '{}') || {};
+      _trafficRecords = {};
+      for (const [k, v] of Object.entries(loaded)) {
+        if (v && typeof v === 'object') {
+          _trafficRecords[k] = {
+            currentMonth: v.currentMonth,
+            baselineRaw: Number(v.baselineRaw) || 0,
+            lastRaw: Number(v.lastRaw) || 0,
+            updatedAt: v.updatedAt || Date.now()
+          };
+        }
+      }
     }
   } catch (err) {
     console.error('[Traffic Tracker] Failed to load records:', err.message);
@@ -268,9 +279,8 @@ function getClientTrafficMetrics(email, rawUp, rawDown, limitBytes) {
   if (!rec) {
     rec = {
       currentMonth,
-      baselineRaw: rawTotal,
+      baselineRaw: 0,
       lastRaw: rawTotal,
-      archivedLifetime: 0,
       createdAt: now.getTime(),
       updatedAt: now.getTime()
     };
@@ -279,27 +289,17 @@ function getClientTrafficMetrics(email, rawUp, rawDown, limitBytes) {
   } else {
     // 1. Calendar month rollover check (1st of month at 00:00:00)
     if (rec.currentMonth !== currentMonth) {
-      if (rawTotal >= (rec.lastRaw || 0)) {
-        // 3x-ui did NOT auto-reset: baseline for the new month is the raw counter at rollover
-        rec.baselineRaw = rawTotal;
-      } else {
-        // 3x-ui DID auto-reset on the 1st: archive previous months
-        rec.archivedLifetime = (rec.archivedLifetime || 0) + (rec.lastRaw || 0);
-        rec.baselineRaw = 0;
-      }
+      rec.baselineRaw = rawTotal;
       rec.currentMonth = currentMonth;
       rec.lastRaw = rawTotal;
       rec.updatedAt = now.getTime();
       dirty = true;
     } else {
-      // 2. Mid-month check: if 3x-ui or admin manually reset traffic (counter dropped by > 2MB)
-      if (rawTotal < (rec.lastRaw || 0) - 2097152) {
-        rec.archivedLifetime = (rec.archivedLifetime || 0) + (rec.lastRaw || 0);
+      // 2. Mid-month check: if panel was reset (rawTotal dropped significantly below baseline)
+      if (rawTotal < (rec.baselineRaw || 0)) {
         rec.baselineRaw = 0;
-        rec.lastRaw = rawTotal;
-        rec.updatedAt = now.getTime();
-        dirty = true;
-      } else if (rawTotal !== rec.lastRaw) {
+      }
+      if (rawTotal !== rec.lastRaw) {
         rec.lastRaw = rawTotal;
         rec.updatedAt = now.getTime();
         dirty = true;
@@ -311,8 +311,10 @@ function getClientTrafficMetrics(email, rawUp, rawDown, limitBytes) {
     scheduleSaveTrafficRecords();
   }
 
-  const lifetimeUsed = (rec.archivedLifetime || 0) + rawTotal;
-  const monthlyUsed = Math.max(0, rawTotal - (rec.baselineRaw || 0));
+  // Lifetime used is ALWAYS rawTotal (actual cumulative bytes recorded by Xray/3x-ui)
+  const lifetimeUsed = rawTotal;
+  // Monthly used is usage within current month, bounded between 0 and rawTotal
+  const monthlyUsed = Math.max(0, Math.min(rawTotal, rawTotal - (rec.baselineRaw || 0)));
 
   return {
     lifetimeUsed,
@@ -958,11 +960,24 @@ app.get('/api/clients/traffic/:email', async (req, res) => {
   }
 });
 
+// Disable caching for HTML and entry root so browser updates take effect immediately
+app.use((req, res, next) => {
+  if (req.path === '/' || req.path.endsWith('.html')) {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+  next();
+});
+
 app.use(express.static(path.join(__dirname), { index: 'index.html', extensions: ['html'] }));
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/') || req.path.startsWith('/public/')) {
     return res.status(404).json({ success: false, msg: 'Endpoint not found' });
   }
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
