@@ -8,19 +8,45 @@ const https = require('https');
 
 const app = express();
 
-const PANEL_URL_RAW = process.env.PANEL_URL || 'https://trackydev.site:2083/ghc4QE4Ha6kFxHHIIB';
+// Built-in .env parser for secure secret management without committing credentials to Git
+const fs = require('fs');
+const envFile = path.join(__dirname, '.env');
+if (fs.existsSync(envFile)) {
+  try {
+    const lines = fs.readFileSync(envFile, 'utf8').split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx > 0) {
+        const key = trimmed.slice(0, eqIdx).trim();
+        let val = trimmed.slice(eqIdx + 1).trim();
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+          val = val.slice(1, -1);
+        }
+        if (!process.env[key]) process.env[key] = val;
+      }
+    }
+  } catch (e) {}
+}
+
+const PANEL_URL_RAW = (process.env.PANEL_URL || '').trim();
 const PANEL_URL = PANEL_URL_RAW.replace(/\/$/, '');
-const PANEL_API_TOKEN = (process.env.PANEL_API_TOKEN || process.env.PANEL_TOKEN || 'iIOzXQFIkmOMOqNvKG21OcgMonMoDTmuhCBIokkviGLAwbqU').trim();
-const ADMIN_USER = process.env.PANEL_USERNAME || 'admin';
-const ADMIN_PASS = process.env.PANEL_PASSWORD || 'password';
+const PANEL_API_TOKEN = (process.env.PANEL_API_TOKEN || process.env.PANEL_TOKEN || '').trim();
+const ADMIN_USER = (process.env.PANEL_USERNAME || '').trim();
+const ADMIN_PASS = (process.env.PANEL_PASSWORD || '').trim();
+const ADMIN_LOGIN_ENABLED = process.env.ADMIN_LOGIN_ENABLED === 'true'; // OFF by default
+const MASK_VPS_DETAILS = process.env.MASK_VPS_DETAILS !== 'false'; // ON by default
 const PORT = Number(process.env.PORT || 8080);
 const INTERVAL_MS = Math.max(1000, Number(process.env.METRICS_INTERVAL_MS || 3000));
 const CACHE_TTL_S = Number(process.env.METRICS_CACHE_TTL || 3);
 
 console.log('----------------------------------------------------');
 console.log('3x-ui Dashboard Starting');
-console.log('PANEL_URL:', PANEL_URL);
-console.log('API Token Configured:', PANEL_API_TOKEN ? 'YES (' + PANEL_API_TOKEN.slice(0, 6) + '...)' : 'NO');
+console.log('PANEL_URL Configured:', PANEL_URL ? 'YES' : 'NO (Required - set in .env or environment)');
+console.log('API Token Configured:', PANEL_API_TOKEN ? 'YES' : 'NO');
+console.log('Admin Login Active:', ADMIN_LOGIN_ENABLED ? 'ENABLED' : 'TEMPORARILY DISABLED');
+console.log('VPS Privacy Masking:', MASK_VPS_DETAILS ? 'ACTIVE' : 'OFF');
 console.log('Port:', PORT);
 console.log('----------------------------------------------------');
 
@@ -29,6 +55,9 @@ console.log('----------------------------------------------------');
 function panelFetch(urlStr, options = {}) {
   return new Promise((resolve, reject) => {
     try {
+      if (!PANEL_URL) {
+        return reject(new Error('PANEL_URL is not configured in .env or environment'));
+      }
       const url = new URL(urlStr.startsWith('http') ? urlStr : `${PANEL_URL}${urlStr.startsWith('/') ? '' : '/'}${urlStr}`);
       const isHttps = url.protocol === 'https:';
       const lib = isHttps ? https : http;
@@ -237,8 +266,19 @@ async function resolveClient(id) {
 
   let subLink = null, vlessLink = null, vmessLink = null, trojanLink = null, protocol = 'vless';
   try {
-    const host = new URL(PANEL_URL).hostname;
-    subLink = foundClient.subId ? `${PANEL_URL}/sub/${foundClient.subId}` : null;
+    let cleanBaseUrl = '';
+    let publicHost = '';
+    try {
+      const pUri = new URL(PANEL_URL);
+      // Strip any secret web base path (/ghc4...) so it is NEVER disclosed to clients
+      cleanBaseUrl = `${pUri.protocol}//${pUri.host}`;
+      publicHost = process.env.PUBLIC_DOMAIN || pUri.hostname;
+    } catch (e) {
+      publicHost = process.env.PUBLIC_DOMAIN || 'localhost';
+      cleanBaseUrl = 'http://' + publicHost;
+    }
+    const host = publicHost;
+    subLink = foundClient.subId ? `${cleanBaseUrl}/sub/${foundClient.subId}` : null;
 
     if (foundInbound) {
       const stream = JSON.parse(foundInbound.streamSettings || '{}');
@@ -336,20 +376,42 @@ async function resolveClient(id) {
     status: 200,
     body: {
       success: true, role: 'client',
-      clientData: { ...foundClient, isOnline, ips, subLink, vlessLink, vmessLink, trojanLink, configLink, protocol, subInfo }
+      clientData: {
+        email: foundClient.email,
+        up: foundClient.up || 0,
+        down: foundClient.down || 0,
+        total: foundClient.total || 0,
+        expiryTime: foundClient.expiryTime || 0,
+        enable: foundClient.enable !== false,
+        uuid: foundClient.uuid || foundClient.id,
+        subId: foundClient.subId,
+        isOnline,
+        ips: MASK_VPS_DETAILS ? [] : ips,
+        subLink,
+        vlessLink,
+        vmessLink,
+        trojanLink,
+        configLink,
+        protocol,
+        subInfo
+      }
     }
   };
 }
 
 // Admin auth guard (Bearer <PANEL_PASSWORD> or API token)
 function isAdmin(req) {
+  if (!ADMIN_LOGIN_ENABLED) return false;
   const auth = req.headers.authorization;
   if (!auth) return false;
-  if (auth === `Bearer ${ADMIN_PASS}`) return true;
+  if (ADMIN_PASS && auth === `Bearer ${ADMIN_PASS}`) return true;
   if (PANEL_API_TOKEN && auth === `Bearer ${PANEL_API_TOKEN}`) return true;
   return false;
 }
 function requireAdmin(req, res, next) {
+  if (!ADMIN_LOGIN_ENABLED) {
+    return res.status(403).json({ success: false, msg: 'Admin access is temporarily disabled' });
+  }
   if (!isAdmin(req)) return res.status(401).json({ success: false, msg: 'Unauthorized' });
   next();
 }
@@ -374,10 +436,22 @@ async function handleClientAuth(id, res) {
 app.post('/api/auth', async (req, res) => {
   const body = req.body || {};
   if (body.type === 'admin') {
-    const matchesPass = (body.username === ADMIN_USER && body.password === ADMIN_PASS) || (body.username === 'ganidu' && body.password === '7211') || body.password === '7211';
-    const matchesToken = PANEL_API_TOKEN && (body.password === PANEL_API_TOKEN || body.token === PANEL_API_TOKEN || body.username === PANEL_API_TOKEN);
+    if (!ADMIN_LOGIN_ENABLED) {
+      return res.status(403).json({
+        success: false,
+        msg: 'Admin login is temporarily disabled. Only client access is currently available.'
+      });
+    }
+    if (!ADMIN_USER || !ADMIN_PASS) {
+      return res.status(500).json({
+        success: false,
+        msg: 'Admin credentials are not configured in server environment.'
+      });
+    }
+    const matchesPass = body.username === ADMIN_USER && body.password === ADMIN_PASS;
+    const matchesToken = PANEL_API_TOKEN && (body.password === PANEL_API_TOKEN || body.token === PANEL_API_TOKEN);
     if (matchesPass || matchesToken) {
-      return res.json({ success: true, role: 'admin', token: PANEL_API_TOKEN || ADMIN_PASS || '7211' });
+      return res.json({ success: true, role: 'admin', token: PANEL_API_TOKEN || ADMIN_PASS });
     }
     return res.status(401).json({ success: false, msg: 'Invalid admin credentials' });
   }
@@ -398,7 +472,12 @@ app.get('/api/ping', async (req, res) => {
 });
 
 app.get('/api/settings', requireAdmin, (req, res) => {
-  res.json({ success: true, panelUrl: PANEL_URL, username: ADMIN_USER, hasApiToken: !!PANEL_API_TOKEN });
+  res.json({
+    success: true,
+    hasApiToken: !!PANEL_API_TOKEN,
+    adminLoginEnabled: ADMIN_LOGIN_ENABLED,
+    maskVpsDetails: MASK_VPS_DETAILS
+  });
 });
 
 app.all('/api/xui/*', requireAdmin, async (req, res) => {
@@ -427,7 +506,7 @@ app.all('/api/xui/*', requireAdmin, async (req, res) => {
   } catch (err) {
     _session = { cookie: null, ts: 0 };
     console.error('[API 500 Error]', req.method, req.originalUrl, err.message);
-    res.status(500).json({ success: false, error: err.message, stack: err.stack });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -533,7 +612,12 @@ app.get('/api/status', requireAdmin, async (req, res) => {
       }
     }
     const data = await parseResponseJson(apiRes, 'server/status');
-    if (data && data.obj) pushHistory(data.obj);
+    if (data && data.obj) {
+      if (MASK_VPS_DETAILS && data.obj.publicIP) {
+        data.obj.publicIP = { ipv4: 'Protected', ipv6: 'Protected' };
+      }
+      pushHistory(data.obj);
+    }
     res.json({ success: true, obj: data.obj || data });
   } catch (err) {
     _session = { cookie: null, ts: 0 };
@@ -653,5 +737,5 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`3x-ui dashboard listening on http://0.0.0.0:${PORT}`);
-  console.log(`Connecting to 3x-ui at: ${PANEL_URL} (API Token Mode)`);
+  console.log(`Admin Login: ${ADMIN_LOGIN_ENABLED ? 'ENABLED' : 'TEMPORARILY DISABLED'}`);
 });
