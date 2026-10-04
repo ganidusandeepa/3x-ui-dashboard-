@@ -360,6 +360,20 @@ async function resolveClient(id) {
   // If user was active within last 3 minutes (180,000 ms), they are ONLINE / CONNECTED
   const isOnline = lastOnlineTs > 0 ? ((now - lastOnlineTs) < 180000) : false;
   let ips = [];
+  try {
+    const ipRes = await panelFetch(`${PANEL_URL}/panel/api/inbounds/clientIps/${encodeURIComponent(foundClient.email)}`, {
+      method: 'POST',
+      headers: authHeaders
+    });
+    if (ipRes && ipRes.ok) {
+      const ipData = await ipRes.json().catch(() => null);
+      if (ipData && Array.isArray(ipData.obj)) {
+        ips = ipData.obj.filter(Boolean);
+      }
+    }
+  } catch (e) {}
+
+  const onlineUsers = ips.length > 0 ? ips.length : (isOnline ? 1 : 0);
 
   let serverInfo = null;
   try {
@@ -512,6 +526,8 @@ async function resolveClient(id) {
         lastOnline: foundClient.lastOnline || 0,
         serverInfo,
         isOnline,
+        onlineUsers,
+        userCount: onlineUsers,
         ips: MASK_VPS_DETAILS ? [] : ips,
         subLink,
         vlessLink,
@@ -894,10 +910,26 @@ app.get('/public/stream', async (req, res) => {
           client.down,
           client.total
         );
+        let onlineUsers = isOnline ? 1 : 0;
+        try {
+          const ipRes = await panelFetch(`${PANEL_URL}/panel/api/inbounds/clientIps/${encodeURIComponent(client.email)}`, {
+            method: 'POST',
+            headers: authHeaders
+          });
+          if (ipRes && ipRes.ok) {
+            const ipData = await ipRes.json().catch(() => null);
+            if (ipData && Array.isArray(ipData.obj) && ipData.obj.length > 0) {
+              onlineUsers = ipData.obj.length;
+            }
+          }
+        } catch (e) {}
+
         sseSend(res, 'client', {
           ts: Date.now(), email: client.email, down: client.down, up: client.up,
           total: client.total, enable: client.enable, lastOnline: client.lastOnline,
           isOnline: isOnline,
+          onlineUsers: onlineUsers,
+          userCount: onlineUsers,
           uuid: client.uuid, subId: client.subId,
           traffic: trafficMetrics
         });
