@@ -256,6 +256,10 @@ header {
 }
 .hdr-btn:hover { color: var(--on-bg); background: var(--surface-0); }
 .hdr-btn i { font-size: 0.88rem; }
+.hdr-btn svg { display: inline-block; vertical-align: middle; flex-shrink: 0; }
+.hdr-github { text-decoration: none; color: var(--on-dim); }
+.hdr-github:hover { color: #ffffff; background: rgba(255, 255, 255, 0.08); }
+.login-github-link:hover { color: #ffffff !important; }
 .hdr-logout:hover { color: #e05c5c; }
 .desktop-nav { display: none; }
 
@@ -1565,6 +1569,7 @@ body.theme-light .mobile-nav {
         justify-content: center;
     }
     .hdr-btn i { font-size: 0.85rem; }
+    .hdr-btn svg { width: 15px; height: 15px; }
 
     .hdr-logout {
         width: 34px !important;
