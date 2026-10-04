@@ -6,3 +6,5 @@ nohup.out
 .env
 .env.*
 *.db
+traffic_history.json
+data/
