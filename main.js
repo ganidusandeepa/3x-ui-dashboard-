@@ -764,7 +764,13 @@ function applyClientDataToUI(client) {
 
     const down = parseFloat(toGB(client.down));
     const up = parseFloat(toGB(client.up));
-    const totalUsed = (down + up).toFixed(2);
+
+    // Distinguish Lifetime Total from Monthly Period usage
+    const lifetimeBytes = (client.traffic && client.traffic.lifetimeUsed !== undefined)
+        ? Number(client.traffic.lifetimeUsed)
+        : (Number(client.up || 0) + Number(client.down || 0));
+    const totalUsedGB = lifetimeBytes / (1024 ** 3);
+    const totalUsed = totalUsedGB.toFixed(2);
     const limit = parseFloat(toGB(client.total));
     const remainDesc = limit === 0 ? "Unlimited GB" : `${limit.toFixed(2)} GB`;
 
@@ -828,9 +834,13 @@ function applyClientDataToUI(client) {
         const siTotal = si ? Number(si.total ?? 0) : 0;
         const siExpire = si ? Number(si.expire ?? 0) * 1000 : 0; // seconds → ms
 
-        const periodBytes = si ? (siUp + siDown) : (Number(client.up || 0) + Number(client.down || 0));
+        // Monthly used bytes from server traffic tracker (falls back to subInfo or raw)
+        const monthlyBytes = (client.traffic && client.traffic.monthlyUsed !== undefined)
+            ? Number(client.traffic.monthlyUsed)
+            : (si ? (siUp + siDown) : (Number(client.up || 0) + Number(client.down || 0)));
+
         const limitBytes  = si && siTotal > 0 ? siTotal : Number(client.total || 0);
-        const periodGB    = periodBytes / (1024 ** 3);
+        const periodGB    = monthlyBytes / (1024 ** 3);
         const limitGB     = limitBytes  / (1024 ** 3);
 
         const periodFmt = formatGB(periodGB);
