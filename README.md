@@ -7,7 +7,10 @@ A modern, responsive, and glassmorphic web dashboard for monitoring and managing
 ## ✨ Features
 
 - **🎨 Modern Glassmorphism UI**: High-end dark theme with smooth animations powered by GSAP and Three.js.
-- **📱 100% Mobile Responsive**: Dedicated mobile bottom navigation bar and touch-friendly cards.
+- **📡 3-Node Interactive Latency Pipeline**: Visual packet travel across **Client ➔ VPS Proxy ➔ Internet** with individual hop latencies, jitter tracking, and quality badges.
+- **⚡ Dynamic Network Speed Flow**: Realtime EMA-smoothed download and upload indicators featuring frequency-scaled directional arrow animations.
+- **✨ Smart Consumption Flares**: Glowing white plasma flare radiating at the tip of the usage meter for limited quotas (automatically hidden for unlimited data).
+- **📱 100% Mobile Responsive**: Dedicated mobile bottom navigation bar, touch-friendly cards, and adaptive topology controls.
 - **📊 Real-Time Metrics**: Live interactive charts for CPU, RAM, and inbound/outbound bandwidth consumption (Chart.js).
 - **🔑 Native API Token Support**: Fully compatible with 3x-ui scoped Bearer tokens ([official docs](https://docs.sanaei.dev/docs/reference/api/api-tokens/)).
 - **🔒 Secure API Proxy**: Built-in backend proxy (Node.js / Cloudflare Functions) to eliminate CORS issues and protect your 3x-ui credentials.
