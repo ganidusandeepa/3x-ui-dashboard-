@@ -786,6 +786,17 @@ function applyClientDataToUI(client) {
         if (client.subId !== undefined) document.getElementById('user-subid').textContent = client.subId || '-';
         if (client.lastOnline !== undefined) document.getElementById('user-last-online').textContent = fmtTime(client.lastOnline);
         if (client.ips !== undefined) document.getElementById('user-ips').textContent = Array.isArray(client.ips) ? (client.ips.join(', ') || 'None') : '-';
+        const userCount = client.onlineUsers !== undefined ? Number(client.onlineUsers) : (client.userCount !== undefined ? Number(client.userCount) : (client.isOnline ? 1 : 0));
+        const activeCountEl = document.getElementById('user-active-count');
+        if (activeCountEl) {
+            activeCountEl.textContent = userCount > 0 ? `${userCount} active` : '0 (offline)';
+            activeCountEl.style.color = userCount > 0 ? 'var(--good)' : 'var(--on-dim)';
+        }
+        const liveUsersEl = document.getElementById('live-users') || document.getElementById('live-conns');
+        if (liveUsersEl) {
+            liveUsersEl.textContent = `${userCount}`;
+            liveUsersEl.style.color = userCount > 0 ? 'var(--good)' : 'var(--on-dim)';
+        }
     } catch(e) {}
 
     animateNumber('#user-used', Number(totalUsed), { decimals: 2, duration: 500 });
@@ -1256,7 +1267,14 @@ function updateServerHealthUI(s) {
         }
         if (s.tcpCount !== undefined || s.udpCount !== undefined) {
             const tot = (Number(s.tcpCount) || 0) + (Number(s.udpCount) || 0);
-            setTextSafe('#live-conns', `${tot} (${s.tcpCount || 0}T/${s.udpCount || 0}U)`);
+            if (currentRole === 'client' && __currentClientData) {
+                const uCount = __currentClientData.onlineUsers !== undefined ? Number(__currentClientData.onlineUsers) : (__currentClientData.isOnline ? 1 : 0);
+                setTextSafe('#live-users', `${uCount}`);
+                setTextSafe('#live-conns', `${uCount}`);
+            } else {
+                setTextSafe('#live-users', `${tot}`);
+                setTextSafe('#live-conns', `${tot} (${s.tcpCount || 0}T/${s.udpCount || 0}U)`);
+            }
         }
         if (s.uptime) {
             const sec = Number(s.uptime);
@@ -1311,8 +1329,16 @@ function applyAdminStatusToUI(stat) {
             if (spdEl) spdEl.textContent = `↓ ${dSpd} ↑ ${uSpd}`;
         }
         if (s.tcpCount !== undefined || s.udpCount !== undefined) {
-            const connsEl = document.getElementById('live-conns');
-            if (connsEl) connsEl.textContent = `${(s.tcpCount || 0) + (s.udpCount || 0)} (${s.tcpCount || 0}T/${s.udpCount || 0}U)`;
+            const tot = (Number(s.tcpCount) || 0) + (Number(s.udpCount) || 0);
+            const usersEl = document.getElementById('live-users') || document.getElementById('live-conns');
+            if (usersEl) {
+                if (currentRole === 'client' && __currentClientData) {
+                    const uCount = __currentClientData.onlineUsers !== undefined ? Number(__currentClientData.onlineUsers) : (__currentClientData.isOnline ? 1 : 0);
+                    usersEl.textContent = `${uCount}`;
+                } else {
+                    usersEl.textContent = `${tot} (${s.tcpCount || 0}T/${s.udpCount || 0}U)`;
+                }
+            }
         }
         if (s.uptime) {
             const upEl = document.getElementById('live-uptime');
