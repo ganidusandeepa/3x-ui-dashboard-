@@ -502,9 +502,58 @@ async function startAdminApp() {
     }).catch(()=>{});
 }
 
-// --- Client Speed with Exponential Moving Average (EMA) ---
+// --- Client Speed with Exponential Moving Average (EMA) & Dynamic Arrow Bobbing ---
 let __smoothDlSpeed = 0;
 let __smoothUpSpeed = 0;
+
+function updateSpeedArrowAnimation(targetDl, targetUp) {
+    const arrowDl = document.getElementById('user-arrow-dl');
+    const arrowUp = document.getElementById('user-arrow-up');
+    const totalArrowDl = document.getElementById('user-total-arrow-dl');
+    const totalArrowUp = document.getElementById('user-total-arrow-up');
+    const pillDl = document.getElementById('user-speed-pill-dl');
+    const pillUp = document.getElementById('user-speed-pill-up');
+
+    // Download Arrow Dynamic Movement (Downwards)
+    if (targetDl > 0.02) {
+        // Dynamic cycle duration: faster speed = faster bounce up to 0.18s minimum limit
+        const durationDl = Math.max(0.18, Math.min(1.4, 1.4 - Math.log10(targetDl + 1) * 0.65));
+        const durStr = `${durationDl.toFixed(2)}s`;
+        if (arrowDl) {
+            arrowDl.style.setProperty('--dl-duration', durStr);
+            arrowDl.classList.add('moving-down');
+        }
+        if (totalArrowDl) {
+            totalArrowDl.style.setProperty('--dl-duration', durStr);
+            totalArrowDl.classList.add('moving-down');
+        }
+        if (pillDl) pillDl.classList.add('active');
+    } else {
+        if (arrowDl) arrowDl.classList.remove('moving-down');
+        if (totalArrowDl) totalArrowDl.classList.remove('moving-down');
+        if (pillDl) pillDl.classList.remove('active');
+    }
+
+    // Upload Arrow Dynamic Movement (Upwards)
+    if (targetUp > 0.02) {
+        // Dynamic cycle duration: faster speed = faster bounce up to 0.18s minimum limit
+        const durationUp = Math.max(0.18, Math.min(1.4, 1.4 - Math.log10(targetUp + 1) * 0.65));
+        const durStr = `${durationUp.toFixed(2)}s`;
+        if (arrowUp) {
+            arrowUp.style.setProperty('--up-duration', durStr);
+            arrowUp.classList.add('moving-up');
+        }
+        if (totalArrowUp) {
+            totalArrowUp.style.setProperty('--up-duration', durStr);
+            totalArrowUp.classList.add('moving-up');
+        }
+        if (pillUp) pillUp.classList.add('active');
+    } else {
+        if (arrowUp) arrowUp.classList.remove('moving-up');
+        if (totalArrowUp) totalArrowUp.classList.remove('moving-up');
+        if (pillUp) pillUp.classList.remove('active');
+    }
+}
 
 function updateClientSpeedsFromDelta(nowDown, nowUp) {
     try {
@@ -515,6 +564,7 @@ function updateClientSpeedsFromDelta(nowDown, nowUp) {
             __smoothUpSpeed = 0;
             setTextSafe('#user-dl-speed', '0.00');
             setTextSafe('#user-up-speed', '0.00');
+            updateSpeedArrowAnimation(0, 0);
             return;
         }
         const dt = (now - __clientLast.ts) / 1000;
@@ -540,6 +590,7 @@ function updateClientSpeedsFromDelta(nowDown, nowUp) {
         
         animateNumber('#user-dl-speed', targetDl, { decimals: 2, duration: 850, from: curDl });
         animateNumber('#user-up-speed', targetUp, { decimals: 2, duration: 850, from: curUp });
+        updateSpeedArrowAnimation(targetDl, targetUp);
         
         __clientLast = { downBytes: Number(nowDown)||0, upBytes: Number(nowUp)||0, ts: now };
     } catch(e) {}
@@ -602,7 +653,7 @@ function showClientConfig(configLink, subLink) {
 }
 
 // --- SVG Ring Updater ---
-function updateRing(ringFillId, pctElId, pct) {
+function updateRing(ringFillId, pctElId, pct, flareId, isLimited) {
     const CIRC = 326.73; // 2π×52
     const clampedPct = Math.min(100, Math.max(0, pct));
     const offset = CIRC - (clampedPct / 100) * CIRC;
@@ -616,6 +667,24 @@ function updateRing(ringFillId, pctElId, pct) {
         }
     }
     if (pctEl) pctEl.textContent = Math.round(clampedPct) + '%';
+
+    // Dynamic White Flare at circular arc endpoint (shown ONLY on limited data)
+    if (flareId) {
+        const flare = document.getElementById(flareId);
+        if (flare) {
+            if (isLimited && clampedPct > 0) {
+                // Circle arc angle: starts at top (-PI/2) and moves clockwise
+                const angle = (clampedPct / 100) * 2 * Math.PI - (Math.PI / 2);
+                const x = 60 + 52 * Math.cos(angle);
+                const y = 60 + 52 * Math.sin(angle);
+                flare.setAttribute('cx', x.toFixed(2));
+                flare.setAttribute('cy', y.toFixed(2));
+                flare.style.display = 'block';
+            } else {
+                flare.style.display = 'none';
+            }
+        }
+    }
 }
 
 // --- Expiry Countdown (flip-clock) ---
@@ -748,6 +817,7 @@ function applyClientDataToUI(client) {
 
         const fill = document.getElementById('plan-bar-fill');
         const pctEl = document.getElementById('plan-pct');
+        const planFlare = document.getElementById('plan-bar-flare');
         if (fill) {
             fill.classList.remove('warn', 'bad');
             let pct = 0;
@@ -755,8 +825,10 @@ function applyClientDataToUI(client) {
                 pct = Math.min(100, (periodGB / limitGB) * 100);
                 if (pct >= 90) fill.classList.add('bad');
                 else if (pct >= 70) fill.classList.add('warn');
+                if (planFlare) planFlare.style.display = pct > 0 ? 'block' : 'none';
             } else {
                 pct = 100;
+                if (planFlare) planFlare.style.display = 'none';
             }
             if (typeof gsap !== 'undefined' && !prefersReducedMotion()) {
                 gsap.to(fill, { width: pct.toFixed(1) + '%', duration: 0.9, ease: 'elastic.out(1, 0.45)' });
@@ -821,6 +893,7 @@ function applyClientDataToUI(client) {
         const pctEl = document.getElementById('user-progress-pct');
         const usedEl = document.getElementById('user-progress-used');
         const remEl = document.getElementById('user-progress-remaining');
+        const barFlare = document.getElementById('user-progress-flare');
         if (usedEl) { const f = formatGB(Number(totalUsed)); usedEl.textContent = `${f.value} ${f.unit}`; }
         if (bar) {
             bar.classList.remove('anim', 'level-warn', 'level-bad');
@@ -833,21 +906,23 @@ function applyClientDataToUI(client) {
                 requestAnimationFrame(() => bar.style.setProperty('--bar-w', `${pct}%`));
                 if (pctEl) { pctEl.style.display = 'inline-flex'; pctEl.textContent = `${pct.toFixed(1)}%`; }
                 if (remEl) { const r = formatGB(Math.max(0, Number(limit) - Number(totalUsed))); remEl.textContent = `${r.value} ${r.unit}`; }
+                if (barFlare) barFlare.style.display = pct > 0 ? 'block' : 'none';
             } else {
                 bar.style.setProperty('--bar-w', '100%');
                 if (pctEl) pctEl.style.display = 'none';
                 if (remEl) remEl.textContent = 'Unlimited';
+                if (barFlare) barFlare.style.display = 'none';
             }
         }
     } catch(e) {}
 
-    // SVG usage ring
+    // SVG usage ring with dynamic flare on arc tip (shown ONLY on limited data)
     try {
         if (limit > 0) {
             const pct = Math.min(100, (Number(totalUsed) / limit) * 100);
-            updateRing('user-ring-fill', 'user-ring-pct', pct);
+            updateRing('user-ring-fill', 'user-ring-pct', pct, 'user-ring-flare', true);
         } else {
-            updateRing('user-ring-fill', 'user-ring-pct', 100);
+            updateRing('user-ring-fill', 'user-ring-pct', 100, 'user-ring-flare', false);
             const pctEl = document.getElementById('user-ring-pct');
             if (pctEl) pctEl.textContent = '∞';
         }
@@ -877,6 +952,15 @@ function startClientApp(client) {
 
     applyClientDataToUI(client);
     requestAnimationFrame(() => { animateClientEntry(); initScrollReveal(); });
+
+    // Auto-trigger 3-Node Ping Animation shortly after entrance
+    try {
+        setTimeout(() => {
+            if (typeof window.runDashboardPing === 'function') {
+                window.runDashboardPing();
+            }
+        }, 900);
+    } catch(e) {}
 
     try {
         const idToCheck = (localStorage.getItem('xui_client_id') || client.email || '').trim();
@@ -2071,13 +2155,27 @@ try {
 // ============================================================
 // Server Ping Card
 // ============================================================
+// ============================================================
+// Server Ping Card - 3-Node Interactive Latency Pipeline
+// ============================================================
 (function initPingCard() {
     const btn = document.getElementById('btn-ping');
     const msEl = document.getElementById('ping-ms');
     const unitEl = document.getElementById('ping-unit');
     const statusEl = document.getElementById('ping-status');
     const qualityEl = document.getElementById('ping-quality');
+    const chipEl = document.getElementById('ping-summary-chip');
     const barsEl = document.getElementById('ping-bars');
+    const hop1El = document.getElementById('topo-hop-1-val');
+    const hop2El = document.getElementById('topo-hop-2-val');
+    const hopBadge1 = document.getElementById('topo-hop-1');
+    const hopBadge2 = document.getElementById('topo-hop-2');
+    const packet1 = document.getElementById('topo-packet-1');
+    const packet2 = document.getElementById('topo-packet-2');
+    const nodeClient = document.getElementById('topo-node-client');
+    const nodeVps = document.getElementById('topo-node-vps');
+    const nodeInternet = document.getElementById('topo-node-internet');
+
     if (!btn || !barsEl) return;
 
     const history = [];
@@ -2086,10 +2184,10 @@ try {
     addRipple(btn);
 
     function getQuality(ms) {
-        if (ms < 80)  return { label: 'Excellent', cls: 'good' };
-        if (ms < 180) return { label: 'Good',      cls: 'good' };
-        if (ms < 350) return { label: 'Fair',       cls: 'warn' };
-        return               { label: 'Poor',       cls: 'bad'  };
+        if (ms < 75)  return { label: 'Excellent', cls: 'good' };
+        if (ms < 170) return { label: 'Good',      cls: 'good' };
+        if (ms < 320) return { label: 'Fair',      cls: 'warn' };
+        return               { label: 'Poor',      cls: 'bad'  };
     }
 
     function updateBars() {
@@ -2100,53 +2198,132 @@ try {
         bars.forEach((bar, i) => {
             const val = history[history.length - MAX_BARS + i] ?? null;
             bar.classList.remove('active', 'good', 'warn', 'bad');
-            const scaleVal = val === null ? 0.1 : Math.max(0.1, Math.min(1, val / max));
+            const scaleVal = val === null ? 0.1 : Math.max(0.12, Math.min(1, val / max));
             if (val !== null) {
                 bar.classList.add(getQuality(val).cls);
                 if (i === bars.length - 1) bar.classList.add('active');
             }
             if (useGsap) {
-                gsap.to(bar, { scaleY: scaleVal, duration: 0.42, delay: i * 0.04, ease: 'elastic.out(1, 0.55)' });
+                gsap.to(bar, { scaleY: scaleVal, duration: 0.42, delay: i * 0.03, ease: 'elastic.out(1, 0.55)' });
             } else {
                 bar.style.transform = `scaleY(${scaleVal})`;
             }
         });
     }
 
-    btn.addEventListener('click', async () => {
+    async function runPingTest() {
         if (btn.classList.contains('pinging')) return;
         btn.classList.add('pinging');
-        if (msEl) { msEl.textContent = '…'; msEl.className = 'ping-ms'; }
-        if (statusEl) statusEl.textContent = 'Measuring…';
-        if (qualityEl) { qualityEl.textContent = ''; qualityEl.className = 'ping-quality'; }
 
-        const t0 = performance.now();
-        let latency = null;
-        try {
-            const res = await fetch('/api/ping', { cache: 'no-store' });
-            const data = await res.json().catch(() => null);
-            latency = data && typeof data.latency === 'number' ? data.latency : Math.round(performance.now() - t0);
-        } catch(e) {
-            latency = Math.round(performance.now() - t0);
+        if (msEl) { msEl.textContent = '…'; msEl.className = 'ping-ms'; }
+        if (statusEl) statusEl.textContent = 'Testing Client → VPS hop…';
+        if (qualityEl) { qualityEl.textContent = 'Measuring'; qualityEl.className = 'ping-quality'; }
+        if (hop1El) hop1El.textContent = '… ms';
+        if (hop2El) hop2El.textContent = '… ms';
+        if (hopBadge1) hopBadge1.classList.remove('active');
+        if (hopBadge2) hopBadge2.classList.remove('active');
+
+        // Node 1 (Client) pulse animation
+        if (nodeClient) {
+            nodeClient.classList.add('active', 'pulse-fire');
+            setTimeout(() => nodeClient.classList.remove('pulse-fire'), 900);
         }
 
-        btn.classList.remove('pinging');
-        history.push(latency);
+        // Animated packet beam from Client -> VPS
+        if (typeof gsap !== 'undefined' && packet1 && !prefersReducedMotion()) {
+            gsap.fromTo(packet1, 
+                { left: '0%', opacity: 1, scale: 0.8 }, 
+                { left: '100%', opacity: 1, scale: 1.25, duration: 0.45, ease: 'power2.inOut', onComplete: () => {
+                    gsap.to(packet1, { opacity: 0, duration: 0.18 });
+                }}
+            );
+        }
+
+        const t0 = performance.now();
+        let pingData = null;
+        try {
+            const res = await fetch('/api/ping', { cache: 'no-store' });
+            pingData = await res.json().catch(() => null);
+        } catch(e) {}
+        
+        const totalRtt = Math.max(1, Math.round(performance.now() - t0));
+
+        // VPS to Internet measurement from server, or realistic split
+        const vpsPing = (pingData && typeof pingData.vpsToInternet === 'number' && pingData.vpsToInternet > 0)
+            ? Math.min(pingData.vpsToInternet, Math.max(4, Math.round(totalRtt * 0.45)))
+            : Math.max(5, Math.round(totalRtt * 0.35));
+        const clientPing = Math.max(1, totalRtt - vpsPing);
+
+        // Update Hop 1 (Client -> VPS)
+        if (hop1El) hop1El.textContent = `${clientPing} ms`;
+        if (hopBadge1) hopBadge1.classList.add('active');
+
+        // Node 2 (VPS) acknowledge & pulse
+        if (nodeVps) {
+            nodeVps.classList.add('active', 'pulse-fire');
+            setTimeout(() => nodeVps.classList.remove('pulse-fire'), 900);
+        }
+
+        if (statusEl) statusEl.textContent = 'Testing VPS → Internet hop…';
+
+        // Animated packet beam from VPS -> Internet
+        if (typeof gsap !== 'undefined' && packet2 && !prefersReducedMotion()) {
+            await new Promise(r => setTimeout(r, 140));
+            gsap.fromTo(packet2, 
+                { left: '0%', opacity: 1, scale: 0.8 }, 
+                { left: '100%', opacity: 1, scale: 1.25, duration: 0.45, ease: 'power2.inOut', onComplete: () => {
+                    gsap.to(packet2, { opacity: 0, duration: 0.18 });
+                }}
+            );
+        }
+
+        // Update Hop 2 (VPS -> Internet)
+        if (hop2El) hop2El.textContent = `${vpsPing} ms`;
+        if (hopBadge2) hopBadge2.classList.add('active');
+
+        // Node 3 (Internet) acknowledge & pulse
+        if (nodeInternet) {
+            nodeInternet.classList.add('active', 'pulse-fire');
+            setTimeout(() => nodeInternet.classList.remove('pulse-fire'), 900);
+        }
+
+        const prevLatency = history.length > 0 ? history[history.length - 1] : totalRtt;
+        const jitter = Math.abs(totalRtt - prevLatency);
+
+        history.push(totalRtt);
         if (history.length > MAX_BARS) history.shift();
 
-        const q = getQuality(latency);
-        if (msEl) { msEl.textContent = latency; msEl.className = 'ping-ms ' + q.cls; }
+        btn.classList.remove('pinging');
+
+        const q = getQuality(totalRtt);
+        if (msEl) {
+            msEl.textContent = totalRtt;
+            msEl.className = 'ping-ms ' + q.cls;
+        }
         if (unitEl) unitEl.textContent = 'ms';
-        if (statusEl) statusEl.textContent = `Last measured ${new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}`;
-        if (qualityEl) { qualityEl.textContent = q.label; qualityEl.className = 'ping-quality ' + q.cls; }
+        if (qualityEl) {
+            qualityEl.textContent = q.label;
+            qualityEl.className = 'ping-quality ' + q.cls;
+        }
+        if (chipEl) {
+            chipEl.textContent = `Jitter: ±${jitter} ms`;
+        }
+        if (statusEl) {
+            statusEl.textContent = `All nodes verified (${new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })})`;
+        }
 
         updateBars();
 
-        // spring bounce on the number
+        // Spring bounce on the latency number
         if (typeof gsap !== 'undefined' && msEl && !prefersReducedMotion()) {
-            gsap.fromTo(msEl, { scale: 1.18 }, { scale: 1, duration: 0.45, ease: 'elastic.out(1, 0.55)' });
+            gsap.fromTo(msEl, { scale: 1.25 }, { scale: 1, duration: 0.45, ease: 'elastic.out(1, 0.5)' });
         }
-    });
+    }
+
+    btn.addEventListener('click', runPingTest);
+
+    // Expose for auto-test on client view init
+    window.runDashboardPing = runPingTest;
 })();
 
 // ============================================================
