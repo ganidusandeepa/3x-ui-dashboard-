@@ -9,6 +9,8 @@ A modern, responsive, and glassmorphic web dashboard for monitoring and managing
 - **🎨 Modern Glassmorphism UI**: High-end dark theme with smooth animations powered by GSAP and Three.js.
 - **📊 Total Consumption Meter**: Displays all-time cumulative bandwidth (Total Used, Total Remaining, and Quota %) with full animated progress fill and leading-edge plasma flare.
 - **📅 Monthly Period Cycle (1st to 30th/31st)**: Automatic calendar month period tracker (e.g. 1st – 31st Oct) with days-left countdown and cycle end dates.
+- **🔄 Smart Traffic Baseline Engine**: Resolves 3x-ui's single-counter limitation by locally tracking monthly baseline usage on the 1st of each month in `traffic_history.json`, accurately separating Lifetime Total from Current Monthly Consumption.
+- **🐙 Integrated GitHub Navigation**: One-click GitHub logo on the dashboard top bar and login footer for instant repository tracking.
 - **📡 3-Node Interactive Latency Pipeline**: Visual packet travel across **Client ➔ VPS Proxy ➔ Internet** with individual hop latencies, jitter tracking, and quality badges.
 - **⚡ Dynamic Network Speed Flow**: Realtime EMA-smoothed download and upload indicators featuring frequency-scaled directional arrow animations.
 - **✨ Smart Consumption Flares**: Glowing white plasma flare radiating at the tip of the usage meter for limited quotas (automatically hidden for unlimited data).
@@ -61,7 +63,7 @@ Run the dashboard directly on your VPS as a persistent background process.
 1. **Clone the repository and install dependencies:**
    ```bash
    cd /var/www || cd ~
-   git clone https://github.com/your_usernamesandeepa/3x-ui-dashboard-.git
+   git clone https://github.com/ganidusandeepa/3x-ui-dashboard-.git
    cd 3x-ui-dashboard-
    npm install
    ```
