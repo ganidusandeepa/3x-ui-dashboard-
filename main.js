@@ -237,6 +237,22 @@ function setTextSafe(selOrEl, text) {
     } catch(e) {}
 }
 
+function setLiveUsersUI(count) {
+    try {
+        const num = Math.max(0, Number(count) || 0);
+        const pill = document.getElementById('pill-live-users') || document.getElementById('pill-live-conns');
+        if (pill) {
+            pill.id = 'pill-live-users';
+            pill.innerHTML = `<i class="fa-solid fa-users"></i> Users: <strong id="live-users" style="color:${num > 0 ? 'var(--good)' : 'var(--on-dim)'};">${num}</strong>`;
+        }
+        const ac = document.getElementById('user-active-count');
+        if (ac) {
+            ac.textContent = num > 0 ? `${num} active` : '0 (offline)';
+            ac.style.color = num > 0 ? 'var(--good)' : 'var(--on-dim)';
+        }
+    } catch(e) {}
+}
+
 function animateNumber(elOrSelector, to, opts = {}) {
     const duration = Number(opts.duration ?? 800);
     const decimals = Number(opts.decimals ?? 2);
@@ -762,15 +778,13 @@ function applyClientDataToUI(client) {
     __currentClientData = client;
     updateClientSpeedsFromDelta(client.down, client.up);
 
-    const down = parseFloat(toGB(client.down));
-    const up = parseFloat(toGB(client.up));
-
-    // Distinguish Lifetime Total from Monthly Period usage
-    const lifetimeBytes = (client.traffic && client.traffic.lifetimeUsed !== undefined)
-        ? Number(client.traffic.lifetimeUsed)
-        : (Number(client.up || 0) + Number(client.down || 0));
-    const totalUsedGB = lifetimeBytes / (1024 ** 3);
+    const downBytes = Math.max(0, Number(client.down) || 0);
+    const upBytes = Math.max(0, Number(client.up) || 0);
+    const rawTotalBytes = downBytes + upBytes;
+    const totalUsedGB = rawTotalBytes / (1024 ** 3);
     const totalUsed = totalUsedGB.toFixed(2);
+    const down = parseFloat(toGB(downBytes));
+    const up = parseFloat(toGB(upBytes));
     const limit = parseFloat(toGB(client.total));
     const remainDesc = limit === 0 ? "Unlimited GB" : `${limit.toFixed(2)} GB`;
 
@@ -787,16 +801,7 @@ function applyClientDataToUI(client) {
         if (client.lastOnline !== undefined) document.getElementById('user-last-online').textContent = fmtTime(client.lastOnline);
         if (client.ips !== undefined) document.getElementById('user-ips').textContent = Array.isArray(client.ips) ? (client.ips.join(', ') || 'None') : '-';
         const userCount = client.onlineUsers !== undefined ? Number(client.onlineUsers) : (client.userCount !== undefined ? Number(client.userCount) : (client.isOnline ? 1 : 0));
-        const activeCountEl = document.getElementById('user-active-count');
-        if (activeCountEl) {
-            activeCountEl.textContent = userCount > 0 ? `${userCount} active` : '0 (offline)';
-            activeCountEl.style.color = userCount > 0 ? 'var(--good)' : 'var(--on-dim)';
-        }
-        const liveUsersEl = document.getElementById('live-users') || document.getElementById('live-conns');
-        if (liveUsersEl) {
-            liveUsersEl.textContent = `${userCount}`;
-            liveUsersEl.style.color = userCount > 0 ? 'var(--good)' : 'var(--on-dim)';
-        }
+        setLiveUsersUI(userCount);
     } catch(e) {}
 
     animateNumber('#user-used', Number(totalUsed), { decimals: 2, duration: 500 });
@@ -847,8 +852,8 @@ function applyClientDataToUI(client) {
 
         // Monthly used bytes from server traffic tracker (falls back to subInfo or raw)
         const monthlyBytes = (client.traffic && client.traffic.monthlyUsed !== undefined)
-            ? Number(client.traffic.monthlyUsed)
-            : (si ? (siUp + siDown) : (Number(client.up || 0) + Number(client.down || 0)));
+            ? Math.min(rawTotalBytes, Number(client.traffic.monthlyUsed))
+            : (si ? Math.min(rawTotalBytes, siUp + siDown) : rawTotalBytes);
 
         const limitBytes  = si && siTotal > 0 ? siTotal : Number(client.total || 0);
         const periodGB    = monthlyBytes / (1024 ** 3);
@@ -998,8 +1003,11 @@ function applyClientDataToUI(client) {
 }
 
 function startClientApp(client) {
+    currentRole = 'client';
     document.body.classList.add('is-client'); document.body.classList.remove('is-admin');
     document.getElementById('login-overlay').style.display = 'none';
+    const initUsers = client.onlineUsers !== undefined ? Number(client.onlineUsers) : (client.userCount !== undefined ? Number(client.userCount) : (client.isOnline ? 1 : 0));
+    setLiveUsersUI(initUsers);
     try { document.getElementById('btn-logout').style.display = 'inline-flex'; } catch(e) {}
     try { const sel = document.getElementById('admin-tab-select'); if (sel) sel.style.display = 'none'; } catch(e) {}
     try { document.querySelector('.desktop-nav')?.style && (document.querySelector('.desktop-nav').style.display = 'none'); } catch(e) {}
@@ -1265,15 +1273,17 @@ function updateServerHealthUI(s) {
             setTextSafe('#strip-xray-ver', xrayVer);
             setTextSafe('#xray-version', xrayVer);
         }
-        if (s.tcpCount !== undefined || s.udpCount !== undefined) {
-            const tot = (Number(s.tcpCount) || 0) + (Number(s.udpCount) || 0);
-            if (currentRole === 'client' && __currentClientData) {
-                const uCount = __currentClientData.onlineUsers !== undefined ? Number(__currentClientData.onlineUsers) : (__currentClientData.isOnline ? 1 : 0);
-                setTextSafe('#live-users', `${uCount}`);
-                setTextSafe('#live-conns', `${uCount}`);
-            } else {
-                setTextSafe('#live-users', `${tot}`);
-                setTextSafe('#live-conns', `${tot} (${s.tcpCount || 0}T/${s.udpCount || 0}U)`);
+        const isClientView = currentRole === 'client' || document.body.classList.contains('is-client') || !!document.getElementById('tab-user-view')?.classList.contains('active');
+        if (isClientView) {
+            const uCount = (__currentClientData && (__currentClientData.onlineUsers !== undefined ? Number(__currentClientData.onlineUsers) : (__currentClientData.userCount !== undefined ? Number(__currentClientData.userCount) : (__currentClientData.isOnline ? 1 : 0)))) || 0;
+            setLiveUsersUI(uCount);
+        } else {
+            if (s.tcpCount !== undefined || s.udpCount !== undefined) {
+                const tot = (Number(s.tcpCount) || 0) + (Number(s.udpCount) || 0);
+                const pill = document.getElementById('pill-live-users') || document.getElementById('pill-live-conns');
+                if (pill) {
+                    pill.innerHTML = `<i class="fa-solid fa-server"></i> Conns: <strong id="live-conns">${tot} (${s.tcpCount || 0}T/${s.udpCount || 0}U)</strong>`;
+                }
             }
         }
         if (s.uptime) {
@@ -1328,16 +1338,12 @@ function applyAdminStatusToUI(stat) {
             const spdEl = document.getElementById('live-net-speed');
             if (spdEl) spdEl.textContent = `↓ ${dSpd} ↑ ${uSpd}`;
         }
-        if (s.tcpCount !== undefined || s.udpCount !== undefined) {
+        const isClientView = currentRole === 'client' || document.body.classList.contains('is-client') || !!document.getElementById('tab-user-view')?.classList.contains('active');
+        if (!isClientView && (s.tcpCount !== undefined || s.udpCount !== undefined)) {
             const tot = (Number(s.tcpCount) || 0) + (Number(s.udpCount) || 0);
-            const usersEl = document.getElementById('live-users') || document.getElementById('live-conns');
-            if (usersEl) {
-                if (currentRole === 'client' && __currentClientData) {
-                    const uCount = __currentClientData.onlineUsers !== undefined ? Number(__currentClientData.onlineUsers) : (__currentClientData.isOnline ? 1 : 0);
-                    usersEl.textContent = `${uCount}`;
-                } else {
-                    usersEl.textContent = `${tot} (${s.tcpCount || 0}T/${s.udpCount || 0}U)`;
-                }
+            const pill = document.getElementById('pill-live-users') || document.getElementById('pill-live-conns');
+            if (pill) {
+                pill.innerHTML = `<i class="fa-solid fa-server"></i> Conns: <strong id="live-conns">${tot} (${s.tcpCount || 0}T/${s.udpCount || 0}U)</strong>`;
             }
         }
         if (s.uptime) {
