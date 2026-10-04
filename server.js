@@ -597,6 +597,7 @@ app.get('/api/server-info', async (req, res) => {
 });
 
 app.get('/healthz', (req, res) => res.json({ ok: true }));
+app.get('/api/version', (req, res) => res.json({ ok: true, version: 'v41.2', updated: '2026-10-04' }));
 
 async function handleClientAuth(id, res) {
   try {
