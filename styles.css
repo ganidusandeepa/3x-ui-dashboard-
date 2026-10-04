@@ -1522,22 +1522,25 @@ body.theme-light .mobile-nav {
     }
     #admin-tab-select { display: none !important; }
 
-    .dashboard-wrapper { padding: 14px; }
-    .overview-grid { grid-template-columns: 1fr; gap: 14px; }
+    .dashboard-wrapper { padding: 18px 16px; }
+    .overview-grid { grid-template-columns: 1fr; gap: 18px; margin-bottom: 20px; }
     .charts-row { display: block; }
-    .inbound-grid, .client-container, .system-grid { grid-template-columns: 1fr; }
-    .data-card-hero { grid-column: span 1; flex-direction: column; text-align: center; gap: 16px; padding: 20px; }
-    .traffic-split { justify-content: center; gap: 18px; }
-    header { margin-bottom: 16px; margin-inline: -14px; padding-inline: 14px; }
+    .inbound-grid, .client-container, .system-grid { grid-template-columns: 1fr; gap: 18px; }
+    .data-card-hero { grid-column: span 1; flex-direction: column; text-align: center; gap: 18px; padding: 22px 20px; }
+    .traffic-split { justify-content: center; gap: 20px; margin: 16px 0; }
+    header { margin-bottom: 20px; margin-inline: -16px; padding-inline: 16px; }
     .hdr-label { display: none !important; }
     .hdr-btn { padding: 8px 10px; }
     .main-value { font-size: 2.2rem; }
     .usage-ring-wrap { width: 120px; height: 120px; }
+    .user-view-card { margin-bottom: 22px !important; }
 }
 
-/* Compact (<600px) — phone */
+/* Compact (<600px) — phone layout with generous card & ping spacing */
 @media (max-width: 600px) {
-    .dashboard-wrapper { padding: 10px; }
+    .dashboard-wrapper {
+        padding: 16px 14px calc(76px + env(safe-area-inset-bottom, 20px)) !important;
+    }
     body.is-admin .dashboard-wrapper {
         padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)) !important;
     }
@@ -1547,28 +1550,29 @@ body.theme-light .mobile-nav {
     }
 
     header {
-        margin-inline: -10px;
-        padding: 8px 12px;
-        gap: 6px;
+        margin-inline: -14px;
+        padding: 10px 14px;
+        gap: 8px;
+        margin-bottom: 18px;
     }
-    .logo { gap: 6px; min-width: 0; flex-shrink: 1; }
-    .logo-icon { width: 30px; height: 30px; font-size: 0.8rem; border-radius: 8px; }
-    .logo-name { font-size: 1.05rem; white-space: nowrap; }
+    .logo { gap: 8px; min-width: 0; flex-shrink: 1; }
+    .logo-icon { width: 32px; height: 32px; font-size: 0.85rem; border-radius: 9px; }
+    .logo-name { font-size: 1.1rem; white-space: nowrap; }
     .logo-ext { display: none !important; }
 
-    .hdr-right { gap: 5px; flex-shrink: 0; }
-    .user-status { display: none !important; } /* Hide Server OK text to eliminate header crowding */
+    .hdr-right { gap: 6px; flex-shrink: 0; }
+    .user-status { display: none !important; }
 
-    .hdr-actions { padding: 2px 4px; gap: 3px; }
+    .hdr-actions { padding: 3px 6px; gap: 4px; }
     .hdr-btn {
-        width: 32px !important;
-        height: 32px !important;
+        width: 34px !important;
+        height: 34px !important;
         padding: 0 !important;
         display: inline-flex !important;
         align-items: center;
         justify-content: center;
     }
-    .hdr-btn i { font-size: 0.85rem; }
+    .hdr-btn i { font-size: 0.88rem; }
     .hdr-btn svg { width: 15px; height: 15px; }
 
     .hdr-logout {
@@ -1581,25 +1585,156 @@ body.theme-light .mobile-nav {
     }
     .hdr-logout i { font-size: 0.88rem; }
 
-    .card { padding: 14px; border-radius: 18px; }
-    .overview-grid { gap: 10px; }
-    .data-card-hero { padding: 16px 12px; }
-    .data-card-hero .main-value { font-size: 1.75rem; margin: 4px 0; }
-    .traffic-split { flex-direction: row; gap: 12px; margin-top: 10px; justify-content: space-around; }
-    .split-item .val { font-size: 0.88rem; }
-    .usage-ring-wrap { width: 95px; height: 95px; }
+    /* Distinct Card Spacing - Completely eliminates stuck together cards */
+    .card {
+        padding: 22px 18px !important;
+        border-radius: 22px !important;
+        margin-bottom: 22px !important;
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    }
+    .user-view-card {
+        margin-bottom: 22px !important;
+        margin-top: 0 !important;
+    }
+    .overview-grid {
+        gap: 20px !important;
+        margin-bottom: 22px !important;
+    }
+
+    /* Hero Traffic Usage Card */
+    .data-card-hero {
+        padding: 22px 18px !important;
+        gap: 18px !important;
+    }
+    .data-card-hero .main-value {
+        font-size: 2.1rem !important;
+        margin: 6px 0 !important;
+    }
+    .traffic-split {
+        flex-direction: row !important;
+        gap: 16px !important;
+        margin: 18px 0 14px !important;
+        padding: 14px 12px !important;
+        background: rgba(255, 255, 255, 0.02) !important;
+        border-radius: 16px !important;
+        border: 1px solid rgba(255, 255, 255, 0.04) !important;
+        justify-content: space-around !important;
+    }
+    .split-item .val {
+        font-size: 0.95rem !important;
+        margin-top: 4px !important;
+    }
+    .user-live-speed-row {
+        margin-top: 18px !important;
+        padding-top: 16px !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+        gap: 10px !important;
+        flex-direction: column !important;
+        align-items: center !important;
+    }
+    .live-speed-badges {
+        display: flex !important;
+        gap: 10px !important;
+        width: 100% !important;
+        justify-content: center !important;
+    }
+    .speed-pill {
+        padding: 5px 12px !important;
+        font-size: 0.82rem !important;
+        gap: 8px !important;
+        border-radius: var(--shape-full) !important;
+    }
+    .usage-ring-wrap {
+        width: 110px !important;
+        height: 110px !important;
+        margin: 16px auto 4px auto !important;
+    }
     .percent-val { top: 12px; right: 12px; font-size: 1.05rem; }
     .mini-chart-container { height: 68px; }
     .flip-digit { font-size: 1.2rem; min-width: 42px; padding: 6px 8px; }
 
-    /* Forms: prevent iOS Safari auto-zoom on input focus */
+    /* Consumption Progress Bar Spacing */
+    .consumption-head {
+        margin-bottom: 16px !important;
+    }
+    .consumption-track {
+        height: 10px !important;
+        margin: 16px 0 !important;
+    }
+    .consumption-meta {
+        grid-template-columns: 1fr !important;
+        gap: 12px !important;
+        margin-top: 16px !important;
+    }
+    .consumption-line {
+        padding: 12px 14px !important;
+        border-radius: 14px !important;
+    }
+
+    /* M3 Plan Card Spacing */
+    .m3-plan-card {
+        padding: 22px 18px !important;
+    }
+    .plan-head {
+        margin-bottom: 22px !important;
+    }
+    .plan-usage {
+        margin-bottom: 22px !important;
+    }
+    .plan-usage-top {
+        margin-bottom: 10px !important;
+    }
+    .plan-bar-track {
+        height: 10px !important;
+        margin-bottom: 12px !important;
+    }
+    .plan-usage-nums {
+        margin-top: 12px !important;
+        font-size: 0.88rem !important;
+    }
+    .plan-stats {
+        grid-template-columns: 1fr !important;
+        gap: 10px !important;
+        background: transparent !important;
+        border: none !important;
+        margin-top: 18px !important;
+    }
+    .plan-stat-item {
+        border-radius: 14px !important;
+        border: 1px solid var(--border) !important;
+        padding: 12px 16px !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        text-align: left !important;
+    }
+    .plan-stat-lbl {
+        margin-bottom: 0 !important;
+        font-size: 0.75rem !important;
+    }
+    .plan-stat-val {
+        font-size: 0.95rem !important;
+    }
+
+    /* Account Details Spacing */
+    .info-row {
+        padding: 12px 0 !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        gap: 12px !important;
+    }
+
+    /* Forms */
     input, select, textarea, .login-field-input {
         font-size: 16px !important;
     }
 
     /* Modal dialogs */
-    .modal-overlay { padding: 10px; }
-    .modal-card { padding: 18px 14px; border-radius: 18px; max-width: 96vw; max-height: 88vh; }
+    .modal-overlay { padding: 12px; }
+    .modal-card { padding: 20px 16px; border-radius: 20px; max-width: 96vw; max-height: 88vh; }
 
     /* Client drawer */
     .drawer-panel {
@@ -1609,30 +1744,136 @@ body.theme-light .mobile-nav {
     }
 
     /* Live status strip */
-    .live-strip-row { gap: 6px !important; margin-bottom: 12px !important; }
-    .live-pill { padding: 4px 9px !important; font-size: 0.72rem !important; gap: 5px !important; }
+    .live-strip-row { gap: 8px !important; margin-bottom: 16px !important; }
+    .live-pill { padding: 5px 11px !important; font-size: 0.75rem !important; gap: 6px !important; }
 
     /* System action buttons on phone */
-    .sys-actions { gap: 8px !important; }
-    .sys-btn { padding: 9px 8px !important; font-size: 0.78rem !important; }
+    .sys-actions { gap: 10px !important; }
+    .sys-btn { padding: 10px 12px !important; font-size: 0.8rem !important; }
 
-    /* 3-Node Topology Mobile Adjustments */
-    .ping-card { padding: 16px 14px 12px; }
-    .ping-topology { padding: 10px 8px; margin: 14px 0 12px; }
-    .topo-node { min-width: 50px; gap: 4px; }
-    .topo-icon-wrap { width: 40px; height: 40px; }
-    .topo-icon { font-size: 1.05rem; }
-    .topo-name { font-size: 0.74rem; }
-    .topo-sub { font-size: 0.58rem; }
-    .topo-connector { min-width: 26px; padding: 0 2px; gap: 4px; }
-    .topo-hop-badge { font-size: 0.64rem; padding: 2px 5px; }
+    /* ============================================================
+       Ping Section (3-Node Network Pipeline) Mobile Revamp
+       Generous spacing, padded nodes, comfortable hop conduits
+       ============================================================ */
+    .ping-card {
+        padding: 22px 18px 20px !important;
+        margin-bottom: 24px !important;
+    }
+    .ping-head {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        margin-bottom: 20px !important;
+        padding-bottom: 16px !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+        gap: 12px !important;
+    }
+    .ping-val-row {
+        gap: 8px !important;
+        margin-top: 4px !important;
+    }
+    .ping-ms {
+        font-size: 2.1rem !important;
+    }
+    .ping-btn {
+        padding: 8px 14px !important;
+        font-size: 0.8rem !important;
+    }
+
+    /* 3-Node Topology: Spacious conduits with wide connectors */
+    .ping-topology {
+        padding: 20px 14px !important;
+        margin: 22px 0 20px !important;
+        background: rgba(255, 255, 255, 0.025) !important;
+        border-radius: 18px !important;
+        border: 1px solid rgba(255, 255, 255, 0.07) !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 6px !important;
+    }
+    .topo-node {
+        min-width: 58px !important;
+        gap: 8px !important;
+        flex-shrink: 0 !important;
+    }
+    .topo-icon-wrap {
+        width: 46px !important;
+        height: 46px !important;
+        border-radius: 50% !important;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35) !important;
+    }
+    .topo-icon {
+        font-size: 1.15rem !important;
+    }
+    .topo-name {
+        font-size: 0.78rem !important;
+        font-weight: 700 !important;
+        margin-top: 2px !important;
+    }
+    .topo-sub {
+        font-size: 0.62rem !important;
+        letter-spacing: 0.4px !important;
+    }
+    .topo-connector {
+        flex: 1 !important;
+        min-width: 36px !important;
+        padding: 0 4px !important;
+        gap: 8px !important;
+    }
+    .topo-track {
+        height: 4px !important;
+    }
+    .topo-hop-badge {
+        font-size: 0.68rem !important;
+        padding: 3px 6px !important;
+        border-radius: var(--shape-full) !important;
+        margin-top: 4px !important;
+    }
     .topo-hop-arr { display: none; }
-    .ping-ms { font-size: 1.75rem; }
-    .ping-btn { padding: 6px 10px; font-size: 0.76rem; }
 
-    /* Live Speed Badges Mobile */
-    .user-live-speed-row { gap: 6px; }
-    .speed-pill { padding: 3px 9px; font-size: 0.78rem; gap: 6px; }
+    /* Stability Bars & Ping Footer Spacing */
+    .ping-history-section {
+        margin-top: 20px !important;
+        padding-top: 18px !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.07) !important;
+    }
+    .ping-bars-label {
+        font-size: 0.72rem !important;
+        margin-bottom: 12px !important;
+        letter-spacing: 1px !important;
+    }
+    .ping-bars {
+        height: 38px !important;
+        gap: 5px !important;
+        margin-bottom: 16px !important;
+    }
+    .ping-footer {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        gap: 12px !important;
+        padding-top: 10px !important;
+        margin-top: 10px !important;
+    }
+    .ping-status {
+        font-size: 0.78rem !important;
+    }
+    .ping-summary-chip {
+        font-size: 0.75rem !important;
+        padding: 4px 10px !important;
+    }
+
+    /* Connection Config Card */
+    #client-config-card {
+        padding: 22px 18px !important;
+        margin-bottom: 24px !important;
+    }
+    .client-logout-wrap {
+        margin: 28px 0 20px !important;
+        padding-bottom: 14px !important;
+    }
 }
 
 @media (max-width: 380px) {
