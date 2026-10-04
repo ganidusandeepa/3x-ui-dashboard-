@@ -320,9 +320,120 @@ header {
 .unit { font-size: 0.95rem; color: var(--on-dim); font-weight: 500; }
 .traffic-split { display: flex; gap: 24px; margin-top: 18px; }
 .split-item .label { font-size: 0.68rem; color: var(--on-dim); display: block; margin-bottom: 4px; letter-spacing: 1px; text-transform: uppercase; }
-.split-item .val { font-size: 1rem; font-weight: 600; font-family: var(--font-mono); }
+.split-item .val { font-size: 1rem; font-weight: 600; font-family: var(--font-mono); display: inline-flex; align-items: center; gap: 6px; }
 .split-item.down .val { color: var(--blue); }
 .split-item.up .val { color: var(--on-bg); }
+
+/* Live Speed Badges */
+.user-live-speed-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 14px;
+}
+.live-speed-label {
+    font-size: 0.74rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--on-dim);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.live-speed-badges {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.speed-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    border-radius: var(--shape-full);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    font-size: 0.84rem;
+    font-family: var(--font-mono);
+    transition: all 0.3s ease;
+}
+.speed-pill.down {
+    color: var(--blue);
+    border-color: rgba(56, 189, 248, 0.25);
+}
+.speed-pill.down.active {
+    background: rgba(56, 189, 248, 0.12);
+    border-color: rgba(56, 189, 248, 0.45);
+    box-shadow: 0 0 14px rgba(56, 189, 248, 0.22);
+}
+.speed-pill.up {
+    color: var(--accent);
+    border-color: rgba(168, 85, 247, 0.25);
+}
+.speed-pill.up.active {
+    background: rgba(168, 85, 247, 0.12);
+    border-color: rgba(168, 85, 247, 0.45);
+    box-shadow: 0 0 14px rgba(168, 85, 247, 0.22);
+}
+.speed-arrow-box {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+}
+.speed-pill.down .speed-arrow-box { background: rgba(56, 189, 248, 0.15); }
+.speed-pill.up .speed-arrow-box { background: rgba(168, 85, 247, 0.15); }
+
+/* Dynamic Arrow Bounce Animations - frequency scaled dynamically via JS */
+.speed-arrow-icon, .split-arrow {
+    display: inline-block;
+    will-change: transform, opacity, filter;
+    transition: transform 0.2s ease;
+}
+.speed-arrow-icon.moving-down, .split-arrow.down-arrow.moving-down {
+    animation: arrowBobDown var(--dl-duration, 0.8s) cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+.speed-arrow-icon.moving-up, .split-arrow.up-arrow.moving-up {
+    animation: arrowBobUp var(--up-duration, 0.8s) cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+@keyframes arrowBobDown {
+    0% {
+        transform: translateY(-4px);
+        opacity: 0.65;
+    }
+    50% {
+        transform: translateY(4px);
+        opacity: 1;
+        filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.85));
+    }
+    100% {
+        transform: translateY(-4px);
+        opacity: 0.65;
+    }
+}
+
+@keyframes arrowBobUp {
+    0% {
+        transform: translateY(4px);
+        opacity: 0.65;
+    }
+    50% {
+        transform: translateY(-4px);
+        opacity: 1;
+        filter: drop-shadow(0 0 6px rgba(168, 85, 247, 0.85));
+    }
+    100% {
+        transform: translateY(4px);
+        opacity: 0.65;
+    }
+}
 
 /* Resource cards */
 .resource-card { position: relative; overflow: hidden; }
@@ -413,7 +524,8 @@ body.theme-light .ring-track { stroke: rgba(0,0,0,0.08); }
     background: rgba(255,255,255,0.07);
     border-radius: var(--shape-full);
     margin-top: 12px;
-    overflow: hidden;
+    position: relative;
+    overflow: visible;
 }
 body.theme-light .consumption-track { background: rgba(0,0,0,0.07); }
 
@@ -423,7 +535,7 @@ body.theme-light .consumption-track { background: rgba(0,0,0,0.07); }
     background: var(--on-bg);
     border-radius: var(--shape-full);
     position: relative;
-    overflow: hidden;
+    overflow: visible;
     transition: --bar-w var(--m3-std-default);  /* native @property interpolation */
 }
 /* shimmer */
@@ -431,8 +543,11 @@ body.theme-light .consumption-track { background: rgba(0,0,0,0.07); }
     content: '';
     position: absolute;
     inset: 0;
+    border-radius: var(--shape-full);
     background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.30) 50%, transparent 100%);
     animation: shimmer 1.8s linear infinite;
+    pointer-events: none;
+    overflow: hidden;
 }
 body.theme-light .consumption-bar.anim::after {
     background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.50) 50%, transparent 100%);
@@ -441,6 +556,68 @@ body.theme-light .consumption-bar.anim::after {
 
 .consumption-bar.level-warn { background: var(--warn); }
 .consumption-bar.level-bad { background: var(--bad); }
+
+/* White Flares on Limited Data Progress Bar & Arc (Not shown on unlimited) */
+.flare-spark {
+    position: absolute;
+    right: -4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 
+        0 0 6px 2px #ffffff,
+        0 0 14px 6px rgba(255, 255, 255, 0.95),
+        0 0 24px 10px rgba(99, 102, 241, 0.75),
+        0 0 36px 14px rgba(255, 255, 255, 0.4);
+    pointer-events: none;
+    z-index: 10;
+    animation: whiteFlarePulse 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes whiteFlarePulse {
+    0% {
+        transform: translateY(-50%) scale(0.85);
+        box-shadow: 
+            0 0 5px 2px #ffffff,
+            0 0 12px 4px rgba(255, 255, 255, 0.85),
+            0 0 20px 7px rgba(99, 102, 241, 0.6);
+        opacity: 0.85;
+    }
+    100% {
+        transform: translateY(-50%) scale(1.3);
+        box-shadow: 
+            0 0 10px 4px #ffffff,
+            0 0 22px 9px rgba(255, 255, 255, 1),
+            0 0 35px 14px rgba(129, 140, 248, 0.9),
+            0 0 50px 18px rgba(255, 255, 255, 0.6);
+        opacity: 1;
+    }
+}
+
+/* White Flare on SVG Usage Ring (Limited Data Only) */
+.ring-flare-spark {
+    fill: #ffffff;
+    filter: drop-shadow(0 0 5px #ffffff) drop-shadow(0 0 12px rgba(255, 255, 255, 0.95)) drop-shadow(0 0 22px rgba(99, 102, 241, 0.85));
+    animation: ringFlarePulse 1.3s ease-in-out infinite alternate;
+    pointer-events: none;
+    transition: cx 0.8s cubic-bezier(0.2, 0.8, 0.2, 1), cy 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes ringFlarePulse {
+    0% {
+        r: 3.5;
+        opacity: 0.85;
+        filter: drop-shadow(0 0 4px #ffffff) drop-shadow(0 0 10px rgba(255, 255, 255, 0.8)) drop-shadow(0 0 18px rgba(99, 102, 241, 0.6));
+    }
+    100% {
+        r: 5.5;
+        opacity: 1;
+        filter: drop-shadow(0 0 9px #ffffff) drop-shadow(0 0 18px rgba(255, 255, 255, 1)) drop-shadow(0 0 28px rgba(147, 197, 253, 0.95));
+    }
+}
 
 .consumption-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
 .consumption-line {
@@ -605,10 +782,11 @@ body.theme-light .consumption-line { background: rgba(0,0,0,0.03); }
 
 .plan-bar-track {
     width: 100%;
-    height: 5px;
+    height: 6px;
     background: var(--surface-2);
     border-radius: var(--shape-full);
-    overflow: hidden;
+    position: relative;
+    overflow: visible;
 }
 .plan-bar-fill {
     height: 100%;
@@ -616,14 +794,18 @@ body.theme-light .consumption-line { background: rgba(0,0,0,0.03); }
     background: var(--on-bg);
     width: 0%;
     position: relative;
-    overflow: hidden;
+    overflow: visible;
+    transition: width 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .plan-bar-fill::after {
     content: '';
     position: absolute;
     inset: 0;
+    border-radius: var(--shape-full);
     background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.28) 50%, transparent 100%);
     animation: shimmer 2.2s linear infinite;
+    pointer-events: none;
+    overflow: hidden;
 }
 .plan-bar-fill.warn { background: var(--warn); }
 .plan-bar-fill.bad  { background: var(--bad); }
@@ -1428,6 +1610,24 @@ body.theme-light .mobile-nav {
     /* System action buttons on phone */
     .sys-actions { gap: 8px !important; }
     .sys-btn { padding: 9px 8px !important; font-size: 0.78rem !important; }
+
+    /* 3-Node Topology Mobile Adjustments */
+    .ping-card { padding: 16px 14px 12px; }
+    .ping-topology { padding: 10px 8px; margin: 14px 0 12px; }
+    .topo-node { min-width: 50px; gap: 4px; }
+    .topo-icon-wrap { width: 40px; height: 40px; }
+    .topo-icon { font-size: 1.05rem; }
+    .topo-name { font-size: 0.74rem; }
+    .topo-sub { font-size: 0.58rem; }
+    .topo-connector { min-width: 26px; padding: 0 2px; gap: 4px; }
+    .topo-hop-badge { font-size: 0.64rem; padding: 2px 5px; }
+    .topo-hop-arr { display: none; }
+    .ping-ms { font-size: 1.75rem; }
+    .ping-btn { padding: 6px 10px; font-size: 0.76rem; }
+
+    /* Live Speed Badges Mobile */
+    .user-live-speed-row { gap: 6px; }
+    .speed-pill { padding: 3px 9px; font-size: 0.78rem; gap: 6px; }
 }
 
 @media (max-width: 380px) {
@@ -1516,31 +1716,47 @@ body.theme-light .m3-ripple { background: rgba(0,0,0,0.08); }
 }
 
 /* ============================================================
-   Server Ping Card
+   Server Ping Card - 3-Node Interactive Latency Pipeline
    ============================================================ */
-.ping-card { padding: 18px 20px 14px; }
+.ping-card {
+    padding: 20px 22px 18px;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--shape-xl);
+    position: relative;
+    overflow: hidden;
+    transition: border-color var(--m3-effects), box-shadow var(--m3-effects);
+}
+.ping-card:hover {
+    border-color: var(--border-hi);
+    box-shadow: 0 8px 32px -8px rgba(0, 0, 0, 0.35);
+}
 
 .ping-head {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    margin-bottom: 16px;
+    margin-bottom: 18px;
 }
 .ping-eyebrow {
-    font-size: 0.67rem;
+    font-size: 0.68rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 1.2px;
     color: var(--on-dim);
-    margin-bottom: 5px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 .ping-val-row {
     display: flex;
     align-items: baseline;
-    gap: 4px;
+    gap: 6px;
+    flex-wrap: wrap;
 }
 .ping-ms {
-    font-size: 2rem;
+    font-size: 2.1rem;
     font-weight: 800;
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
@@ -1550,7 +1766,7 @@ body.theme-light .m3-ripple { background: rgba(0,0,0,0.08); }
     transition: color var(--m3-effects);
 }
 .ping-unit {
-    font-size: 0.78rem;
+    font-size: 0.8rem;
     font-weight: 600;
     color: var(--on-dim);
 }
@@ -1559,35 +1775,252 @@ body.theme-light .m3-ripple { background: rgba(0,0,0,0.08); }
 .ping-ms.bad   { color: var(--bad);  }
 
 .ping-btn {
-    width: 36px;
-    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 14px;
     border-radius: var(--shape-full);
     border: 1px solid var(--border);
-    background: transparent;
-    color: var(--on-dim);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    background: var(--surface-2);
+    color: var(--on-bg);
     cursor: pointer;
-    font-size: 0.88rem;
-    transition: color var(--m3-effects), background var(--m3-effects), transform var(--m3-spatial-fast);
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    transition: all var(--m3-effects);
     flex-shrink: 0;
     position: relative;
     overflow: hidden;
 }
-.ping-btn:hover { color: var(--on-bg); background: var(--surface-2); }
-.ping-btn.pinging { animation: ping-pulse 600ms ease-in-out infinite alternate; }
-@keyframes ping-pulse {
-    from { opacity: 0.4; }
-    to   { opacity: 1; }
+.ping-btn i {
+    color: var(--accent);
+    font-size: 0.85rem;
+    transition: transform 0.3s ease;
+}
+.ping-btn:hover {
+    background: var(--surface-3);
+    border-color: var(--border-hi);
+    transform: translateY(-1px);
+}
+.ping-btn:hover i {
+    transform: scale(1.15);
+}
+.ping-btn.pinging {
+    animation: ping-pulse 600ms ease-in-out infinite alternate;
+    pointer-events: none;
+    border-color: rgba(99, 102, 241, 0.6);
+}
+.ping-btn.pinging i {
+    animation: pingSpin 0.8s linear infinite;
+}
+@keyframes pingSpin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
-/* Bar chart */
+/* 3-Node Topology Diagram: Client -> VPS -> Internet */
+.ping-topology {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 18px 0 16px;
+    padding: 14px 12px;
+    border-radius: var(--shape-lg);
+    background: rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    position: relative;
+}
+body.theme-light .ping-topology {
+    background: rgba(0, 0, 0, 0.03);
+    border-color: rgba(0, 0, 0, 0.06);
+}
+
+.topo-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 6px;
+    flex-shrink: 0;
+    min-width: 64px;
+    z-index: 2;
+}
+.topo-icon-wrap {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface-2);
+    border: 1.5px solid var(--border);
+    position: relative;
+    transition: all 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.topo-icon {
+    font-size: 1.2rem;
+    transition: transform 0.3s ease;
+}
+
+/* Node Custom Accents & Glows */
+.topo-icon-wrap.client-glow {
+    border-color: rgba(56, 189, 248, 0.35);
+    color: #38bdf8;
+    box-shadow: 0 0 16px rgba(56, 189, 248, 0.15);
+}
+.topo-icon-wrap.vps-glow {
+    border-color: rgba(129, 140, 248, 0.35);
+    color: #818cf8;
+    box-shadow: 0 0 16px rgba(129, 140, 248, 0.15);
+}
+.topo-icon-wrap.internet-glow {
+    border-color: rgba(16, 185, 129, 0.35);
+    color: #10b981;
+    box-shadow: 0 0 16px rgba(16, 185, 129, 0.15);
+}
+
+.topo-node.active .topo-icon-wrap {
+    transform: scale(1.1);
+}
+.topo-node.active .topo-icon-wrap.client-glow {
+    box-shadow: 0 0 24px rgba(56, 189, 248, 0.55);
+    border-color: #38bdf8;
+}
+.topo-node.active .topo-icon-wrap.vps-glow {
+    box-shadow: 0 0 24px rgba(129, 140, 248, 0.55);
+    border-color: #818cf8;
+}
+.topo-node.active .topo-icon-wrap.internet-glow {
+    box-shadow: 0 0 24px rgba(16, 185, 129, 0.55);
+    border-color: #10b981;
+}
+
+.node-pulse-ring {
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    border: 1.5px solid currentColor;
+    opacity: 0;
+    pointer-events: none;
+}
+.topo-node.pulse-fire .node-pulse-ring {
+    animation: nodePulseWave 1s cubic-bezier(0.1, 0.8, 0.2, 1);
+}
+@keyframes nodePulseWave {
+    0% { transform: scale(1); opacity: 0.9; }
+    100% { transform: scale(1.6); opacity: 0; }
+}
+
+.topo-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.topo-name {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--on-bg);
+}
+.topo-sub {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--on-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Conduits / Connectors */
+.topo-connector {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+    position: relative;
+    padding: 0 4px;
+    min-width: 44px;
+    z-index: 1;
+}
+.topo-track {
+    width: 100%;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 99px;
+    position: relative;
+    overflow: hidden;
+}
+body.theme-light .topo-track { background: rgba(0, 0, 0, 0.08); }
+
+.topo-beam {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.7), transparent);
+    animation: beamFlow 2.2s ease-in-out infinite;
+    opacity: 0.6;
+}
+@keyframes beamFlow {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+.topo-packet {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    transform: translate(-50%, -50%);
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 0 6px 2px #fff, 0 0 12px 4px rgba(99, 102, 241, 0.9);
+    opacity: 0;
+    pointer-events: none;
+    will-change: left, opacity;
+}
+
+.topo-hop-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: var(--shape-full);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    font-size: 0.72rem;
+    font-family: var(--font-mono);
+    color: var(--on-dim);
+    font-weight: 600;
+    white-space: nowrap;
+    transition: all 0.3s ease;
+}
+.topo-hop-arr {
+    font-size: 0.62rem;
+    opacity: 0.6;
+}
+.topo-hop-badge.active {
+    color: var(--on-bg);
+    border-color: rgba(99, 102, 241, 0.45);
+    background: rgba(99, 102, 241, 0.12);
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
+}
+
+/* History / Stability Bars */
+.ping-history-section {
+    margin-top: 14px;
+}
+.ping-bars-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--on-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 6px;
+}
 .ping-bars {
     display: flex;
     align-items: flex-end;
     gap: 4px;
-    height: 36px;
+    height: 32px;
     margin-bottom: 12px;
 }
 .ping-bar {
@@ -1610,21 +2043,53 @@ body.theme-light .m3-ripple { background: rgba(0,0,0,0.08); }
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
 }
 .ping-status {
     font-size: 0.75rem;
     color: var(--on-dim);
+    font-weight: 500;
 }
 .ping-quality {
     font-size: 0.72rem;
     font-weight: 700;
     letter-spacing: 0.5px;
     text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: var(--shape-full);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
     color: var(--on-dim);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
-.ping-quality.good { color: var(--good); }
-.ping-quality.warn { color: var(--warn); }
-.ping-quality.bad  { color: var(--bad);  }
+.ping-quality.good {
+    color: var(--good);
+    border-color: rgba(16, 185, 129, 0.35);
+    background: rgba(16, 185, 129, 0.12);
+}
+.ping-quality.warn {
+    color: var(--warn);
+    border-color: rgba(245, 158, 11, 0.35);
+    background: rgba(245, 158, 11, 0.12);
+}
+.ping-quality.bad  {
+    color: var(--bad);
+    border-color: rgba(239, 68, 68, 0.35);
+    background: rgba(239, 68, 68, 0.12);
+}
+.ping-summary-chip {
+    font-size: 0.72rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    color: var(--on-dim);
+    background: var(--surface-2);
+    padding: 3px 8px;
+    border-radius: var(--shape-full);
+    border: 1px solid var(--border);
+}
 
 /* ============================================================
    Misc utility
