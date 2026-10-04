@@ -3,3 +3,6 @@ server-config.json
 .DS_Store
 *.log
 nohup.out
+.env
+.env.*
+*.db
