@@ -246,22 +246,30 @@ async function resolveClient(id) {
   });
   if (!foundClient) return { status: 404, body: { success: false, msg: 'User email not found' } };
 
-  let isOnline = null;
+  const now = Date.now();
+  const lastOnlineTs = Number(foundClient.lastOnline) || 0;
+  // If user was active within last 3 minutes (180,000 ms), they are ONLINE / CONNECTED
+  const isOnline = lastOnlineTs > 0 ? ((now - lastOnlineTs) < 180000) : false;
   let ips = [];
-  try {
-    const onRes = await panelFetch(`${PANEL_URL}/panel/api/inbounds/onlines`, {
-      method: 'POST', headers: { ...authHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify({})
-    });
-    const onData = await onRes.json();
-    if (onData && onData.success && Array.isArray(onData.obj)) isOnline = onData.obj.includes(foundClient.email);
-  } catch (e) {}
 
+  let serverInfo = null;
   try {
-    const ipRes = await panelFetch(`${PANEL_URL}/panel/api/inbounds/clientIps/${encodeURIComponent(foundClient.email)}`, {
-      method: 'POST', headers: { ...authHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify({})
+    const sData = await cachedJson('server_health', 5, async () => {
+      const apiRes = await panelFetch(`${PANEL_URL}/panel/api/server/status`, {
+        method: 'GET', headers: authHeaders
+      });
+      return await parseResponseJson(apiRes, 'resolveClient/status');
     });
-    const ipData = await ipRes.json();
-    if (ipData && ipData.success && Array.isArray(ipData.obj)) ips = ipData.obj;
+    if (sData && sData.obj) {
+      const s = sData.obj;
+      serverInfo = {
+        xray: { version: s.xray?.version || '' },
+        uptime: s.uptime || 0,
+        tcpCount: s.tcpCount || 0,
+        udpCount: s.udpCount || 0,
+        disk: s.disk || null
+      };
+    }
   } catch (e) {}
 
   let subLink = null, vlessLink = null, vmessLink = null, trojanLink = null, protocol = 'vless';
@@ -385,6 +393,8 @@ async function resolveClient(id) {
         enable: foundClient.enable !== false,
         uuid: foundClient.uuid || foundClient.id,
         subId: foundClient.subId,
+        lastOnline: foundClient.lastOnline || 0,
+        serverInfo,
         isOnline,
         ips: MASK_VPS_DETAILS ? [] : ips,
         subLink,
@@ -419,6 +429,37 @@ function requireAdmin(req, res, next) {
 app.use(cors());
 app.use('/api/xui', express.raw({ type: () => true, limit: '64mb' }));
 app.use(express.json({ limit: '2mb' }));
+
+
+// Lightweight server health endpoint for live status strip (Xray, conns, uptime, disk)
+app.get('/api/server-info', async (req, res) => {
+  try {
+    const authHeaders = await getAuthHeaders();
+    if (!authHeaders) return res.status(500).json({ success: false, msg: 'Auth failed' });
+    const sData = await cachedJson('server_health', 5, async () => {
+      const apiRes = await panelFetch(`${PANEL_URL}/panel/api/server/status`, {
+        method: 'GET', headers: authHeaders
+      });
+      return await parseResponseJson(apiRes, 'api/server-info');
+    });
+    if (sData && sData.obj) {
+      const s = sData.obj;
+      return res.json({
+        success: true,
+        obj: {
+          xray: { version: s.xray?.version || '' },
+          uptime: s.uptime || 0,
+          tcpCount: s.tcpCount || 0,
+          udpCount: s.udpCount || 0,
+          disk: s.disk || null
+        }
+      });
+    }
+    return res.status(502).json({ success: false });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
 
 app.get('/healthz', (req, res) => res.json({ ok: true }));
 
@@ -712,9 +753,11 @@ app.get('/public/stream', async (req, res) => {
       if (!client) {
         sseSend(res, 'notfound', { id, ts: Date.now() });
       } else {
+        const isOnline = client.lastOnline > 0 && ((Date.now() - Number(client.lastOnline)) < 180000);
         sseSend(res, 'client', {
           ts: Date.now(), email: client.email, down: client.down, up: client.up,
           total: client.total, enable: client.enable, lastOnline: client.lastOnline,
+          isOnline: isOnline,
           uuid: client.uuid, subId: client.subId
         });
       }
