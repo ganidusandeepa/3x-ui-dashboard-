@@ -248,15 +248,21 @@ function animateNumber(elOrSelector, to, opts = {}) {
     const el = typeof elOrSelector === 'string' ? document.querySelector(elOrSelector) : elOrSelector;
     if (!el) return;
 
-    let startVal = (fromRaw !== null && Number.isFinite(fromRaw)) ? fromRaw : Number(el.textContent);
+    let startVal = (fromRaw !== null && Number.isFinite(fromRaw)) ? fromRaw : parseFloat(el.textContent);
     if (!Number.isFinite(startVal)) startVal = 0;
     const endVal = Number(to);
     if (!Number.isFinite(endVal)) { el.textContent = formatter(0); return; }
 
     try {
         if (typeof gsap !== 'undefined') {
+            if (el._numTween) el._numTween.kill();
             const obj = { v: startVal };
-            gsap.to(obj, { v: endVal, duration: duration / 1000, ease: 'power2.out', onUpdate: () => { el.textContent = formatter(obj.v); } });
+            el._numTween = gsap.to(obj, {
+                v: endVal,
+                duration: duration / 1000,
+                ease: 'power2.out',
+                onUpdate: () => { el.textContent = formatter(obj.v); }
+            });
             return;
         }
     } catch(e) {}
@@ -496,20 +502,45 @@ async function startAdminApp() {
     }).catch(()=>{});
 }
 
-// --- Client Speed ---
+// --- Client Speed with Exponential Moving Average (EMA) ---
+let __smoothDlSpeed = 0;
+let __smoothUpSpeed = 0;
+
 function updateClientSpeedsFromDelta(nowDown, nowUp) {
     try {
         const now = Date.now();
         if (!__clientLast) {
             __clientLast = { downBytes: Number(nowDown)||0, upBytes: Number(nowUp)||0, ts: now };
-            setTextSafe('#user-dl-speed', '0'); setTextSafe('#user-up-speed', '0'); return;
+            __smoothDlSpeed = 0;
+            __smoothUpSpeed = 0;
+            setTextSafe('#user-dl-speed', '0.00');
+            setTextSafe('#user-up-speed', '0.00');
+            return;
         }
         const dt = (now - __clientLast.ts) / 1000;
-        if (dt <= 0) return;
-        const dDown = (Number(nowDown)||0) - (__clientLast.downBytes||0);
-        const dUp = (Number(nowUp)||0) - (__clientLast.upBytes||0);
-        animateNumber('#user-dl-speed', Math.max(0, (dDown * 8) / (dt * 1e6)), { decimals: 2, duration: 500 });
-        animateNumber('#user-up-speed', Math.max(0, (dUp * 8) / (dt * 1e6)), { decimals: 2, duration: 500 });
+        if (dt <= 0.3) return; // ignore instant duplicate callbacks
+        
+        const dDown = Math.max(0, (Number(nowDown)||0) - (__clientLast.downBytes||0));
+        const dUp   = Math.max(0, (Number(nowUp)||0) - (__clientLast.upBytes||0));
+        
+        // Instantaneous speed in Mbps: (bytes * 8) / (dt * 1e6)
+        const instDl = (dDown * 8) / (dt * 1e6);
+        const instUp = (dUp * 8) / (dt * 1e6);
+        
+        // EMA smoothing: glides smoothly without jumping abruptly between ticks
+        const alpha = 0.35;
+        __smoothDlSpeed = (alpha * instDl) + ((1 - alpha) * __smoothDlSpeed);
+        __smoothUpSpeed = (alpha * instUp) + ((1 - alpha) * __smoothUpSpeed);
+        
+        const targetDl = __smoothDlSpeed < 0.01 ? 0 : __smoothDlSpeed;
+        const targetUp = __smoothUpSpeed < 0.01 ? 0 : __smoothUpSpeed;
+        
+        const curDl = parseFloat(document.getElementById('user-dl-speed')?.textContent) || 0;
+        const curUp = parseFloat(document.getElementById('user-up-speed')?.textContent) || 0;
+        
+        animateNumber('#user-dl-speed', targetDl, { decimals: 2, duration: 850, from: curDl });
+        animateNumber('#user-up-speed', targetUp, { decimals: 2, duration: 850, from: curUp });
+        
         __clientLast = { downBytes: Number(nowDown)||0, upBytes: Number(nowUp)||0, ts: now };
     } catch(e) {}
 }
@@ -669,7 +700,10 @@ function applyClientDataToUI(client) {
     // --- M3 Plan Status Card ---
     try {
         const active = client.enable !== false;
-        const isOnline = client.isOnline === true;
+        const lastOnline = Number(client.lastOnline) || 0;
+        // If active within 3 minutes (180,000 ms), client is actively CONNECTED
+        const isOnline = client.isOnline === true || (lastOnline > 0 && (Date.now() - lastOnline) < 180000);
+        if (client.serverInfo) updateServerHealthUI(client.serverInfo);
         const exp = Number(client.expiryTime ?? client.expiry ?? 0);
 
         // Status pill
@@ -763,7 +797,7 @@ function applyClientDataToUI(client) {
             if (top && topDot && topText) {
                 const firstShow = top.style.display !== 'inline-flex';
                 top.style.display = 'inline-flex';
-                topText.textContent = isOnline ? 'ONLINE' : (active ? 'ACTIVE' : 'INACTIVE');
+                topText.textContent = !active ? 'INACTIVE' : (isOnline ? 'CONNECTED' : 'ACTIVE');
                 topDot.style.background = isOnline ? 'var(--good)' : (active ? 'var(--on-mid)' : 'var(--bad)');
                 if (firstShow && typeof gsap !== 'undefined' && !prefersReducedMotion()) {
                     gsap.fromTo(top, { opacity: 0, x: 10, scale: 0.88 }, { opacity: 1, x: 0, scale: 1, duration: 0.36, ease: 'elastic.out(1, 0.65)' });
@@ -1079,6 +1113,47 @@ function initAdminCharts() {
     if (ramCtx) ramChart = new Chart(ramCtx, { type: 'line', data: { labels: Array(10).fill(''), datasets: [{ data: Array(10).fill(0), borderColor: lineClr2, borderWidth: 1.5, pointRadius: 0, tension: 0.4, fill: true, backgroundColor: fillClr }]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }});
 }
 
+
+// Universal Server Health UI updater (Xray, conns, uptime, disk)
+function updateServerHealthUI(s) {
+    if (!s) return;
+    try {
+        const xrayVer = s.xray?.version || s.xrayVersion;
+        if (xrayVer) {
+            setTextSafe('#strip-xray-ver', xrayVer);
+            setTextSafe('#xray-version', xrayVer);
+        }
+        if (s.tcpCount !== undefined || s.udpCount !== undefined) {
+            const tot = (Number(s.tcpCount) || 0) + (Number(s.udpCount) || 0);
+            setTextSafe('#live-conns', `${tot} (${s.tcpCount || 0}T/${s.udpCount || 0}U)`);
+        }
+        if (s.uptime) {
+            const sec = Number(s.uptime);
+            const h = Math.floor(sec / 3600);
+            const m = Math.floor((sec % 3600) / 60);
+            const d = Math.floor(h / 24);
+            const remH = h % 24;
+            setTextSafe('#live-uptime', d > 0 ? `${d}d ${remH}h` : `${h}h ${m}m`);
+        }
+        if (s.disk && s.disk.total) {
+            const curGB = (Number(s.disk.current) / 1073741824).toFixed(1);
+            const totGB = (Number(s.disk.total) / 1073741824).toFixed(1);
+            const pct = Math.round((Number(s.disk.current) / Number(s.disk.total)) * 100);
+            setTextSafe('#live-disk', `${curGB}/${totGB} GB (${pct}%)`);
+        }
+    } catch(e) {}
+}
+
+async function loadServerHealth() {
+    try {
+        const res = await fetch('/api/server-info');
+        const data = await res.json();
+        if (data && data.success && data.obj) {
+            updateServerHealthUI(data.obj);
+        }
+    } catch(e) {}
+}
+
 function applyAdminStatusToUI(stat) {
     if (!stat || !stat.success) return;
     const s = stat.obj;
@@ -1095,7 +1170,7 @@ function applyAdminStatusToUI(stat) {
         document.getElementById('node-ip').textContent = s.publicIP?.ipv4 || s.publicIP?.ipv6 || '-';
         document.getElementById('node-region').textContent = s.publicIP?.country || '-';
         document.getElementById('xray-version').textContent = s.xray?.version || '-';
-        if (s.xray?.version) { const el = document.getElementById('strip-xray-ver'); if (el) el.textContent = s.xray.version; }
+        updateServerHealthUI(s);
         if (s.netIO) {
             const dVal = Number(s.netIO.down) || 0;
             const uVal = Number(s.netIO.up) || 0;
