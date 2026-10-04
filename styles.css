@@ -531,12 +531,12 @@ body.theme-light .consumption-track { background: rgba(0,0,0,0.07); }
 
 .consumption-bar {
     height: 100%;
-    width: var(--bar-w);          /* driven by @property, animated by CSS */
+    width: 0%;
     background: var(--on-bg);
     border-radius: var(--shape-full);
     position: relative;
     overflow: visible;
-    transition: --bar-w var(--m3-std-default);  /* native @property interpolation */
+    transition: width 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 /* shimmer */
 .consumption-bar.anim::after {
