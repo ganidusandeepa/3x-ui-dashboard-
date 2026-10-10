@@ -2,24 +2,6 @@
 let _session = { cookie: null, ts: 0 };
 const SESSION_TTL = 18 * 60 * 1000; // 18 min
 
-// Maintenance mode — when true, admin sign-in is blocked server-side.
-// Flip to false (and in main.js) to re-enable admin access.
-const ADMIN_MAINTENANCE = true;
-
-// Newer 3x-ui can return settings/streamSettings/sniffing as nested objects
-// instead of JSON strings — tolerate both so link building never throws.
-function parseMaybe(v, fallback) {
-  if (v == null || v === '') return fallback || {};
-  if (typeof v === 'object') return v;
-  try { return JSON.parse(v); } catch (e) { return fallback || {}; }
-}
-// Normalize a client-IPs response entry (string or {ip}/{address}) to a string.
-function normIp(x) {
-  if (typeof x === 'string') return x;
-  if (x && typeof x === 'object') return x.ip || x.address || x.clientIp || x.remote || '';
-  return '';
-}
-
 // Rolling system history buffer (CPU/RAM over time)
 let _sysHistory = [];
 const HISTORY_MAX = 24;
@@ -45,90 +27,63 @@ export async function onRequest(context) {
 
   const PANEL_URL_RAW = env.PANEL_URL || "http://127.0.0.1:2053";
   const PANEL_URL = PANEL_URL_RAW.replace(/\/$/, "");
+  const PANEL_API_TOKEN = (env.PANEL_API_TOKEN || env.PANEL_TOKEN || "").trim();
   const ADMIN_USER = env.PANEL_USERNAME || "admin";
   const ADMIN_PASS = env.PANEL_PASSWORD || "password";
-  const PANEL_API_TOKEN = env.PANEL_API_TOKEN || null;
 
   const path = url.pathname.replace('/api/', '');
 
   async function getSession() {
-    // If using API token, return it directly (no session needed)
-    if (PANEL_API_TOKEN) {
-      return `Bearer ${PANEL_API_TOKEN}`;
-    }
-
+    if (PANEL_API_TOKEN) return null;
     const now = Date.now();
     if (_session.cookie && (now - _session.ts) < SESSION_TTL) {
       return _session.cookie;
     }
+    const loginRes = await fetch(`${PANEL_URL}/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ username: ADMIN_USER, password: ADMIN_PASS }),
+      redirect: 'follow'
+    });
+    const cookie = loginRes.headers.get("set-cookie");
+    if (cookie) {
+      _session = { cookie, ts: now };
+    }
+    return cookie;
+  }
 
-    try {
-      // Try 3x-ui 3.6.0+ API first (JSON endpoint)
-      const loginRes = await fetch(`${PANEL_URL}/api/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: ADMIN_USER, password: ADMIN_PASS }),
-        redirect: 'follow'
-      });
-
-      const cookie = loginRes.headers.get("set-cookie");
-      if (cookie) {
-        _session = { cookie, ts: now };
-        return cookie;
-      }
-
-      const data = await loginRes.json().catch(() => null);
-      if (data?.success && cookie) {
-        return cookie;
-      }
-    } catch (e) {}
-
-    try {
-      // Fallback to old /login endpoint (form-encoded)
-      const loginRes = await fetch(`${PANEL_URL}/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ username: ADMIN_USER, password: ADMIN_PASS }),
-        redirect: 'follow'
-      });
-      const cookie = loginRes.headers.get("set-cookie");
-      if (cookie) {
-        _session = { cookie, ts: now };
-        return cookie;
-      }
-    } catch (e) {}
-
-    return null;
+  async function getAuthHeaders() {
+    if (PANEL_API_TOKEN) {
+      return {
+        "Authorization": `Bearer ${PANEL_API_TOKEN}`,
+        "Accept": "application/json",
+        "Referer": `${PANEL_URL}/`
+      };
+    }
+    const cookie = await getSession();
+    if (!cookie) return null;
+    return {
+      "Cookie": cookie,
+      "Accept": "application/json",
+      "Referer": `${PANEL_URL}/`
+    };
   }
 
   const cfUserRecord = request.headers.get('Cf-Access-Authenticated-User-Email');
-
-  // Helper to add auth to headers (supports both cookie and Bearer token)
-  function authHeaders(baseHeaders = {}) {
-    if (PANEL_API_TOKEN) {
-      return { ...baseHeaders, "Authorization": `Bearer ${PANEL_API_TOKEN}` };
-    }
-    return baseHeaders;
-  }
 
   // Authentication endpoint
   if (request.method === "POST" && path === "auth") {
     const body = await request.json();
 
     if (body.type === 'admin') {
-      // Maintenance mode: block all admin sign-in (see ADMIN_MAINTENANCE).
-      if (ADMIN_MAINTENANCE) {
-        return new Response(JSON.stringify({ success: false, maintenance: true, msg: 'Admin panel is under maintenance. Please check back later.' }), {
-          status: 503,
-          headers: { "Content-Type": "application/json" }
-        });
-      }
       if (cfUserRecord) {
         return new Response(JSON.stringify({ success: true, role: 'admin', msg: 'Cloudflare Zero Trust Authenticated' }), {
           headers: { "Content-Type": "application/json" }
         });
       }
-      if (body.username === ADMIN_USER && body.password === ADMIN_PASS) {
+      const matchesUserPass = body.username === ADMIN_USER && body.password === ADMIN_PASS;
+      const matchesToken = PANEL_API_TOKEN && (body.password === PANEL_API_TOKEN || body.token === PANEL_API_TOKEN || body.username === PANEL_API_TOKEN);
+      if (matchesUserPass || matchesToken) {
         return new Response(JSON.stringify({ success: true, role: 'admin' }), {
           headers: { "Content-Type": "application/json" }
         });
@@ -141,19 +96,16 @@ export async function onRequest(context) {
 
     if (body.type === 'client') {
       try {
-        const cookie = await getSession();
-        if (!cookie) {
+        const authHeaders = await getAuthHeaders();
+        if (!authHeaders) {
           return new Response(JSON.stringify({ success: false, msg: 'Panel Auth Failed' }), {
             status: 500,
             headers: { "Content-Type": "application/json" }
           });
         }
 
-        const headers = PANEL_API_TOKEN
-          ? { "Authorization": `Bearer ${PANEL_API_TOKEN}` }
-          : { "Cookie": cookie };
         const apiRes = await fetch(`${PANEL_URL}/panel/api/inbounds/list`, {
-          headers
+          headers: authHeaders
         });
         const data = await apiRes.json();
 
@@ -172,87 +124,26 @@ export async function onRequest(context) {
             let ips = [];
 
             try {
-              const onHeaders = PANEL_API_TOKEN
-                ? { "Authorization": `Bearer ${PANEL_API_TOKEN}`, "Content-Type": "application/json" }
-                : { "Cookie": cookie, "Content-Type": "application/json" };
-              // 3x-ui moved this to /panel/api/clients/onlines; fall back to the
-              // legacy /panel/api/inbounds/onlines for older panels.
-              for (const p of ['clients/onlines', 'inbounds/onlines']) {
-                try {
-                  const onRes = await fetch(`${PANEL_URL}/panel/api/${p}`, {
-                    method: 'POST', headers: onHeaders, body: JSON.stringify({})
-                  });
-                  const onData = await onRes.json();
-                  if (onData && onData.success && Array.isArray(onData.obj)) {
-                    isOnline = onData.obj.includes(foundClient.email);
-                    break;
-                  }
-                } catch (e) {}
+              const onRes = await fetch(`${PANEL_URL}/panel/api/inbounds/onlines`, {
+                method: 'POST',
+                headers: { ...authHeaders, "Content-Type": "application/json" },
+                body: JSON.stringify({})
+              });
+              const onData = await onRes.json();
+              if (onData && onData.success && Array.isArray(onData.obj)) {
+                isOnline = onData.obj.includes(foundClient.email);
               }
             } catch (e) {}
 
             try {
-              const ipHeaders = PANEL_API_TOKEN
-                ? { "Authorization": `Bearer ${PANEL_API_TOKEN}`, "Content-Type": "application/json" }
-                : { "Cookie": cookie, "Content-Type": "application/json" };
-              const em = encodeURIComponent(foundClient.email);
-              // New API: /panel/api/clients/ips/{email}; legacy: /panel/api/inbounds/clientIps/{email}
-              for (const p of [`clients/ips/${em}`, `inbounds/clientIps/${em}`]) {
-                try {
-                  const ipRes = await fetch(`${PANEL_URL}/panel/api/${p}`, {
-                    method: 'POST', headers: ipHeaders, body: JSON.stringify({})
-                  });
-                  const ipData = await ipRes.json();
-                  if (ipData && ipData.success) {
-                    if (Array.isArray(ipData.obj)) { ips = ipData.obj.map(normIp).filter(Boolean); break; }
-                    if (typeof ipData.obj === 'string' && ipData.obj && !/no ip/i.test(ipData.obj)) {
-                      ips = ipData.obj.split(/[,\s]+/).filter(Boolean); break;
-                    }
-                  }
-                } catch (e) {}
-              }
-            } catch (e) {}
-
-            // New client-scoped extras: every config link across inbounds, all
-            // subscription protocol links, and an accurate last-seen timestamp.
-            let allLinks = [];
-            let subProtoLinks = [];
-            let lastOnlineTs = 0;
-            const getHdr = PANEL_API_TOKEN
-              ? { "Authorization": `Bearer ${PANEL_API_TOKEN}`, "Accept": "application/json" }
-              : { "Cookie": cookie, "Accept": "application/json" };
-            const postHdr = PANEL_API_TOKEN
-              ? { "Authorization": `Bearer ${PANEL_API_TOKEN}`, "Content-Type": "application/json" }
-              : { "Cookie": cookie, "Content-Type": "application/json" };
-            const normLinks = (obj) => Array.isArray(obj) ? obj.map(x => {
-              if (typeof x === 'string') return { remark: '', link: x };
-              if (x && typeof x === 'object') return { remark: x.remark || x.name || x.tag || '', link: x.link || x.url || x.uri || '' };
-              return null;
-            }).filter(x => x && x.link) : [];
-
-            try {
-              const r = await fetch(`${PANEL_URL}/panel/api/clients/links/${encodeURIComponent(foundClient.email)}`, { headers: getHdr });
-              const j = await r.json();
-              if (j && j.success) allLinks = normLinks(j.obj);
-            } catch (e) {}
-
-            try {
-              if (foundClient.subId) {
-                const r = await fetch(`${PANEL_URL}/panel/api/clients/subLinks/${encodeURIComponent(foundClient.subId)}`, { headers: getHdr });
-                const j = await r.json();
-                if (j && j.success && Array.isArray(j.obj)) {
-                  subProtoLinks = j.obj.map(x => typeof x === 'string' ? x : (x && (x.link || x.url || x.uri))).filter(Boolean);
-                }
-              }
-            } catch (e) {}
-
-            try {
-              const r = await fetch(`${PANEL_URL}/panel/api/clients/lastOnline`, { method: 'POST', headers: postHdr, body: JSON.stringify({}) });
-              const j = await r.json();
-              if (j && j.success && j.obj && typeof j.obj === 'object') {
-                let ts = Number(j.obj[foundClient.email] || 0);
-                if (ts > 0 && ts < 1e12) ts *= 1000; // seconds -> ms
-                lastOnlineTs = ts || 0;
+              const ipRes = await fetch(`${PANEL_URL}/panel/api/inbounds/clientIps/${encodeURIComponent(foundClient.email)}`, {
+                method: 'POST',
+                headers: { ...authHeaders, "Content-Type": "application/json" },
+                body: JSON.stringify({})
+              });
+              const ipData = await ipRes.json();
+              if (ipData && ipData.success && Array.isArray(ipData.obj)) {
+                ips = ipData.obj;
               }
             } catch (e) {}
 
@@ -267,7 +158,7 @@ export async function onRequest(context) {
               subLink = foundClient.subId ? `${PANEL_URL}/sub/${foundClient.subId}` : null;
 
               if (foundInbound) {
-                const stream = parseMaybe(foundInbound.streamSettings);
+                const stream = JSON.parse(foundInbound.streamSettings || '{}');
                 const port = foundInbound.port;
                 const remark = foundInbound.remark || String(port);
                 const network = stream.network || 'tcp';
@@ -317,7 +208,7 @@ export async function onRequest(context) {
                 if (protocol === 'vless') {
                   const qs = buildQs();
                   qs.set('encryption', 'none');
-                  const settings = parseMaybe(foundInbound.settings);
+                  const settings = JSON.parse(foundInbound.settings || '{}');
                   const clientConf = (settings.clients || []).find(c => c.email === foundClient.email);
                   if (clientConf?.flow) qs.set('flow', clientConf.flow);
                   vlessLink = `vless://${foundClient.uuid}@${host}:${port}?${qs.toString()}#${encodeURIComponent(`${remark}-${foundClient.email}`)}`;
@@ -345,7 +236,7 @@ export async function onRequest(context) {
             if (subLink) {
               try {
                 const siRes = await fetch(`${subLink}?format=info`, {
-                  headers: { Cookie: cookie, 'User-Agent': 'ClashforWindows/0.20.0' }
+                  headers: { ...authHeaders, 'User-Agent': 'ClashforWindows/0.20.0' }
                 });
                 const sct = siRes.headers.get('content-type') || '';
                 if (sct.includes('json')) {
@@ -368,7 +259,7 @@ export async function onRequest(context) {
             return new Response(JSON.stringify({
               success: true,
               role: 'client',
-              clientData: { ...foundClient, isOnline, subLink, vlessLink, vmessLink, trojanLink, configLink, protocol, subInfo, allLinks, subProtoLinks, lastOnlineTs }
+              clientData: { ...foundClient, isOnline, ips, subLink, vlessLink, vmessLink, trojanLink, configLink, protocol, subInfo }
             }), {
               headers: { "Content-Type": "application/json" }
             });
@@ -408,7 +299,7 @@ export async function onRequest(context) {
   const hasCfAuthCookie = /(?:^|;\s*)CF_Authorization=/.test(cookieHdr);
   const isZeroTrustAdmin = hasEmailHeader || hasJwtAssertion || hasCfAuthCookie;
 
-  if (authHeader !== `Bearer ${ADMIN_PASS}` && !isZeroTrustAdmin) {
+  if (authHeader !== `Bearer ${ADMIN_PASS}` && !(PANEL_API_TOKEN && authHeader === `Bearer ${PANEL_API_TOKEN}`) && !isZeroTrustAdmin) {
     return new Response(JSON.stringify({ success: false, msg: 'Unauthorized' }), {
       status: 401,
       headers: { "Content-Type": "application/json" }
@@ -417,14 +308,14 @@ export async function onRequest(context) {
 
   // Settings — read-only (returns env-backed values, no cookie needed)
   if (path === "settings" && request.method === "GET") {
-    return new Response(JSON.stringify({ success: true, panelUrl: PANEL_URL, username: ADMIN_USER }), {
+    return new Response(JSON.stringify({ success: true, panelUrl: PANEL_URL, username: ADMIN_USER, hasApiToken: !!PANEL_API_TOKEN }), {
       headers: { "Content-Type": "application/json" }
     });
   }
 
   try {
-    const cookie = await getSession();
-    if (!cookie) {
+    const authHeaders = await getAuthHeaders();
+    if (!authHeaders) {
       return new Response(JSON.stringify({ success: false, msg: "Panel Auth Failed" }), {
         status: 401,
         headers: { "Content-Type": "application/json" }
@@ -437,9 +328,7 @@ export async function onRequest(context) {
       const targetUrl = `${PANEL_URL}/panel/api/${subPath}`;
 
       const headers = {
-        ...(PANEL_API_TOKEN ? { "Authorization": `Bearer ${PANEL_API_TOKEN}` } : { "Cookie": cookie }),
-        "Accept": "application/json",
-        "Referer": `${PANEL_URL}/`
+        ...authHeaders
       };
 
       const ct = request.headers.get('Content-Type');
@@ -472,11 +361,7 @@ export async function onRequest(context) {
     const fetchInbounds = async () => {
       const apiRes = await fetch(`${PANEL_URL}/panel/api/inbounds/list`, {
         method: "GET",
-        headers: {
-          ...(PANEL_API_TOKEN ? { "Authorization": `Bearer ${PANEL_API_TOKEN}` } : { "Cookie": cookie }),
-          "Accept": "application/json",
-          "Referer": `${PANEL_URL}/`
-        }
+        headers: authHeaders
       });
       return await apiRes.json();
     };
@@ -560,11 +445,7 @@ export async function onRequest(context) {
 
     const apiRes = await fetch(targetUrl, {
       method: "GET",
-      headers: {
-        ...(PANEL_API_TOKEN ? { "Authorization": `Bearer ${PANEL_API_TOKEN}` } : { "Cookie": cookie }),
-        "Accept": "application/json",
-        "Referer": `${PANEL_URL}/`
-      }
+      headers: authHeaders
     });
 
     const data = await apiRes.json();

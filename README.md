@@ -1,120 +1,238 @@
-# 3x-ui Premium Dashboard
+# ⚡ 3x-ui Premium Dashboard
 
-A modern, animated, and mobile-responsive dashboard for managing your 3x-ui panel. Built with GSAP, Three.js, and Chart.js.
+A modern, responsive, glassmorphic web dashboard for monitoring and managing your **3x-ui** (Xray-core) proxy servers. Designed with sleek animations, real-time metrics, active user count tracking, and zero-CORS proxy architecture.
 
-![Dashboard Preview](https://raw.githubusercontent.com/iamhelitha/3xui-api-client/main/preview.png) *(Placeholder for your preview)*
+---
 
-## Features
-- **Modern UI**: Glassmorphism aesthetic with dark mode.
-- **Mobile First**: Bottom navigation and optimized cards for phones.
-- **Real-time Metrics**: Dynamic charts for CPU, RAM, and Traffic.
-- **Proxy Server**: Secure Node.js backend to communicate with your panel.
+## ✨ Features
 
-## ☁️ Cloudflare Deployment (Recommended)
+- **🎨 Modern Glassmorphism UI**: High-end dark & light themes with smooth animations powered by GSAP, Three.js, and Vanta Globe.
+- **📊 Total Consumption Meter**: Displays all-time cumulative bandwidth (Total Used, Total Remaining, and Quota %) with silky-smooth progress glide and glowing plasma flare.
+- **📅 Monthly Period Cycle (1st to 30th/31st)**: Automatic calendar month period tracker (e.g. 1st – 31st Oct) with days-left countdown and cycle end dates.
+- **🔄 Smart Traffic Baseline Engine**: Resolves 3x-ui's single-counter limitation by locally tracking monthly baseline usage on the 1st of each month in `traffic_history.json`, accurately separating Lifetime Total from Current Monthly Consumption.
+- **👥 Live Connected Users / Device Count**: Displays active devices and connected client IPs from 3x-ui IP logs and active sessions.
+- **📡 3-Node Interactive Latency Pipeline**: Visual packet travel across **Client ➔ VPS Proxy ➔ Internet** with individual hop latencies, jitter tracking, and quality badges.
+- **⚡ Dynamic Network Speed Flow**: Realtime EMA-smoothed download and upload indicators featuring frequency-scaled directional arrow animations.
+- **✨ Smart Consumption Flares**: Glowing white plasma flare radiating at the tip of the usage meter for limited quotas (automatically hidden for unlimited data).
+- **📱 100% Mobile Responsive**: Generous card breathing room, spacious conduit padding in the 3-node latency pipeline, mobile bottom navigation, and vertical stats cards.
+- **📊 Real-Time Server Metrics**: Live interactive charts for CPU, RAM, and inbound/outbound bandwidth consumption (Chart.js).
+- **🔑 Native API Token & Session Auth**: Fully compatible with 3x-ui scoped Bearer tokens ([official docs](https://docs.sanaei.dev/docs/reference/api/api-tokens/)) and admin credentials.
+- **🔒 Secure API Proxy**: Built-in backend proxy (Node.js Express / Cloudflare Functions) to eliminate CORS issues and protect your 3x-ui credentials.
+- **⚡ Flexible Deployment**: Deploy via **Node.js (PM2)**, **Cloudflare Pages** (Serverless), or **Docker / Coolify**.
 
-This dashboard is ready to be hosted on **Cloudflare Pages**.
+---
 
-1. **Upload to GitHub**: Push this folder to your GitHub.
-2. **Setup Cloudflare Pages**:
-   - Go to the Cloudflare Dashboard -> Workers & Pages -> Create -> Pages -> Connect to Git.
-   - Select your repository.
-   - **Build Settings**: Leave everything blank (Build command and Build output directory should be empty if your files are in the root).
-3. **Set Environment Variables**:
-   - Inside your Cloudflare Pages project, go to **Settings** -> **Variables and Secrets**.
-   - Add these three variables so the backend can talk to your server:
-     - `PANEL_URL` : (e.g., `http://1.2.3.4:2053`)
-     - `PANEL_USERNAME` : (your admin user)
-     - `PANEL_PASSWORD` : (your admin pass)
-4. **Deploy**: Cloudflare will automatically detect the `functions` folder and use it as your backend!
+## 🛠️ Architecture
 
-## 🐳 Coolify / Docker Deployment (Same VPS as 3x-ui)
+```text
+[ Browser / Mobile Client ]
+            │  (SSE Live Stream: Bandwidth, Users, Latency)
+            ▼
+[ Dashboard Proxy (Node.js :3000 / Cloudflare Functions) ]
+            │  (Proxies requests with Bearer Token / Session Cookie)
+            ▼
+[ 3x-ui Panel (http://127.0.0.1:2053/web_base_path) ]
+```
 
-Run the dashboard on the **same VPS** as your 3x-ui panel using Coolify. The
-included `Dockerfile` and `server.js` mirror the Cloudflare Functions exactly,
-so behavior is identical — Coolify builds and runs it straight from this repo,
-no extra setup files needed.
+---
 
-1. **Coolify → New Resource → Application → Public/Private Repository.**
-   - Select this repository and your branch.
-   - **Build Pack:** `Dockerfile` (Coolify auto-detects the `Dockerfile` in the repo root).
-2. **Environment Variables** (Coolify → your app → Environment Variables):
-   - `PANEL_URL` = `http://127.0.0.1:2053` — since the dashboard runs on the same
-     VPS, point it at the panel's local address. If both run as Docker containers,
-     use the panel's container name instead (e.g. `http://3x-ui:2053`).
-   - `PANEL_USERNAME` = your panel admin username.
-   - `PANEL_PASSWORD` = your panel admin password (also the dashboard admin token).
-   - *(optional)* `PANEL_API_TOKEN` — panel Settings → Security → API Token; preferred over username/password when set.
-   - *(optional)* `PANEL_NODES` — JSON array to also resolve clients that were added directly on a node's own panel, e.g. `[{"name":"Node1","url":"https://node1.example.com:2053/base","apiToken":"..."}]`. Each node needs its own API token.
-   - *(optional)* `PORT` (default `8080`), `METRICS_INTERVAL_MS` (default `1500`), `METRICS_CACHE_TTL` (default `1`) — safe to lower further since the dashboard runs on the same VPS as the panel with no external rate limits.
-3. **Networking:**
-   - The container listens on **`8080`** — set this as the exposed/port mapping.
-   - Add your **Domain** (e.g. `dashboard.example.com`); Coolify issues a Let's
-     Encrypt certificate automatically.
-   - If using `PANEL_URL=http://127.0.0.1:2053`, enable **host networking** (or
-     map the host) so the container can reach the panel on localhost. Otherwise
-     put the panel and dashboard on the same Coolify/Docker network and use the
-     container name.
-4. **Deploy.** Coolify builds the image and starts it. A built-in `/healthz`
-   route is available for Coolify's Health Check setting. Every push to the
-   selected branch auto-redeploys.
+## 📋 Prerequisites
 
-### If ports 80/443 are already taken (run on a custom port, no proxy)
+Before setting up the dashboard, ensure you have:
+1. A running **3x-ui panel** (e.g. from [MHSanaei/3x-ui](https://github.com/MHSanaei/3x-ui)).
+2. Your panel's **Full URL** (including `http://` or `https://`, port, and **Web Base Path** if configured).
+3. Either:
+   - Panel **Admin Username & Password**, or
+   - Panel **API Token** (*3x-ui sidebar → Panel Settings → Security tab → API Token*).
 
-If your 3x-ui panel (or another app) already owns `80`/`443`, Coolify's built-in
-proxy can't route a domain to the dashboard. In that case, skip the proxy and
-publish the container on a **direct custom port** instead:
+> [!IMPORTANT]
+> **Web Base Path Requirement:**  
+> If your 3x-ui panel uses a custom URL path (e.g. `http://127.0.0.1:2053/secretpath/`), you **MUST** include the subpath in `PANEL_URL`:  
+> `PANEL_URL="http://127.0.0.1:2053/secretpath"`  
+> Omitting the web base path will result in `HTTP 404 Not Found`.
 
-1. **Coolify → your app → Configuration → Network → "Ports Mappings"**
-   - Set `8090:8080` (host `8090` → container `8080`). Pick any free, non-common
-     host port; confirm it's free first: `sudo ss -tulpn | grep :8090`.
-   - Leave the **Domains** field empty (you're not using the proxy).
-2. **Open the port in your firewall.** On Oracle Cloud (and most VPS) the port is
-   blocked by default at two layers:
-   - **Cloud Security List / firewall:** add an Ingress rule allowing TCP `8090`
-     from `0.0.0.0/0` (Oracle Cloud → VCN → Security Lists).
-   - **Host iptables:** `sudo iptables -I INPUT -p tcp --dport 8090 -j ACCEPT`
-     then persist (`sudo netfilter-persistent save`, or use `ufw allow 8090/tcp`).
-3. **Redeploy**, then open `http://YOUR_VPS_IP:8090`.
+---
 
-The dashboard's env vars stay the same (`PANEL_URL`, `PANEL_USERNAME`,
-`PANEL_PASSWORD`) — only the external port changes.
+## 🚀 Installation & Deployment
 
-### Clean HTTPS domain behind your existing nginx (recommended)
+### Method 1: VPS Setup with PM2 (Recommended)
 
-If your panel already owns 80/443 but you want a real domain like
-`https://dashboard.trackydev.site` (not `IP:port`), reverse-proxy it through the
-nginx that's already on the box. A ready-to-use config with SSE support is at
-[`deploy/nginx-dashboard.conf`](deploy/nginx-dashboard.conf):
+Run the dashboard directly on your VPS as a persistent background process.
 
-1. **DNS:** `A` record `dashboard.trackydev.site` → your VPS IP.
-2. **Publish the container locally** — either:
-   - Coolify → app → **Ports Mappings**: `127.0.0.1:8090:8080`, **or**
-   - Deploy with the committed [`docker-compose.yml`](docker-compose.yml)
-     (Coolify → Build Pack: *Docker Compose*), which already maps
-     `127.0.0.1:8090:8080` in code.
+#### 1. Quick Install One-Liner
+```bash
+cd ~ && \
+git clone https://github.com/ganidusandeepa/3x-ui-dashboard-.git ~/3x-ui-dashboard- && \
+cd ~/3x-ui-dashboard- && \
+npm install --production && \
+cp .env.example .env
+```
 
-   Either way it's bound to localhost, so it stays private and needs **no**
-   firewall/Security-List change.
-3. **Run the automated setup script** (installs nginx/certbot if needed, writes
-   the config, repairs any broken symlink, reloads, and issues the TLS cert):
+#### 2. Configure Environment Variables
+Edit your `.env` file:
+```bash
+nano .env
+```
+
+```ini
+# Full URL to your 3x-ui panel
+PANEL_URL=http://127.0.0.1:2053
+
+# Panel Authentication (Option A: API Token - Recommended)
+PANEL_API_TOKEN=
+
+# Panel Authentication (Option B: Admin Credentials)
+PANEL_USERNAME=admin
+PANEL_PASSWORD=your_password_here
+
+# Port for this dashboard (Default: 3000)
+PORT=3000
+
+# Mask raw VPS IPs from client view for privacy
+MASK_VPS_DETAILS=true
+
+# Keep admin login disabled on client-facing dashboard
+ADMIN_LOGIN_ENABLED=false
+```
+
+#### 3. Start with PM2
+Launch the server using PM2 with the `--insecure-http-parser` argument (this prevents HTTP parsing errors when communicating with Go-based x-ui HTTP responses):
+
+```bash
+pm2 start server.js --name "3x-dashboard" --node-args="--insecure-http-parser" --update-env
+pm2 save
+pm2 startup
+```
+
+#### 4. Open Firewall Port
+```bash
+sudo ufw allow 3000/tcp
+sudo ufw reload
+```
+
+Access your dashboard at `http://<YOUR_VPS_IP>:3000`.
+
+---
+
+### Method 2: Nginx Reverse Proxy with SSL (HTTPS Domain)
+
+To access your dashboard securely at `https://dashboard.yourdomain.com`:
+
+1. **Install Nginx & Certbot:**
    ```bash
-   sudo bash deploy/setup-dashboard.sh vps.trackydev.site
-   # optional: sudo bash deploy/setup-dashboard.sh vps.trackydev.site 127.0.0.1:8090 you@mail.com
+   sudo apt update && sudo apt install -y nginx certbot python3-certbot-nginx
    ```
-   Not got the repo on the VPS? Paste the same script inline — see the chat/PR,
-   or `curl` it from your branch. It's idempotent and safe to re-run.
-4. Open `https://vps.trackydev.site`.
 
-   *(Manual equivalent, if you prefer: copy `deploy/nginx-dashboard.conf` to
-   `/etc/nginx/sites-available/`, symlink it into `sites-enabled/`, `nginx -t`,
-   reload, then `certbot --nginx -d <domain>`.)*
+2. **Create Nginx Configuration:**
+   ```bash
+   sudo nano /etc/nginx/sites-available/3x-dashboard
+   ```
 
-## 📦 Local Installation (Optional)
-1. Install dependencies: `npm install`
-2. Set env vars: `PANEL_URL`, `PANEL_USERNAME`, `PANEL_PASSWORD` (defaults target `http://127.0.0.1:2053`).
-3. Start: `npm start` — serves the dashboard and panel proxy on port `8080` (override with `PORT`).
+   ```nginx
+   server {
+       listen 80;
+       server_name dashboard.yourdomain.com;
 
-## 🎨 Features
-- **Zero-Latency Monitoring**: Hosted on Cloudflare's Edge.
-- **Mobile Optimized**: Home, Nodes, Users, and System tabs.
-- **GSAP & Three.js**: High-end animations and 3D backgrounds.
+       location / {
+           proxy_pass http://127.0.0.1:3000;
+           proxy_http_version 1.1;
+
+           # WebSocket and Server-Sent Events (SSE) support
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection "upgrade";
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+
+           # Disable buffering for live traffic meters
+           proxy_buffering off;
+           proxy_cache off;
+           chunked_transfer_encoding off;
+           proxy_read_timeout 86400s;
+       }
+   }
+   ```
+
+3. **Enable Site & Obtain SSL Certificate:**
+   ```bash
+   sudo ln -s /etc/nginx/sites-available/3x-dashboard /etc/nginx/sites-enabled/
+   sudo nginx -t
+   sudo systemctl reload nginx
+   sudo certbot --nginx -d dashboard.yourdomain.com
+   ```
+
+---
+
+### Method 3: Cloudflare Pages (Serverless)
+
+1. Fork or push this repository to your GitHub account.
+2. In the **[Cloudflare Dashboard](https://dash.cloudflare.com/)**:
+   - Navigate to **Workers & Pages** → **Create** → **Pages** → **Connect to Git**.
+   - Select `3x-ui-dashboard-`.
+3. **Build settings**: Leave both **Build command** and **Build output directory** empty.
+4. **Environment Variables**: Add `PANEL_URL`, `PANEL_USERNAME`, and `PANEL_PASSWORD`.
+5. Click **Save and Deploy**.
+
+---
+
+### Method 4: Docker / Coolify
+
+```bash
+docker run -d \
+  --name 3x-ui-dashboard \
+  --restart always \
+  -p 3000:3000 \
+  -e PANEL_URL="http://127.0.0.1:2053" \
+  -e PANEL_USERNAME="admin" \
+  -e PANEL_PASSWORD="password" \
+  --network host \
+  3x-ui-dashboard
+```
+
+---
+
+## 🔄 Updating the Dashboard
+
+To update your running installation to the latest version:
+
+```bash
+cd ~/3x-ui-dashboard-
+git fetch origin main
+git reset --hard origin/main
+npm install --production
+pm2 restart 3x-dashboard --node-args="--insecure-http-parser" --update-env
+```
+
+Or run the built-in update script:
+```bash
+bash update.sh
+```
+
+---
+
+## 🛠️ Management Commands
+
+| Action | Command |
+|---|---|
+| Check status | `pm2 status` |
+| View live logs | `pm2 logs 3x-dashboard` |
+| Restart dashboard | `pm2 restart 3x-dashboard --node-args="--insecure-http-parser"` |
+| Stop dashboard | `pm2 stop 3x-dashboard` |
+| Live monitor | `pm2 monit` |
+
+---
+
+## ❓ FAQ & Troubleshooting
+
+### Why is `--insecure-http-parser` required?
+3x-ui is built on Go's Gin framework, which can emit raw HTTP headers that Node.js 18+ strict HTTP parser rejects with `HPE_INVALID_VERSION`. Passing `--insecure-http-parser` enables Node's lenient HTTP parser, completely resolving this compatibility issue.
+
+### Panel returns 404 Not Found
+Ensure your `PANEL_URL` in `.env` includes the Web Base Path if one was configured in your 3x-ui panel settings (e.g. `http://127.0.0.1:2053/secretpath`).
+
+---
+
+## 📄 License
+
+MIT License. Designed with ❤️ for the 3x-ui & Xray community.

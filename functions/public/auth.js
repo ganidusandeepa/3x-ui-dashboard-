@@ -1,14 +1,3 @@
-function parseMaybe(v, fallback) {
-  if (v == null || v === '') return fallback || {};
-  if (typeof v === 'object') return v;
-  try { return JSON.parse(v); } catch (e) { return fallback || {}; }
-}
-function normIp(x) {
-  if (typeof x === 'string') return x;
-  if (x && typeof x === 'object') return x.ip || x.address || x.clientIp || x.remote || '';
-  return '';
-}
-
 export async function onRequestPost(context) {
   const { request, env } = context;
 
@@ -76,7 +65,7 @@ export async function onRequestPost(context) {
     let resolvedUuid = foundClient.uuid;
     if (!resolvedUuid && foundInbound) {
       try {
-        const inbSettings = parseMaybe(foundInbound.settings);
+        const inbSettings = JSON.parse(foundInbound.settings || '{}');
         const clientConf = (inbSettings.clients || []).find(c => c.email === foundClient.email);
         resolvedUuid = clientConf?.id || null;
       } catch (e) {}
@@ -89,39 +78,26 @@ export async function onRequestPost(context) {
     let vlessLink = null;
 
     try {
-      for (const p of ['clients/onlines', 'inbounds/onlines']) {
-        try {
-          const onRes = await fetch(`${PANEL_URL}/panel/api/${p}`, {
-            method: 'POST',
-            headers: { "Cookie": cookie, "Content-Type": "application/json" },
-            body: JSON.stringify({})
-          });
-          const onData = await onRes.json();
-          if (onData && onData.success && Array.isArray(onData.obj)) {
-            isOnline = onData.obj.includes(foundClient.email);
-            break;
-          }
-        } catch (e) {}
+      const onRes = await fetch(`${PANEL_URL}/panel/api/inbounds/onlines`, {
+        method: 'POST',
+        headers: { "Cookie": cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      });
+      const onData = await onRes.json();
+      if (onData && onData.success && Array.isArray(onData.obj)) {
+        isOnline = onData.obj.includes(foundClient.email);
       }
     } catch (e) {}
 
     try {
-      const em = encodeURIComponent(foundClient.email);
-      for (const p of [`clients/ips/${em}`, `inbounds/clientIps/${em}`]) {
-        try {
-          const ipRes = await fetch(`${PANEL_URL}/panel/api/${p}`, {
-            method: 'POST',
-            headers: { "Cookie": cookie, "Content-Type": "application/json" },
-            body: JSON.stringify({})
-          });
-          const ipData = await ipRes.json();
-          if (ipData && ipData.success) {
-            if (Array.isArray(ipData.obj)) { ips = ipData.obj.map(normIp).filter(Boolean); break; }
-            if (typeof ipData.obj === 'string' && ipData.obj && !/no ip/i.test(ipData.obj)) {
-              ips = ipData.obj.split(/[,\s]+/).filter(Boolean); break;
-            }
-          }
-        } catch (e) {}
+      const ipRes = await fetch(`${PANEL_URL}/panel/api/inbounds/clientIps/${encodeURIComponent(foundClient.email)}`, {
+        method: 'POST',
+        headers: { "Cookie": cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      });
+      const ipData = await ipRes.json();
+      if (ipData && ipData.success && Array.isArray(ipData.obj)) {
+        ips = ipData.obj;
       }
     } catch (e) {}
 
@@ -130,7 +106,7 @@ export async function onRequestPost(context) {
       subLink = foundClient.subId ? `${PANEL_URL}/sub/${foundClient.subId}` : null;
 
       if (foundInbound) {
-        const stream = parseMaybe(foundInbound.streamSettings);
+        const stream = JSON.parse(foundInbound.streamSettings || '{}');
         const port = foundInbound.port;
         const remark = foundInbound.remark || String(port);
         const network = stream.network || 'tcp';
@@ -165,7 +141,7 @@ export async function onRequestPost(context) {
     return new Response(JSON.stringify({
       success: true,
       role: 'client',
-      clientData: { ...foundClient, uuid: resolvedUuid, isOnline, subLink, vlessLink }
+      clientData: { ...foundClient, uuid: resolvedUuid, isOnline, ips, subLink, vlessLink }
     }), {
       headers: { 'Content-Type': 'application/json' }
     });

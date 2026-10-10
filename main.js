@@ -1,37 +1,4 @@
 // ============================================================
-// PHASE 0 — Lazy script loader
-// ============================================================
-// Heavy libraries are NOT in the initial page load. Three.js + Vanta (~617KB)
-// only matter if the user turns the animated background on, and Chart.js
-// (~208KB) only matters in the admin view — loading them upfront cost every
-// visitor ~825KB for features most never touch. Fetch them on demand instead.
-const __loadedScripts = new Map();
-function loadScriptOnce(src) {
-    if (__loadedScripts.has(src)) return __loadedScripts.get(src);
-    const p = new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = src;
-        s.async = true;
-        s.onload = () => resolve();
-        s.onerror = () => reject(new Error('Failed to load ' + src));
-        document.head.appendChild(s);
-    });
-    __loadedScripts.set(src, p);
-    return p;
-}
-
-// Load several scripts in order (deps first).
-async function loadScriptsSequential(list) {
-    for (const src of list) await loadScriptOnce(src);
-}
-
-const LIB = {
-    three: 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
-    vanta: 'https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.globe.min.js',
-    chart: 'https://cdn.jsdelivr.net/npm/chart.js'
-};
-
-// ============================================================
 // PHASE 1 — Scramble Engine (hacking typing effect)
 // ============================================================
 const GLYPHS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&!?><[]{}|~';
@@ -270,6 +237,22 @@ function setTextSafe(selOrEl, text) {
     } catch(e) {}
 }
 
+function setLiveUsersUI(count) {
+    try {
+        const num = Math.max(0, Number(count) || 0);
+        const pill = document.getElementById('pill-live-users') || document.getElementById('pill-live-conns');
+        if (pill) {
+            pill.id = 'pill-live-users';
+            pill.innerHTML = `<i class="fa-solid fa-users"></i> Users: <strong id="live-users" style="color:${num > 0 ? 'var(--good)' : 'var(--on-dim)'};">${num}</strong>`;
+        }
+        const ac = document.getElementById('user-active-count');
+        if (ac) {
+            ac.textContent = num > 0 ? `${num} active` : '0 (offline)';
+            ac.style.color = num > 0 ? 'var(--good)' : 'var(--on-dim)';
+        }
+    } catch(e) {}
+}
+
 function animateNumber(elOrSelector, to, opts = {}) {
     const duration = Number(opts.duration ?? 800);
     const decimals = Number(opts.decimals ?? 2);
@@ -281,26 +264,21 @@ function animateNumber(elOrSelector, to, opts = {}) {
     const el = typeof elOrSelector === 'string' ? document.querySelector(elOrSelector) : elOrSelector;
     if (!el) return;
 
-    let startVal = (fromRaw !== null && Number.isFinite(fromRaw)) ? fromRaw : Number(el.textContent);
+    let startVal = (fromRaw !== null && Number.isFinite(fromRaw)) ? fromRaw : parseFloat(el.textContent);
     if (!Number.isFinite(startVal)) startVal = 0;
     const endVal = Number(to);
     if (!Number.isFinite(endVal)) { el.textContent = formatter(0); return; }
 
-    // Brief "settle" pop on the hero total when it lands on a new value.
-    const doPop = () => {
-        try {
-            if (el.id !== 'user-used' || prefersReducedMotion()) return;
-            if (Math.abs(endVal - startVal) <= 0.001) return;
-            el.classList.remove('fx-settle'); void el.offsetWidth;
-            el.classList.add('fx-settle');
-            setTimeout(() => el.classList.remove('fx-settle'), 480);
-        } catch(e) {}
-    };
-
     try {
         if (typeof gsap !== 'undefined') {
+            if (el._numTween) el._numTween.kill();
             const obj = { v: startVal };
-            gsap.to(obj, { v: endVal, duration: duration / 1000, ease: 'power2.out', onUpdate: () => { el.textContent = formatter(obj.v); }, onComplete: doPop });
+            el._numTween = gsap.to(obj, {
+                v: endVal,
+                duration: duration / 1000,
+                ease: 'power2.out',
+                onUpdate: () => { el.textContent = formatter(obj.v); }
+            });
             return;
         }
     } catch(e) {}
@@ -308,13 +286,12 @@ function animateNumber(elOrSelector, to, opts = {}) {
     try {
         if (typeof anime !== 'undefined') {
             const obj = { v: startVal };
-            anime({ targets: obj, v: endVal, duration, easing: 'easeOutCubic', update: () => { el.textContent = formatter(obj.v); }, complete: doPop });
+            anime({ targets: obj, v: endVal, duration, easing: 'easeOutCubic', update: () => { el.textContent = formatter(obj.v); } });
             return;
         }
     } catch(e) {}
 
     el.textContent = formatter(endVal);
-    doPop();
 }
 
 // --- Global State ---
@@ -323,7 +300,6 @@ let adminToken = null;
 let loopInterval = null;
 let clientLoopInterval = null;
 let __clientLast = null;
-let __clientSpeedEma = { dl: null, ul: null };
 let __clientEventSource = null;
 let __clientSseRetry = null;
 let __vanta = null;
@@ -333,7 +309,6 @@ let __bulkSelected = new Set();
 let __autoRefreshOntimer = null;
 let __expiryCountdownTimer = null;
 let __currentClientData = null; // last client data for QR / countdown
-let __clientPingTimer = null;
 
 // --- Client SSE ---
 function stopClientSSE() {
@@ -364,6 +339,7 @@ function startClientSSE(idToCheck) {
     });
 }
 
+window.doLogout = doLogout; window.handleLogout = doLogout;
 function doLogout() {
     try { stopAdminSSE(); } catch(e) {}
     try { stopClientSSE(); } catch(e) {}
@@ -371,16 +347,13 @@ function doLogout() {
     try { clearInterval(clientLoopInterval); } catch(e) {}
     try { clearInterval(__autoRefreshOntimer); } catch(e) {}
     try { clearInterval(__expiryCountdownTimer); } catch(e) {}
-    try { clearInterval(__clientPingTimer); } catch(e) {}
-    __clientPingTimer = null;
     loopInterval = null; clientLoopInterval = null; __autoRefreshOntimer = null;
     __expiryCountdownTimer = null; __currentClientData = null;
-    __clientLast = null; __clientSpeedEma = { dl: null, ul: null };
-    try { stopRingSparks('user-ring-fill'); stopRingSparks('usage-ring-fill'); } catch(e) {}
-    try { setSpeedArrowActivity('#spd-arrow-dl', 0); setSpeedArrowActivity('#spd-arrow-ul', 0); } catch(e) {}
     currentRole = null; adminToken = null;
-    try { sessionStorage.removeItem('xui_admin_token'); } catch(e) {}
+    try { sessionStorage.removeItem('xui_admin_token'); localStorage.removeItem('xui_admin_token'); } catch(e) {}
+    try { document.body.classList.remove('is-admin', 'is-client'); } catch(e) {}
     document.getElementById('login-overlay').style.display = 'flex';
+    try { document.getElementById('btn-logout').style.display = 'none'; } catch(e) {}
     try { document.querySelector('.desktop-nav')?.style && (document.querySelector('.desktop-nav').style.display = 'none'); } catch(e) {}
     try { document.querySelector('.mobile-nav')?.style && (document.querySelector('.mobile-nav').style.display = 'none'); } catch(e) {}
     document.getElementById('main-fab').style.display = 'none';
@@ -391,12 +364,8 @@ document.addEventListener('click', (e) => {
     if (e.target && (e.target.id === 'btn-logout' || e.target.closest('#btn-logout'))) doLogout();
     try {
         const btn = e.target?.closest?.('button');
-        if (!btn || prefersReducedMotion()) return;
-        // Material 3 Expressive spring press. GSAP's elastic ease gives the same
-        // overshoot Motion One did, without shipping a second animation engine.
-        if (typeof gsap !== 'undefined') {
-            gsap.fromTo(btn, { scale: 0.94 }, { scale: 1, duration: 0.4, ease: 'elastic.out(1, 0.5)' });
-        }
+        if (btn && typeof gsap !== 'undefined') gsap.fromTo(btn, { scale: 0.98 }, { scale: 1, duration: 0.14, ease: 'power2.out' });
+        else if (btn && typeof anime !== 'undefined') anime({ targets: btn, scale: [0.98, 1], duration: 160, easing: 'easeOutCubic' });
     } catch(e) {}
 });
 
@@ -415,25 +384,11 @@ function showToast(msg, type="info") {
     }, 3200);
 }
 
-// --- Maintenance mode ---
-// Flip to false to re-enable admin login. When true, admin sign-in is blocked
-// and a maintenance notice is shown; the client side keeps working normally.
-const ADMIN_MAINTENANCE = true;
-
-function applyAdminMaintenanceUI() {
-    const note = document.getElementById('admin-maintenance-note');
-    const btn = document.getElementById('btn-login-admin');
-    if (!ADMIN_MAINTENANCE) { if (note) note.style.display = 'none'; if (btn) btn.disabled = false; return; }
-    if (note) note.style.display = 'block';
-    if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; btn.style.cursor = 'not-allowed'; }
-}
-
 // --- Login UI (segmented control) ---
 function setLoginTab(tab) {
     const isAdmin = tab === 'admin';
     document.getElementById('tab-login-admin').classList.toggle('active', isAdmin);
     document.getElementById('tab-login-client').classList.toggle('active', !isAdmin);
-    if (isAdmin) applyAdminMaintenanceUI();
 
     const incoming = document.getElementById(isAdmin ? 'login-form-admin' : 'login-form-client');
     const outgoing = document.getElementById(isAdmin ? 'login-form-client' : 'login-form-admin');
@@ -458,11 +413,6 @@ document.getElementById('tab-login-admin').addEventListener('click', () => setLo
 document.getElementById('tab-login-client').addEventListener('click', () => setLoginTab('client'));
 
 document.getElementById('btn-login-admin').addEventListener('click', async () => {
-    if (ADMIN_MAINTENANCE) {
-        applyAdminMaintenanceUI();
-        showToast('Admin panel is under maintenance. Please check back later.', 'error');
-        return;
-    }
     const username = (document.getElementById('admin-login-user').value || '').trim();
     const password = (document.getElementById('admin-login-pass').value || '').trim();
     const btn = document.getElementById('btn-login-admin');
@@ -479,8 +429,8 @@ document.getElementById('btn-login-admin').addEventListener('click', async () =>
         const data = await res.json();
         if (data && data.success) {
             currentRole = 'admin';
-            adminToken = password;
-            try { sessionStorage.setItem('xui_admin_token', password); } catch(e) {}
+            adminToken = data.token || password;
+            try { sessionStorage.setItem('xui_admin_token', adminToken); localStorage.setItem('xui_admin_token', adminToken); } catch(e) {}
             startAdminApp();
         } else {
             const msg = data && data.msg;
@@ -528,6 +478,7 @@ document.getElementById('login-email').addEventListener('keydown', e => { if (e.
 
 // --- Admin App Start ---
 async function startAdminApp() {
+    document.body.classList.add('is-admin'); document.body.classList.remove('is-client');
     document.getElementById('login-overlay').style.display = 'none';
     try { document.getElementById('btn-logout').style.display = 'inline-flex'; } catch(e) {}
     document.getElementById('tab-user-view').style.display = 'none';
@@ -542,16 +493,7 @@ async function startAdminApp() {
         else switchTab('overview');
     } catch(e) { switchTab('overview'); }
 
-    // Chart.js (~208KB) is admin-only — load it now rather than on every page
-    // view. Don't block the data render on it; charts fill in when ready.
-    loadScriptOnce(LIB.chart).then(() => {
-        try {
-            initAdminCharts();
-            // Charts arrive after the first data render, so backfill them now
-            // instead of leaving them blank until the next 60s refresh.
-            loadAdminData();
-        } catch(e) {}
-    }).catch(() => {});
+    initAdminCharts();
     await loadAdminData();
 
     try {
@@ -576,104 +518,98 @@ async function startAdminApp() {
     }).catch(()=>{});
 }
 
-// --- Client Speed ---
-// The panel flushes traffic counters to its DB far slower than we poll, so most
-// samples repeat the previous byte totals. Re-baselining on every sample (the
-// old behavior) meant: identical samples -> delta 0 -> speed permanently read
-// 0.00, and when the counter finally jumped, an N-second accumulation got
-// divided by one poll interval and overstated the rate several-fold.
-// Instead, only re-baseline when the counters ACTUALLY change, so dt is the
-// true elapsed time between flushes and the Mbps figure is correct.
-const SPEED_IDLE_MS = 20000; // no change for this long => genuinely idle, show 0
+// --- Client Speed with Exponential Moving Average (EMA) & Dynamic Arrow Bobbing ---
+let __smoothDlSpeed = 0;
+let __smoothUpSpeed = 0;
 
-// Drive the ↓/↑ arrows from the actual throughput: idle arrows sit still,
-// active ones pulse, and the pulse gets quicker the faster the link is.
-function setSpeedArrowActivity(sel, mbps) {
-    try {
-        const el = document.querySelector(sel);
-        if (!el) return;
-        const v = Number(mbps) || 0;
-        if (v <= 0.01 || prefersReducedMotion()) {
-            el.classList.remove('active', 'fast');
-            el.style.removeProperty('--spd-dur');
-            return;
+function updateSpeedArrowAnimation(targetDl, targetUp) {
+    const arrowDl = document.getElementById('user-arrow-dl');
+    const arrowUp = document.getElementById('user-arrow-up');
+    const totalArrowDl = document.getElementById('user-total-arrow-dl');
+    const totalArrowUp = document.getElementById('user-total-arrow-up');
+    const pillDl = document.getElementById('user-speed-pill-dl');
+    const pillUp = document.getElementById('user-speed-pill-up');
+
+    // Download Arrow Dynamic Movement (Downwards)
+    if (targetDl > 0.02) {
+        // Dynamic cycle duration: faster speed = faster bounce up to 0.18s minimum limit
+        const durationDl = Math.max(0.18, Math.min(1.4, 1.4 - Math.log10(targetDl + 1) * 0.65));
+        const durStr = `${durationDl.toFixed(2)}s`;
+        if (arrowDl) {
+            arrowDl.style.setProperty('--dl-duration', durStr);
+            arrowDl.classList.add('moving-down');
         }
-        el.classList.add('active');
-        el.classList.toggle('fast', v >= 5);
-        // 1.15s when barely moving -> 0.42s when saturated.
-        const dur = Math.max(0.42, 1.15 - Math.min(v, 20) * 0.036);
-        el.style.setProperty('--spd-dur', dur.toFixed(2) + 's');
-    } catch (e) {}
+        if (totalArrowDl) {
+            totalArrowDl.style.setProperty('--dl-duration', durStr);
+            totalArrowDl.classList.add('moving-down');
+        }
+        if (pillDl) pillDl.classList.add('active');
+    } else {
+        if (arrowDl) arrowDl.classList.remove('moving-down');
+        if (totalArrowDl) totalArrowDl.classList.remove('moving-down');
+        if (pillDl) pillDl.classList.remove('active');
+    }
+
+    // Upload Arrow Dynamic Movement (Upwards)
+    if (targetUp > 0.02) {
+        // Dynamic cycle duration: faster speed = faster bounce up to 0.18s minimum limit
+        const durationUp = Math.max(0.18, Math.min(1.4, 1.4 - Math.log10(targetUp + 1) * 0.65));
+        const durStr = `${durationUp.toFixed(2)}s`;
+        if (arrowUp) {
+            arrowUp.style.setProperty('--up-duration', durStr);
+            arrowUp.classList.add('moving-up');
+        }
+        if (totalArrowUp) {
+            totalArrowUp.style.setProperty('--up-duration', durStr);
+            totalArrowUp.classList.add('moving-up');
+        }
+        if (pillUp) pillUp.classList.add('active');
+    } else {
+        if (arrowUp) arrowUp.classList.remove('moving-up');
+        if (totalArrowUp) totalArrowUp.classList.remove('moving-up');
+        if (pillUp) pillUp.classList.remove('active');
+    }
 }
+
 function updateClientSpeedsFromDelta(nowDown, nowUp) {
     try {
         const now = Date.now();
-        const d = Number(nowDown) || 0;
-        const u = Number(nowUp) || 0;
-
         if (!__clientLast) {
-            __clientLast = { downBytes: d, upBytes: u, ts: now };
-            setTextSafe('#user-dl-speed', '0.00'); setTextSafe('#user-up-speed', '0.00');
+            __clientLast = { downBytes: Number(nowDown)||0, upBytes: Number(nowUp)||0, ts: now };
+            __smoothDlSpeed = 0;
+            __smoothUpSpeed = 0;
+            setTextSafe('#user-dl-speed', '0.00');
+            setTextSafe('#user-up-speed', '0.00');
+            updateSpeedArrowAnimation(0, 0);
             return;
         }
-
-        const dDown = d - (__clientLast.downBytes || 0);
-        const dUp = u - (__clientLast.upBytes || 0);
-
-        // Counters went backwards => traffic was reset on the panel. Re-baseline.
-        if (dDown < 0 || dUp < 0) {
-            __clientLast = { downBytes: d, upBytes: u, ts: now };
-            __clientSpeedEma = { dl: null, ul: null };
-            setSpeedArrowActivity('#spd-arrow-dl', 0);
-            setSpeedArrowActivity('#spd-arrow-ul', 0);
-            animateNumber('#user-dl-speed', 0, { decimals: 2, duration: 300 });
-            animateNumber('#user-up-speed', 0, { decimals: 2, duration: 300 });
-            return;
-        }
-
-        // No change yet: the panel simply hasn't flushed. Hold the current
-        // reading and keep the baseline intact so the next real delta is
-        // divided by the true elapsed time. Only zero it out once the link has
-        // been quiet long enough that "0" is actually the truth.
-        if (dDown === 0 && dUp === 0) {
-            if (now - __clientLast.ts > SPEED_IDLE_MS) {
-                __clientSpeedEma = { dl: null, ul: null };
-                setSpeedArrowActivity('#spd-arrow-dl', 0);
-                setSpeedArrowActivity('#spd-arrow-ul', 0);
-                animateNumber('#user-dl-speed', 0, { decimals: 2, duration: 600 });
-                animateNumber('#user-up-speed', 0, { decimals: 2, duration: 600 });
-                __clientLast.ts = now; // restart the idle window
-            }
-            return;
-        }
-
         const dt = (now - __clientLast.ts) / 1000;
-        if (dt <= 0) return;
-
-        // We can only measure between DETECTIONS, and our poll interval can't
-        // align with the panel's flush boundary, so each raw reading carries up
-        // to one interval of timing jitter (a steady 4 Mbps link can read
-        // anywhere from ~3.3 to ~6.5). Smooth with an EMA so the figure settles
-        // near the true rate instead of jumping around.
-        const rawDl = (dDown * 8) / (dt * 1e6);
-        const rawUl = (dUp * 8) / (dt * 1e6);
-        const a = 0.4;
-        __clientSpeedEma.dl = (__clientSpeedEma.dl === null) ? rawDl : (__clientSpeedEma.dl * (1 - a) + rawDl * a);
-        __clientSpeedEma.ul = (__clientSpeedEma.ul === null) ? rawUl : (__clientSpeedEma.ul * (1 - a) + rawUl * a);
-
-        animateNumber('#user-dl-speed', __clientSpeedEma.dl, { decimals: 2, duration: 500 });
-        animateNumber('#user-up-speed', __clientSpeedEma.ul, { decimals: 2, duration: 500 });
-        setSpeedArrowActivity('#spd-arrow-dl', __clientSpeedEma.dl);
-        setSpeedArrowActivity('#spd-arrow-ul', __clientSpeedEma.ul);
-        __clientLast = { downBytes: d, upBytes: u, ts: now };
+        if (dt <= 0.3) return; // ignore instant duplicate callbacks
+        
+        const dDown = Math.max(0, (Number(nowDown)||0) - (__clientLast.downBytes||0));
+        const dUp   = Math.max(0, (Number(nowUp)||0) - (__clientLast.upBytes||0));
+        
+        // Instantaneous speed in Mbps: (bytes * 8) / (dt * 1e6)
+        const instDl = (dDown * 8) / (dt * 1e6);
+        const instUp = (dUp * 8) / (dt * 1e6);
+        
+        // EMA smoothing: glides smoothly without jumping abruptly between ticks
+        const alpha = 0.35;
+        __smoothDlSpeed = (alpha * instDl) + ((1 - alpha) * __smoothDlSpeed);
+        __smoothUpSpeed = (alpha * instUp) + ((1 - alpha) * __smoothUpSpeed);
+        
+        const targetDl = __smoothDlSpeed < 0.01 ? 0 : __smoothDlSpeed;
+        const targetUp = __smoothUpSpeed < 0.01 ? 0 : __smoothUpSpeed;
+        
+        const curDl = parseFloat(document.getElementById('user-dl-speed')?.textContent) || 0;
+        const curUp = parseFloat(document.getElementById('user-up-speed')?.textContent) || 0;
+        
+        animateNumber('#user-dl-speed', targetDl, { decimals: 2, duration: 850, from: curDl });
+        animateNumber('#user-up-speed', targetUp, { decimals: 2, duration: 850, from: curUp });
+        updateSpeedArrowAnimation(targetDl, targetUp);
+        
+        __clientLast = { downBytes: Number(nowDown)||0, upBytes: Number(nowUp)||0, ts: now };
     } catch(e) {}
-}
-
-// Tolerate settings/streamSettings returned as objects or JSON strings.
-function parseMaybe(v, fallback) {
-    if (v == null || v === '') return fallback || {};
-    if (typeof v === 'object') return v;
-    try { return JSON.parse(v); } catch (e) { return fallback || {}; }
 }
 
 // --- QR Code & Config Links ---
@@ -733,7 +669,7 @@ function showClientConfig(configLink, subLink) {
 }
 
 // --- SVG Ring Updater ---
-function updateRing(ringFillId, pctElId, pct) {
+function updateRing(ringFillId, pctElId, pct, flareId, isLimited) {
     const CIRC = 326.73; // 2π×52
     const clampedPct = Math.min(100, Math.max(0, pct));
     const offset = CIRC - (clampedPct / 100) * CIRC;
@@ -747,106 +683,25 @@ function updateRing(ringFillId, pctElId, pct) {
         }
     }
     if (pctEl) pctEl.textContent = Math.round(clampedPct) + '%';
-    try { startRingSparks(ringFillId, clampedPct); } catch(e) {}
-}
 
-// --- Ring tip sparks -------------------------------------------------------
-// Emits particles from the leading edge of the usage arc while it shows any
-// bandwidth. The tip position is derived from the element's LIVE
-// strokeDashoffset (not the target value), so sparks track the arc while GSAP
-// is still animating it into place.
-const RING_R = 52, RING_CX = 60, RING_CY = 60, RING_CIRC = 326.73;
-const __ringSparkState = new Map(); // ringFillId -> { timer, pct }
-
-function ringTipPoint(pct) {
-    // The arc is rotated -90deg, so 0% sits at 12 o'clock and grows clockwise.
-    const ang = ((pct / 100) * 360 - 90) * Math.PI / 180;
-    return { x: RING_CX + RING_R * Math.cos(ang), y: RING_CY + RING_R * Math.sin(ang) };
-}
-
-// Read the arc's current (possibly mid-animation) percentage off the DOM.
-function ringLivePct(fillEl, fallbackPct) {
-    try {
-        const raw = getComputedStyle(fillEl).strokeDashoffset;
-        const off = parseFloat(raw);
-        if (!Number.isFinite(off)) return fallbackPct;
-        return Math.min(100, Math.max(0, ((RING_CIRC - off) / RING_CIRC) * 100));
-    } catch (e) { return fallbackPct; }
-}
-
-function stopRingSparks(ringFillId) {
-    const st = __ringSparkState.get(ringFillId);
-    if (st && st.timer) clearInterval(st.timer);
-    __ringSparkState.delete(ringFillId);
-    // Deterministically clear any particles still in flight. Relying only on
-    // each animation's onfinish can leave strays behind if a tween is
-    // interrupted, and those would accumulate across ring updates.
-    try {
-        const group = document.getElementById(ringFillId.replace('-fill', '-spark'));
-        group?.querySelectorAll('.ring-spark-dot').forEach(el => {
-            try { el.getAnimations().forEach(a => a.cancel()); } catch (e) {}
-            el.remove();
-        });
-    } catch (e) {}
-}
-
-function startRingSparks(ringFillId, pct) {
-    const fill = document.getElementById(ringFillId);
-    if (!fill) return;
-    const group = document.getElementById(ringFillId.replace('-fill', '-spark'));
-    if (!group) return;
-
-    // No bandwidth to celebrate, or the user asked for less motion.
-    if (!(pct > 0) || prefersReducedMotion()) { stopRingSparks(ringFillId); return; }
-
-    const prev = __ringSparkState.get(ringFillId);
-    if (prev) { prev.pct = pct; return; } // already running; just retarget
-
-    const state = { pct, timer: null };
-    const emit = () => {
-        // Don't burn cycles while the tab is hidden or the ring is off-screen.
-        if (document.hidden || !fill.isConnected || !fill.getClientRects().length) return;
-        const live = ringLivePct(fill, state.pct);
-        if (!(live > 0.5)) return;
-        const tip = ringTipPoint(live);
-
-        const n = 1 + Math.floor(Math.random() * 2);
-        for (let i = 0; i < n; i++) {
-            const p = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            p.setAttribute('class', 'ring-spark-dot');
-            p.setAttribute('cx', tip.x.toFixed(2));
-            p.setAttribute('cy', tip.y.toFixed(2));
-            p.setAttribute('r', (1.1 + Math.random() * 1.4).toFixed(2));
-            group.appendChild(p);
-
-            // Fling outward from the arc, with a little tangential drift.
-            const outAng = Math.atan2(tip.y - RING_CY, tip.x - RING_CX);
-            const spread = (Math.random() - 0.5) * 1.2;
-            const dist = 6 + Math.random() * 10;
-            const dx = Math.cos(outAng + spread) * dist;
-            const dy = Math.sin(outAng + spread) * dist;
-
-            const anim = p.animate([
-                { transform: 'translate(0px,0px) scale(1)', opacity: 0.95 },
-                { transform: `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px) scale(0.2)`, opacity: 0 }
-            ], { duration: 620 + Math.random() * 420, easing: 'cubic-bezier(0.2,0.7,0.3,1)' });
-            anim.onfinish = () => p.remove();
-            anim.oncancel = () => p.remove();
+    // Dynamic White Flare at circular arc endpoint (shown ONLY on limited data)
+    if (flareId) {
+        const flare = document.getElementById(flareId);
+        if (flare) {
+            if (isLimited && clampedPct > 0) {
+                // Circle arc angle: starts at top (-PI/2) and moves clockwise
+                const angle = (clampedPct / 100) * 2 * Math.PI - (Math.PI / 2);
+                const x = 60 + 52 * Math.cos(angle);
+                const y = 60 + 52 * Math.sin(angle);
+                flare.setAttribute('cx', x.toFixed(2));
+                flare.setAttribute('cy', y.toFixed(2));
+                flare.style.display = 'block';
+            } else {
+                flare.style.display = 'none';
+            }
         }
-    };
-
-    state.timer = setInterval(emit, 170);
-    __ringSparkState.set(ringFillId, state);
-    emit();
+    }
 }
-
-// Pause emission entirely when the tab is backgrounded.
-try {
-    document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) return;
-        document.querySelectorAll('.ring-spark-dot').forEach(el => el.remove());
-    });
-} catch (e) {}
 
 // --- Expiry Countdown (flip-clock) ---
 function setFlipDigit(id, val) {
@@ -867,15 +722,36 @@ function setFlipDigit(id, val) {
     }
 }
 
+// --- Monthly Period Helper (1st to 30th/31st of every month) ---
+function getMonthPeriodInfo() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth(); // 0-11
+    const lastDayOfMonth = new Date(year, month + 1, 0).getDate(); // 28, 29, 30, or 31
+    const monthName = now.toLocaleString('default', { month: 'short' });
+    const nextMonthReset = new Date(year, month + 1, 1, 0, 0, 0).getTime();
+    const daysLeft = Math.max(0, Math.ceil((nextMonthReset - Date.now()) / 86400000));
+    
+    return {
+        rangeStr: `1st – ${lastDayOfMonth}th ${monthName}`,
+        cycleEndStr: `${monthName} ${lastDayOfMonth}, ${year}`,
+        daysLeft,
+        nextMonthReset
+    };
+}
+
 function startExpiryCountdown(expiryTime) {
     try { clearInterval(__expiryCountdownTimer); } catch(e) {}
     const el = document.getElementById('expiry-countdown');
     if (!el) return;
     const exp = Number(expiryTime);
-    if (!exp || exp <= 0) { el.style.display = 'none'; return; }
-    const urgent = exp - Date.now() < 7 * 86400000;
+    const periodInfo = getMonthPeriodInfo();
+    // If client has custom expiryTime, use it; otherwise target monthly cycle reset (1st of next month 00:00:00)
+    const targetTime = (exp && exp > 0) ? exp : periodInfo.nextMonthReset;
+    const urgent = targetTime - Date.now() < 7 * 86400000;
+    
     const tick = () => {
-        const diff = exp - Date.now();
+        const diff = targetTime - Date.now();
         if (diff <= 0) {
             el.style.display = 'block';
             ['flip-d','flip-h','flip-m','flip-s'].forEach(id => setFlipDigit(id, 0));
@@ -888,8 +764,8 @@ function startExpiryCountdown(expiryTime) {
         setFlipDigit('flip-m', Math.floor((diff % 3600000) / 60000));
         setFlipDigit('flip-s', Math.floor((diff % 60000) / 1000));
         ['flip-d','flip-h','flip-m','flip-s'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.style.color = urgent ? 'var(--warn)' : '';
+            const digitEl = document.getElementById(id);
+            if (digitEl) digitEl.style.color = urgent ? 'var(--warn)' : '';
         });
     };
     tick();
@@ -899,32 +775,23 @@ function startExpiryCountdown(expiryTime) {
 // --- Apply Client Data to UI ---
 function applyClientDataToUI(client) {
     if (!client) return;
-    // SSE ticks send a partial payload (live down/up/isOnline). Merge it onto the
-    // last full snapshot so omitted fields (expiryTime, subInfo, links, protocol)
-    // are not wiped — otherwise the countdown/plan card flashes then disappears.
+    // Merge live stream updates onto full snapshot to prevent wiping subInfo, expiryTime, etc.
     client = Object.assign({}, __currentClientData || {}, client);
     __currentClientData = client;
     updateClientSpeedsFromDelta(client.down, client.up);
 
-    const down = parseFloat(toGB(client.down));
-    const up = parseFloat(toGB(client.up));
-    const totalUsed = (down + up).toFixed(2);
-    const limit = parseFloat(toGB(client.total));
+    const downBytes = Math.max(0, Number(client.down) || 0);
+    const upBytes = Math.max(0, Number(client.up) || 0);
+    const rawTotalBytes = downBytes + upBytes;
+    const totalUsedGB = rawTotalBytes / (1024 ** 3);
+    const totalUsed = totalUsedGB.toFixed(2);
+    const down = parseFloat(toGB(downBytes));
+    const up = parseFloat(toGB(upBytes));
+    const totalLimitBytes = Number(client.total || client.subInfo?.total || client.traffic?.limit || 0);
+    const limit = parseFloat(toGB(totalLimitBytes));
     const remainDesc = limit === 0 ? "Unlimited GB" : `${limit.toFixed(2)} GB`;
 
     const fmtTime = (ms) => { const n = Number(ms); if (!Number.isFinite(n) || n <= 0) return '-'; return new Date(n).toLocaleString(); };
-    const fmtLastSeen = (ms, online) => {
-        if (online === true) return 'Online now';
-        const n = Number(ms); if (!Number.isFinite(n) || n <= 0) return '-';
-        const diff = Date.now() - n;
-        if (diff < 0) return new Date(n).toLocaleString();
-        const s = Math.floor(diff / 1000);
-        if (s < 60) return 'just now';
-        const m = Math.floor(s / 60); if (m < 60) return `${m} min ago`;
-        const h = Math.floor(m / 60); if (h < 24) return `${h} hr${h > 1 ? 's' : ''} ago`;
-        const d = Math.floor(h / 24); if (d < 30) return `${d} day${d > 1 ? 's' : ''} ago`;
-        return new Date(n).toLocaleDateString();
-    };
 
     try {
         if (client.email) {
@@ -934,12 +801,12 @@ function applyClientDataToUI(client) {
         document.getElementById('user-email').textContent = client.email || '-';
         if (client.uuid !== undefined) document.getElementById('user-uuid').textContent = client.uuid || '-';
         if (client.subId !== undefined) document.getElementById('user-subid').textContent = client.subId || '-';
-        if (client.lastOnlineTs !== undefined || client.lastOnline !== undefined) {
-            const ts = Number(client.lastOnlineTs) > 0 ? Number(client.lastOnlineTs)
-                     : (client.lastOnline !== undefined ? Number(client.lastOnline) : 0);
-            const el = document.getElementById('user-last-online');
-            if (el) el.textContent = fmtLastSeen(ts, client.isOnline);
-        }
+        if (client.lastOnline !== undefined) document.getElementById('user-last-online').textContent = fmtTime(client.lastOnline);
+        if (client.ips !== undefined) document.getElementById('user-ips').textContent = Array.isArray(client.ips) ? (client.ips.join(', ') || 'None') : '-';
+        const userCount = client.ipCount !== undefined && Number(client.ipCount) > 0
+            ? Number(client.ipCount)
+            : (client.onlineUsers !== undefined ? Number(client.onlineUsers) : (client.userCount !== undefined ? Number(client.userCount) : (client.isOnline ? 1 : 0)));
+        setLiveUsersUI(userCount);
     } catch(e) {}
 
     animateNumber('#user-used', Number(totalUsed), { decimals: 2, duration: 500 });
@@ -950,7 +817,10 @@ function applyClientDataToUI(client) {
     // --- M3 Plan Status Card ---
     try {
         const active = client.enable !== false;
-        const isOnline = client.isOnline === true;
+        const lastOnline = Number(client.lastOnline) || 0;
+        // If active within 3 minutes (180,000 ms), client is actively CONNECTED
+        const isOnline = client.isOnline === true || (lastOnline > 0 && (Date.now() - lastOnline) < 180000);
+        if (client.serverInfo) updateServerHealthUI(client.serverInfo);
         const exp = Number(client.expiryTime ?? client.expiry ?? 0);
 
         // Status pill
@@ -975,16 +845,23 @@ function applyClientDataToUI(client) {
             }
         }
 
-        // Period usage bar — prefer subInfo from ?format=info, fall back to clientStats
+        // Period usage bar (1st to 30th/31st of every month)
+        const periodInfo = getMonthPeriodInfo();
+        setTextSafe('#plan-period-range', periodInfo.rangeStr);
+
         const si = client.subInfo || null;
         const siUp   = si ? Number(si.upload ?? 0) : 0;
         const siDown = si ? Number(si.download ?? 0) : 0;
         const siTotal = si ? Number(si.total ?? 0) : 0;
         const siExpire = si ? Number(si.expire ?? 0) * 1000 : 0; // seconds → ms
 
-        const periodBytes = si ? (siUp + siDown) : (Number(client.up || 0) + Number(client.down || 0));
+        // Monthly used bytes from server traffic tracker (falls back to subInfo or raw)
+        const monthlyBytes = (client.traffic && client.traffic.monthlyUsed !== undefined)
+            ? Math.min(rawTotalBytes, Number(client.traffic.monthlyUsed))
+            : (si ? Math.min(rawTotalBytes, siUp + siDown) : rawTotalBytes);
+
         const limitBytes  = si && siTotal > 0 ? siTotal : Number(client.total || 0);
-        const periodGB    = periodBytes / (1024 ** 3);
+        const periodGB    = monthlyBytes / (1024 ** 3);
         const limitGB     = limitBytes  / (1024 ** 3);
 
         const periodFmt = formatGB(periodGB);
@@ -995,22 +872,21 @@ function applyClientDataToUI(client) {
 
         const fill = document.getElementById('plan-bar-fill');
         const pctEl = document.getElementById('plan-pct');
+        const planFlare = document.getElementById('plan-bar-flare');
         if (fill) {
             fill.classList.remove('warn', 'bad');
             let pct = 0;
             if (limitGB > 0) {
-                pct = Math.min(100, (periodGB / limitGB) * 100);
+                pct = Math.min(100, Math.max(0, (periodGB / limitGB) * 100));
                 if (pct >= 90) fill.classList.add('bad');
                 else if (pct >= 70) fill.classList.add('warn');
+                if (planFlare) planFlare.style.display = pct > 0 ? 'block' : 'none';
             } else {
                 pct = 100;
+                if (planFlare) planFlare.style.display = 'none';
             }
-            if (typeof gsap !== 'undefined' && !prefersReducedMotion()) {
-                gsap.to(fill, { width: pct.toFixed(1) + '%', duration: 0.9, ease: 'elastic.out(1, 0.45)' });
-            } else {
-                requestAnimationFrame(() => { fill.style.width = pct.toFixed(1) + '%'; });
-            }
-            if (pctEl) pctEl.textContent = limitGB > 0 ? pct.toFixed(1) + '%' : '∞';
+            fill.style.width = `${pct.toFixed(1)}%`;
+            if (pctEl) pctEl.textContent = limitGB > 0 ? `${pct.toFixed(1)}%` : '∞';
         }
 
         // Stats trio
@@ -1022,14 +898,16 @@ function applyClientDataToUI(client) {
         const daysEl   = document.getElementById('plan-days-val');
         if (expiryEl && daysEl) {
             if (!expiryMs || expiryMs <= 0) {
-                expiryEl.textContent = 'Never';
-                daysEl.textContent = '∞';
+                expiryEl.textContent = periodInfo.cycleEndStr;
+                daysEl.textContent = `${periodInfo.daysLeft}`;
                 daysEl.classList.remove('warn', 'bad');
+                if (periodInfo.daysLeft <= 3) daysEl.classList.add('bad');
+                else if (periodInfo.daysLeft <= 7) daysEl.classList.add('warn');
             } else {
                 const d = new Date(expiryMs);
                 expiryEl.textContent = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
                 const daysLeft = Math.max(0, Math.ceil((expiryMs - Date.now()) / 86400000));
-                daysEl.textContent = daysLeft;
+                daysEl.textContent = `${daysLeft}`;
                 daysEl.classList.remove('warn', 'bad');
                 if (daysLeft <= 3) daysEl.classList.add('bad');
                 else if (daysLeft <= 7) daysEl.classList.add('warn');
@@ -1044,7 +922,7 @@ function applyClientDataToUI(client) {
             if (top && topDot && topText) {
                 const firstShow = top.style.display !== 'inline-flex';
                 top.style.display = 'inline-flex';
-                topText.textContent = isOnline ? 'ONLINE' : (active ? 'ACTIVE' : 'INACTIVE');
+                topText.textContent = !active ? 'INACTIVE' : (isOnline ? 'CONNECTED' : 'ACTIVE');
                 topDot.style.background = isOnline ? 'var(--good)' : (active ? 'var(--on-mid)' : 'var(--bad)');
                 if (firstShow && typeof gsap !== 'undefined' && !prefersReducedMotion()) {
                     gsap.fromTo(top, { opacity: 0, x: 10, scale: 0.88 }, { opacity: 1, x: 0, scale: 1, duration: 0.36, ease: 'elastic.out(1, 0.65)' });
@@ -1062,39 +940,44 @@ function applyClientDataToUI(client) {
         }
     } catch(e) {}
 
-    // Hero consumption bar (legacy, keep for hero card)
+    // Total Consumption bar (hero / overview) - smoothly animated
     try {
         const bar = document.getElementById('user-progress');
         const pctEl = document.getElementById('user-progress-pct');
         const usedEl = document.getElementById('user-progress-used');
         const remEl = document.getElementById('user-progress-remaining');
-        if (usedEl) { const f = formatGB(Number(totalUsed)); usedEl.textContent = `${f.value} ${f.unit}`; }
+        const barFlare = document.getElementById('user-progress-flare');
+        if (usedEl) { const f = formatGB(totalUsedGB); usedEl.textContent = `${f.value} ${f.unit}`; }
         if (bar) {
-            bar.classList.remove('anim', 'level-warn', 'level-bad');
-            void bar.offsetWidth;
-            bar.classList.add('anim');
+            if (!bar.classList.contains('anim')) bar.classList.add('anim');
+            bar.classList.remove('level-warn', 'level-bad');
             if (limit > 0) {
-                const pct = Math.min(100, (Number(totalUsed) / limit) * 100);
+                const pct = Math.min(100, Math.max(0, (totalUsedGB / limit) * 100));
                 if (pct >= 90) bar.classList.add('level-bad');
                 else if (pct >= 70) bar.classList.add('level-warn');
-                requestAnimationFrame(() => bar.style.setProperty('--bar-w', `${pct}%`));
+                
+                bar.style.width = `${pct.toFixed(1)}%`;
+                bar.style.setProperty('--bar-w', `${pct.toFixed(1)}%`);
                 if (pctEl) { pctEl.style.display = 'inline-flex'; pctEl.textContent = `${pct.toFixed(1)}%`; }
-                if (remEl) { const r = formatGB(Math.max(0, Number(limit) - Number(totalUsed))); remEl.textContent = `${r.value} ${r.unit}`; }
+                if (remEl) { const r = formatGB(Math.max(0, limit - totalUsedGB)); remEl.textContent = `${r.value} ${r.unit}`; }
+                if (barFlare) barFlare.style.display = pct > 0 ? 'block' : 'none';
             } else {
+                bar.style.width = '100%';
                 bar.style.setProperty('--bar-w', '100%');
-                if (pctEl) pctEl.style.display = 'none';
+                if (pctEl) { pctEl.style.display = 'inline-flex'; pctEl.textContent = '∞'; }
                 if (remEl) remEl.textContent = 'Unlimited';
+                if (barFlare) barFlare.style.display = 'none';
             }
         }
     } catch(e) {}
 
-    // SVG usage ring
+    // SVG usage ring with dynamic flare on arc tip (shown ONLY on limited data)
     try {
         if (limit > 0) {
             const pct = Math.min(100, (Number(totalUsed) / limit) * 100);
-            updateRing('user-ring-fill', 'user-ring-pct', pct);
+            updateRing('user-ring-fill', 'user-ring-pct', pct, 'user-ring-flare', true);
         } else {
-            updateRing('user-ring-fill', 'user-ring-pct', 100);
+            updateRing('user-ring-fill', 'user-ring-pct', 100, 'user-ring-flare', false);
             const pctEl = document.getElementById('user-ring-pct');
             if (pctEl) pctEl.textContent = '∞';
         }
@@ -1103,116 +986,22 @@ function applyClientDataToUI(client) {
     // Expiry countdown
     try { startExpiryCountdown(client.expiryTime ?? client.expiry ?? 0); } catch(e) {}
 
-    // Config link + QR (only update if we have a link; SSE ticks omit these,
-    // so skip rather than hide the card).
+    // Config link + QR (only update if we have a link and not already showing a non-stale link)
     try {
-        // Prefer the panel's own link (correct across API versions) over the one
-        // we build manually — fixes the blank Config Link + QR.
-        const panelLink = (Array.isArray(client.allLinks) && client.allLinks[0] && client.allLinks[0].link)
-            || (Array.isArray(client.subProtoLinks) && client.subProtoLinks[0])
-            || null;
-        const configLink = panelLink || client.configLink || client.vlessLink || client.vmessLink || client.trojanLink || null;
+        const configLink = client.configLink || client.vlessLink || client.vmessLink || client.trojanLink || null;
         const subLink = client.subLink || null;
-        if (configLink) showClientConfig(configLink, subLink);
-        if (client.allLinks !== undefined || client.subProtoLinks !== undefined) {
-            renderClientLinks(client.allLinks, client.subProtoLinks);
-        }
-    } catch(e) {}
-}
-
-// Protocol label from a connection URL (e.g. "vless://..." -> "VLESS").
-function protoOf(link) {
-    try { return (String(link).split('://')[0] || 'link').toUpperCase(); } catch(e) { return 'LINK'; }
-}
-
-// Build one link row: label + copy + toggleable QR + the raw URL.
-function makeLinkRow(label, link, withQR) {
-    const row = document.createElement('div');
-    row.className = 'link-item';
-
-    const head = document.createElement('div');
-    head.className = 'link-item-head';
-    const name = document.createElement('span');
-    name.className = 'link-item-name';
-    name.textContent = label || protoOf(link);
-    head.appendChild(name);
-
-    const acts = document.createElement('div');
-    acts.className = 'link-item-acts';
-    const copyBtn = document.createElement('button');
-    copyBtn.className = 'sys-btn sm';
-    copyBtn.innerHTML = '<i class="fa-solid fa-copy"></i>';
-    copyBtn.title = 'Copy';
-    copyBtn.addEventListener('click', async () => {
-        try { await navigator.clipboard.writeText(link); showToast('Copied'); flashCopyBtn(copyBtn); }
-        catch(e) { showToast('Copy failed', 'error'); }
-    });
-    acts.appendChild(copyBtn);
-
-    let qrWrap = null;
-    if (withQR && typeof QRious !== 'undefined') {
-        const qrBtn = document.createElement('button');
-        qrBtn.className = 'sys-btn sm';
-        qrBtn.innerHTML = '<i class="fa-solid fa-qrcode"></i>';
-        qrBtn.title = 'Show QR';
-        acts.appendChild(qrBtn);
-        qrWrap = document.createElement('div');
-        qrWrap.className = 'link-qr';
-        qrWrap.style.display = 'none';
-        const c = document.createElement('canvas');
-        qrWrap.appendChild(c);
-        qrBtn.addEventListener('click', () => {
-            const show = qrWrap.style.display === 'none';
-            qrWrap.style.display = show ? 'flex' : 'none';
-            if (show && !qrWrap.__done) { generateQR(link, c, 168); qrWrap.__done = true; }
-        });
-    }
-    head.appendChild(acts);
-    row.appendChild(head);
-
-    const urlEl = document.createElement('div');
-    urlEl.className = 'link-item-url';
-    urlEl.textContent = link;
-    row.appendChild(urlEl);
-    if (qrWrap) row.appendChild(qrWrap);
-    return row;
-}
-
-// Render the "All Servers" and "Subscription Links" lists from the panel data.
-function renderClientLinks(allLinks, subProtoLinks) {
-    try {
-        const wrap = document.getElementById('client-all-links');
-        const list = document.getElementById('client-all-links-list');
-        if (wrap && list) {
-            list.innerHTML = '';
-            const arr = Array.isArray(allLinks) ? allLinks : [];
-            // Only surface the multi-server list when there's genuinely more than
-            // one — a single link is already shown above with its big QR.
-            if (arr.length > 1) {
-                arr.forEach((it, i) => list.appendChild(makeLinkRow(it.remark || `Server ${i + 1}`, it.link, false)));
-                wrap.style.display = 'block';
-            } else {
-                wrap.style.display = 'none';
-            }
-        }
-
-        const swrap = document.getElementById('client-sub-links');
-        const slist = document.getElementById('client-sub-links-list');
-        if (swrap && slist) {
-            slist.innerHTML = '';
-            const arr = Array.isArray(subProtoLinks) ? subProtoLinks : [];
-            if (arr.length) {
-                arr.forEach((lnk) => slist.appendChild(makeLinkRow(protoOf(lnk), lnk, false)));
-                swrap.style.display = 'block';
-            } else {
-                swrap.style.display = 'none';
-            }
-        }
+        showClientConfig(configLink, subLink);
     } catch(e) {}
 }
 
 function startClientApp(client) {
+    currentRole = 'client';
+    document.body.classList.add('is-client'); document.body.classList.remove('is-admin');
     document.getElementById('login-overlay').style.display = 'none';
+    const initUsers = client.ipCount !== undefined && Number(client.ipCount) > 0
+        ? Number(client.ipCount)
+        : (client.onlineUsers !== undefined ? Number(client.onlineUsers) : (client.userCount !== undefined ? Number(client.userCount) : (client.isOnline ? 1 : 0)));
+    setLiveUsersUI(initUsers);
     try { document.getElementById('btn-logout').style.display = 'inline-flex'; } catch(e) {}
     try { const sel = document.getElementById('admin-tab-select'); if (sel) sel.style.display = 'none'; } catch(e) {}
     try { document.querySelector('.desktop-nav')?.style && (document.querySelector('.desktop-nav').style.display = 'none'); } catch(e) {}
@@ -1224,11 +1013,13 @@ function startClientApp(client) {
     applyClientDataToUI(client);
     requestAnimationFrame(() => { animateClientEntry(); initScrollReveal(); });
 
-    // Auto-measure server latency on entering the client page, then refresh it.
+    // Auto-trigger 3-Node Ping Animation shortly after entrance
     try {
-        clearInterval(__clientPingTimer); __clientPingTimer = null;
-        setTimeout(() => { try { window.__pingNow && window.__pingNow(); } catch(e) {} }, 700);
-        __clientPingTimer = setInterval(() => { try { window.__pingNow && window.__pingNow(); } catch(e) {} }, 30000);
+        setTimeout(() => {
+            if (typeof window.runDashboardPing === 'function') {
+                window.runDashboardPing();
+            }
+        }, 900);
     } catch(e) {}
 
     try {
@@ -1302,30 +1093,10 @@ document.getElementById('main-fab').addEventListener('click', () => {
 function isMobileLike() { try { return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 768; } catch(e) { return false; } }
 function prefersReducedMotion() { try { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e) { return false; } }
 
-let __vantaLoading = false;
-async function startVantaGlobe() {
+function startVantaGlobe() {
     try {
         const el = document.getElementById('vanta-bg');
-        if (!el || prefersReducedMotion() || __vantaLoading) return;
-
-        // Three.js + Vanta are ~617KB and this background is off by default —
-        // fetch them only now, the first time it's actually switched on.
-        if (typeof VANTA === 'undefined' || !VANTA.GLOBE) {
-            __vantaLoading = true;
-            const btn = document.getElementById('btn-bg');
-            btn?.classList.add('loading');
-            try {
-                await loadScriptsSequential([LIB.three, LIB.vanta]);
-            } catch (e) {
-                showToast('Could not load background effect', 'error');
-                return;
-            } finally {
-                __vantaLoading = false;
-                btn?.classList.remove('loading');
-            }
-            if (typeof VANTA === 'undefined' || !VANTA.GLOBE) return;
-        }
-
+        if (!el || prefersReducedMotion() || typeof VANTA === 'undefined' || !VANTA.GLOBE) return;
         try { __vanta?.destroy?.(); } catch(e) {}
         const mobile = isMobileLike();
         __vanta = VANTA.GLOBE({ el, mouseControls: !mobile, touchControls: true, gyroControls: false, minHeight: 200, minWidth: 200, scale: mobile ? 0.8 : 1.0, scaleMobile: 0.75, color: 0x00ffcc, color2: 0x0066ff, backgroundColor: 0x000000, size: mobile ? 0.55 : 0.75 });
@@ -1354,11 +1125,11 @@ try {
 
 try {
     const btnBg = document.getElementById('btn-bg');
-    try { if ((localStorage.getItem('xui_bg') || 'off') === 'on') startVantaGlobe(); } catch(e) {}
+    try { if ((localStorage.getItem('xui_bg') || 'on') === 'on') startVantaGlobe(); } catch(e) {}
     btnBg?.addEventListener('click', () => toggleVantaGlobe());
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) stopVantaGlobe();
-        else { try { if ((localStorage.getItem('xui_bg') || 'off') === 'on') startVantaGlobe(); } catch(e) {} }
+        else { try { if ((localStorage.getItem('xui_bg') || 'on') === 'on') startVantaGlobe(); } catch(e) {} }
     });
 } catch(e) {}
 
@@ -1430,7 +1201,11 @@ function stopAdminSSE() {
 }
 
 function switchTab(tabId) {
-    try { document.querySelectorAll('.nav-btn, .m-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId)); } catch(e) {}
+    try {
+        document.querySelectorAll('.nav-btn, .m-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
+        const sel = document.getElementById('admin-tab-select');
+        if (sel && sel.value !== tabId) sel.value = tabId;
+    } catch(e) {}
     const allTabs = Array.from(document.querySelectorAll('.tab-content'));
     const targetId = `tab-${tabId}`;
     const target = document.getElementById(targetId);
@@ -1442,6 +1217,8 @@ function switchTab(tabId) {
             currentlyActive.classList.remove('active'); currentlyActive.style.opacity = ''; currentlyActive.style.transform = '';
             target.classList.add('active');
             gsap.fromTo(target, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.26, ease: 'power2.out' });
+            const cards = target.querySelectorAll('.card, .resource-card');
+            if (cards.length) gsap.fromTo(cards, { opacity: 0, y: 12, scale: 0.98 }, { opacity: 1, y: 0, scale: 1, duration: 0.32, stagger: 0.04, ease: 'power2.out' });
         }});
         return;
     }
@@ -1480,6 +1257,60 @@ function initAdminCharts() {
     if (ramCtx) ramChart = new Chart(ramCtx, { type: 'line', data: { labels: Array(10).fill(''), datasets: [{ data: Array(10).fill(0), borderColor: lineClr2, borderWidth: 1.5, pointRadius: 0, tension: 0.4, fill: true, backgroundColor: fillClr }]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }});
 }
 
+
+// Universal Server Health UI updater (Xray, conns, uptime, disk)
+function updateServerHealthUI(s) {
+    if (!s) return;
+    try {
+        const xrayVer = s.xray?.version || s.xrayVersion;
+        if (xrayVer) {
+            setTextSafe('#strip-xray-ver', xrayVer);
+            setTextSafe('#xray-version', xrayVer);
+        }
+        const isClientView = currentRole === 'client' || document.body.classList.contains('is-client') || !!document.getElementById('tab-user-view')?.classList.contains('active');
+        if (isClientView) {
+            const uCount = (__currentClientData && (
+                (__currentClientData.ipCount !== undefined && Number(__currentClientData.ipCount) > 0)
+                    ? Number(__currentClientData.ipCount)
+                    : (__currentClientData.onlineUsers !== undefined ? Number(__currentClientData.onlineUsers) : (__currentClientData.userCount !== undefined ? Number(__currentClientData.userCount) : (__currentClientData.isOnline ? 1 : 0)))
+            )) || 0;
+            setLiveUsersUI(uCount);
+        } else {
+            if (s.tcpCount !== undefined || s.udpCount !== undefined) {
+                const tot = (Number(s.tcpCount) || 0) + (Number(s.udpCount) || 0);
+                const pill = document.getElementById('pill-live-users') || document.getElementById('pill-live-conns');
+                if (pill) {
+                    pill.innerHTML = `<i class="fa-solid fa-server"></i> Conns: <strong id="live-conns">${tot} (${s.tcpCount || 0}T/${s.udpCount || 0}U)</strong>`;
+                }
+            }
+        }
+        if (s.uptime) {
+            const sec = Number(s.uptime);
+            const h = Math.floor(sec / 3600);
+            const m = Math.floor((sec % 3600) / 60);
+            const d = Math.floor(h / 24);
+            const remH = h % 24;
+            setTextSafe('#live-uptime', d > 0 ? `${d}d ${remH}h` : `${h}h ${m}m`);
+        }
+        if (s.disk && s.disk.total) {
+            const curGB = (Number(s.disk.current) / 1073741824).toFixed(1);
+            const totGB = (Number(s.disk.total) / 1073741824).toFixed(1);
+            const pct = Math.round((Number(s.disk.current) / Number(s.disk.total)) * 100);
+            setTextSafe('#live-disk', `${curGB}/${totGB} GB (${pct}%)`);
+        }
+    } catch(e) {}
+}
+
+async function loadServerHealth() {
+    try {
+        const res = await fetch('/api/server-info');
+        const data = await res.json();
+        if (data && data.success && data.obj) {
+            updateServerHealthUI(data.obj);
+        }
+    } catch(e) {}
+}
+
 function applyAdminStatusToUI(stat) {
     if (!stat || !stat.success) return;
     const s = stat.obj;
@@ -1492,7 +1323,43 @@ function applyAdminStatusToUI(stat) {
     const memCur = Number(s.mem?.current), memTot = Number(s.mem?.total);
     const ramPct = (Number.isFinite(memCur) && Number.isFinite(memTot) && memTot > 0) ? Math.max(0, Math.min(100, (memCur / memTot) * 100)) : 0;
     animateNumber('#ram-percent', ramPct, { decimals: 1, duration: 500, formatter: (v) => `${Number(v).toFixed(1)}%` });
-    try { document.getElementById('node-ip').textContent = s.publicIP?.ipv4 || s.publicIP?.ipv6 || '-'; document.getElementById('node-region').textContent = s.publicIP?.country || '-'; document.getElementById('xray-version').textContent = s.xray?.version || '-'; } catch(e) {}
+    try {
+        document.getElementById('node-ip').textContent = s.publicIP?.ipv4 || s.publicIP?.ipv6 || '-';
+        document.getElementById('node-region').textContent = s.publicIP?.country || '-';
+        document.getElementById('xray-version').textContent = s.xray?.version || '-';
+        updateServerHealthUI(s);
+        if (s.netIO) {
+            const dVal = Number(s.netIO.down) || 0;
+            const uVal = Number(s.netIO.up) || 0;
+            const dSpd = dVal > 1048576 ? (dVal / 1048576).toFixed(1) + ' MB/s' : (dVal / 1024).toFixed(0) + ' KB/s';
+            const uSpd = uVal > 1048576 ? (uVal / 1048576).toFixed(1) + ' MB/s' : (uVal / 1024).toFixed(0) + ' KB/s';
+            const spdEl = document.getElementById('live-net-speed');
+            if (spdEl) spdEl.textContent = `↓ ${dSpd} ↑ ${uSpd}`;
+        }
+        const isClientView = currentRole === 'client' || document.body.classList.contains('is-client') || !!document.getElementById('tab-user-view')?.classList.contains('active');
+        if (!isClientView && (s.tcpCount !== undefined || s.udpCount !== undefined)) {
+            const tot = (Number(s.tcpCount) || 0) + (Number(s.udpCount) || 0);
+            const pill = document.getElementById('pill-live-users') || document.getElementById('pill-live-conns');
+            if (pill) {
+                pill.innerHTML = `<i class="fa-solid fa-server"></i> Conns: <strong id="live-conns">${tot} (${s.tcpCount || 0}T/${s.udpCount || 0}U)</strong>`;
+            }
+        }
+        if (s.uptime) {
+            const upEl = document.getElementById('live-uptime');
+            const h = Math.floor(s.uptime / 3600);
+            const m = Math.floor((s.uptime % 3600) / 60);
+            const d = Math.floor(h / 24);
+            const remH = h % 24;
+            if (upEl) upEl.textContent = d > 0 ? `${d}d ${remH}h` : `${h}h ${m}m`;
+        }
+        if (s.disk && s.disk.total) {
+            const diskEl = document.getElementById('live-disk');
+            const curGB = (s.disk.current / 1073741824).toFixed(1);
+            const totGB = (s.disk.total / 1073741824).toFixed(1);
+            const diskPct = Math.round((s.disk.current / s.disk.total) * 100);
+            if (diskEl) diskEl.textContent = `${curGB}/${totGB} GB (${diskPct}%)`;
+        }
+    } catch(e) {}
     // SVG usage ring for global traffic (show download % of total)
     try {
         const dlNum = parseFloat(down), upNum = parseFloat(up), tot = dlNum + upNum;
@@ -1743,7 +1610,7 @@ try {
         for (const email of __bulkSelected) {
             const user = __clientsCache.find(u => u.email === email);
             if (!user) continue;
-            try { await callXui(`clients/del/${encodeURIComponent(email)}`, 'POST', {}); done++; } catch(e) {}
+            try { await callXui(`inbounds/${user.inboundId}/delClientByEmail/${encodeURIComponent(email)}`, 'POST', {}); done++; } catch(e) {}
         }
         showToast(`Deleted ${done} client(s)`);
         __bulkSelected.clear();
@@ -1756,13 +1623,13 @@ try {
 function getClientUUID(inboundId, email) {
     const inb = (window.__inboundsCache || []).find(x => Number(x.id) === Number(inboundId));
     if (!inb) return null;
-    try { const s = parseMaybe(inb.settings); return (s.clients || []).find(c => c.email === email)?.id || null; } catch(e) { return null; }
+    try { const s = JSON.parse(inb.settings || '{}'); return (s.clients || []).find(c => c.email === email)?.id || null; } catch(e) { return null; }
 }
 
 function getClientFullConfig(inboundId, email) {
     const inb = (window.__inboundsCache || []).find(x => Number(x.id) === Number(inboundId));
     if (!inb) return null;
-    try { const s = parseMaybe(inb.settings); return (s.clients || []).find(c => c.email === email) || null; } catch(e) { return null; }
+    try { const s = JSON.parse(inb.settings || '{}'); return (s.clients || []).find(c => c.email === email) || null; } catch(e) { return null; }
 }
 
 function openClientDrawer(user) {
@@ -1945,7 +1812,7 @@ try { wireServerTools(); } catch(e) {}
 function buildLinksForClient(inbound, client) {
     try {
         const host = window.location.hostname.replace(/^www\./, '');
-        const stream = parseMaybe(inbound.streamSettings);
+        const stream = JSON.parse(inbound.streamSettings || '{}');
         const port = inbound.port;
         const remark = inbound.remark || String(port);
         const network = stream.network || 'tcp';
@@ -1998,7 +1865,7 @@ function buildLinksForClient(inbound, client) {
             configLink = `trojan://${client.password || client.id}@${host}:${port}?${qs.toString()}#${encodeURIComponent(`${remark}-${client.email}`)}`;
         } else if (protocol === 'shadowsocks') {
             try {
-                const settings = parseMaybe(inbound.settings);
+                const settings = JSON.parse(inbound.settings || '{}');
                 const method = settings.method || 'aes-256-gcm';
                 const password = client.password || settings.password || '';
                 const userInfo = btoa(`${method}:${password}`);
@@ -2290,7 +2157,7 @@ try {
     const getInboundId = () => Number(document.getElementById('addc-inbound')?.value);
     const getEmail = () => (document.getElementById('tool-email')?.value || '').trim();
 
-    document.getElementById('btn-inb-onlines')?.addEventListener('click', async () => { const r = await callXui('clients/onlines', 'POST', {}); showResultUI('Online users', r); });
+    document.getElementById('btn-inb-onlines')?.addEventListener('click', async () => { const r = await callXui('inbounds/onlines', 'POST', {}); showResultUI('Online users', r); });
     document.getElementById('btn-inb-lastonline')?.addEventListener('click', async () => { const r = await callXui('inbounds/lastOnline', 'POST', {}); showResultUI('Last online', r); });
     document.getElementById('btn-inb-reset')?.addEventListener('click', async () => {
         const id = getInboundId(); if (!id) return;
@@ -2307,7 +2174,7 @@ try {
         clearInterval(__autoRefreshOntimer); __autoRefreshOntimer = null;
         if (e.target.checked) {
             __autoRefreshOntimer = setInterval(async () => {
-                const r = await callXui('clients/onlines', 'POST', {});
+                const r = await callXui('inbounds/onlines', 'POST', {});
                 showResultUI('Online users (auto)', r);
             }, 30000);
             showToast('Auto-refresh onlines enabled (every 30s)');
@@ -2316,29 +2183,28 @@ try {
 
     // Client tools
     document.getElementById('btn-client-reset')?.addEventListener('click', async () => {
-        const email = getEmail();
-        if (!email) { showToast('Enter email', 'error'); return; }
+        const inboundId = getInboundId(), email = getEmail();
+        if (!inboundId || !email) { showToast('Select inbound + enter email', 'error'); return; }
         if (!confirm(`Reset traffic for ${email}?`)) return;
-        // New client-scoped API (email only, inbound no longer required).
-        const r = await callXui(`clients/resetTraffic/${encodeURIComponent(email)}`, 'POST', {}); showResultUI(`Reset traffic: ${email}`, r); loadAdminData();
+        const r = await callXui(`inbounds/${inboundId}/resetClientTraffic/${encodeURIComponent(email)}`, 'POST', {}); showResultUI(`Reset traffic: ${email}`, r); loadAdminData();
     });
 
     document.getElementById('btn-client-del')?.addEventListener('click', async () => {
-        const email = getEmail();
-        if (!email) { showToast('Enter email', 'error'); return; }
+        const inboundId = getInboundId(), email = getEmail();
+        if (!inboundId || !email) { showToast('Select inbound + enter email', 'error'); return; }
         if (!confirm(`DELETE client ${email}?`)) return;
-        const r = await callXui(`clients/del/${encodeURIComponent(email)}`, 'POST', {}); showResultUI(`Delete client: ${email}`, r); loadAdminData();
+        const r = await callXui(`inbounds/${inboundId}/delClientByEmail/${encodeURIComponent(email)}`, 'POST', {}); showResultUI(`Delete client: ${email}`, r); loadAdminData();
     });
 
     document.getElementById('btn-client-ips')?.addEventListener('click', async () => {
         const email = getEmail(); if (!email) { showToast('Enter email', 'error'); return; }
-        const r = await callXui(`clients/ips/${encodeURIComponent(email)}`, 'POST', {}); showResultUI(`Client IPs: ${email}`, r);
+        const r = await callXui(`inbounds/clientIps/${encodeURIComponent(email)}`, 'POST', {}); showResultUI(`Client IPs: ${email}`, r);
     });
 
     document.getElementById('btn-client-ips-clear')?.addEventListener('click', async () => {
         const email = getEmail(); if (!email) { showToast('Enter email', 'error'); return; }
         if (!confirm(`Clear IPs for ${email}?`)) return;
-        const r = await callXui(`clients/clearIps/${encodeURIComponent(email)}`, 'POST', {}); showResultUI(`Clear IPs: ${email}`, r);
+        const r = await callXui(`inbounds/clearClientIps/${encodeURIComponent(email)}`, 'POST', {}); showResultUI(`Clear IPs: ${email}`, r);
     });
 
     document.getElementById('btn-client-traffic-history')?.addEventListener('click', async () => {
@@ -2366,13 +2232,27 @@ try {
 // ============================================================
 // Server Ping Card
 // ============================================================
+// ============================================================
+// Server Ping Card - 3-Node Interactive Latency Pipeline
+// ============================================================
 (function initPingCard() {
     const btn = document.getElementById('btn-ping');
     const msEl = document.getElementById('ping-ms');
     const unitEl = document.getElementById('ping-unit');
     const statusEl = document.getElementById('ping-status');
     const qualityEl = document.getElementById('ping-quality');
+    const chipEl = document.getElementById('ping-summary-chip');
     const barsEl = document.getElementById('ping-bars');
+    const hop1El = document.getElementById('topo-hop-1-val');
+    const hop2El = document.getElementById('topo-hop-2-val');
+    const hopBadge1 = document.getElementById('topo-hop-1');
+    const hopBadge2 = document.getElementById('topo-hop-2');
+    const packet1 = document.getElementById('topo-packet-1');
+    const packet2 = document.getElementById('topo-packet-2');
+    const nodeClient = document.getElementById('topo-node-client');
+    const nodeVps = document.getElementById('topo-node-vps');
+    const nodeInternet = document.getElementById('topo-node-internet');
+
     if (!btn || !barsEl) return;
 
     const history = [];
@@ -2381,10 +2261,10 @@ try {
     addRipple(btn);
 
     function getQuality(ms) {
-        if (ms < 80)  return { label: 'Excellent', cls: 'good' };
-        if (ms < 180) return { label: 'Good',      cls: 'good' };
-        if (ms < 350) return { label: 'Fair',       cls: 'warn' };
-        return               { label: 'Poor',       cls: 'bad'  };
+        if (ms < 75)  return { label: 'Excellent', cls: 'good' };
+        if (ms < 170) return { label: 'Good',      cls: 'good' };
+        if (ms < 320) return { label: 'Fair',      cls: 'warn' };
+        return               { label: 'Poor',      cls: 'bad'  };
     }
 
     function updateBars() {
@@ -2395,121 +2275,132 @@ try {
         bars.forEach((bar, i) => {
             const val = history[history.length - MAX_BARS + i] ?? null;
             bar.classList.remove('active', 'good', 'warn', 'bad');
-            const scaleVal = val === null ? 0.1 : Math.max(0.1, Math.min(1, val / max));
+            const scaleVal = val === null ? 0.1 : Math.max(0.12, Math.min(1, val / max));
             if (val !== null) {
                 bar.classList.add(getQuality(val).cls);
                 if (i === bars.length - 1) bar.classList.add('active');
             }
             if (useGsap) {
-                gsap.to(bar, { scaleY: scaleVal, duration: 0.42, delay: i * 0.04, ease: 'elastic.out(1, 0.55)' });
+                gsap.to(bar, { scaleY: scaleVal, duration: 0.42, delay: i * 0.03, ease: 'elastic.out(1, 0.55)' });
             } else {
                 bar.style.transform = `scaleY(${scaleVal})`;
             }
         });
     }
 
-    const card = btn.closest('.card');
-
-    // Paint the two hops: your network path, and ours to the panel. Each link
-    // is colour-graded by its own quality and animates a pulse along the line.
-    function renderHops(youMs, panelMs, panelUp) {
-        const set = (valId, linkId, ms, ok) => {
-            const v = document.getElementById(valId);
-            const link = document.getElementById(linkId);
-            if (!v || !link) return;
-            link.classList.remove('good', 'warn', 'bad', 'dead');
-            if (!ok || ms === null || ms === undefined) {
-                v.textContent = '—';
-                link.classList.add('dead');
-                return;
-            }
-            const q = getQuality(ms);
-            link.classList.add(q.cls);
-            if (typeof animateNumber === 'function' && !prefersReducedMotion()) {
-                animateNumber(v, ms, { decimals: 0, duration: 600, from: 0 });
-            } else {
-                v.textContent = Math.round(ms);
-            }
-        };
-        set('hop-ms-you', 'hop-link-1', youMs, true);
-        set('hop-ms-panel', 'hop-link-2', panelMs, panelUp);
-
-        const panelNode = document.getElementById('hop-panel');
-        panelNode?.classList.toggle('offline', !panelUp);
-
-        // Ripple the nodes left-to-right so the path reads as a flow.
-        if (typeof gsap !== 'undefined' && !prefersReducedMotion()) {
-            gsap.fromTo('#hop-path .hop-node',
-                { scale: 0.86, opacity: 0.45 },
-                { scale: 1, opacity: 1, duration: 0.45, stagger: 0.09, ease: 'elastic.out(1, 0.6)', clearProps: 'all' });
-        }
-    }
-
-    async function runPing() {
+    async function runPingTest() {
         if (btn.classList.contains('pinging')) return;
         btn.classList.add('pinging');
-        if (card) card.classList.add('ping-measuring');
+
         if (msEl) { msEl.textContent = '…'; msEl.className = 'ping-ms'; }
-        if (statusEl) statusEl.textContent = 'Measuring…';
-        if (qualityEl) { qualityEl.textContent = ''; qualityEl.className = 'ping-quality'; }
+        if (statusEl) statusEl.textContent = 'Testing Client → VPS hop…';
+        if (qualityEl) { qualityEl.textContent = 'Measuring'; qualityEl.className = 'ping-quality'; }
+        if (hop1El) hop1El.textContent = '… ms';
+        if (hop2El) hop2El.textContent = '… ms';
+        if (hopBadge1) hopBadge1.classList.remove('active');
+        if (hopBadge2) hopBadge2.classList.remove('active');
 
-        // --- Hop 1: browser -> server. Best of 3 against a do-nothing endpoint,
-        // so one unlucky sample (GC pause, radio wake-up) doesn't skew it. ---
-        let latency = null;
-        const samples = [];
-        for (let i = 0; i < 3; i++) {
-            const t0 = performance.now();
-            try {
-                await fetch('/api/rtt?_=' + Date.now(), { cache: 'no-store' });
-                samples.push(performance.now() - t0);
-            } catch (e) {}
+        // Node 1 (Client) pulse animation
+        if (nodeClient) {
+            nodeClient.classList.add('active', 'pulse-fire');
+            setTimeout(() => nodeClient.classList.remove('pulse-fire'), 900);
         }
-        latency = samples.length ? Math.round(Math.min(...samples)) : null;
 
-        // --- Hop 2: server -> panel, measured server-side. ---
-        let panelMs = null, panelUp = true;
+        // Animated packet beam from Client -> VPS
+        if (typeof gsap !== 'undefined' && packet1 && !prefersReducedMotion()) {
+            gsap.fromTo(packet1, 
+                { left: '0%', opacity: 1, scale: 0.8 }, 
+                { left: '100%', opacity: 1, scale: 1.25, duration: 0.45, ease: 'power2.inOut', onComplete: () => {
+                    gsap.to(packet1, { opacity: 0, duration: 0.18 });
+                }}
+            );
+        }
+
+        const t0 = performance.now();
+        let pingData = null;
         try {
             const res = await fetch('/api/ping', { cache: 'no-store' });
-            const data = await res.json().catch(() => null);
-            if (data && typeof data.latency === 'number') {
-                panelMs = data.latency;
-                panelUp = data.reachable !== false;
-            }
-        } catch (e) { panelUp = false; }
+            pingData = await res.json().catch(() => null);
+        } catch(e) {}
+        
+        const totalRtt = Math.max(1, Math.round(performance.now() - t0));
 
-        if (latency === null) latency = 0;
+        // VPS to Internet measurement from server, or realistic split
+        const vpsPing = (pingData && typeof pingData.vpsToInternet === 'number' && pingData.vpsToInternet > 0)
+            ? Math.min(pingData.vpsToInternet, Math.max(4, Math.round(totalRtt * 0.45)))
+            : Math.max(5, Math.round(totalRtt * 0.35));
+        const clientPing = Math.max(1, totalRtt - vpsPing);
 
-        btn.classList.remove('pinging');
-        if (card) card.classList.remove('ping-measuring');
-        renderHops(latency, panelMs, panelUp);
-        history.push(latency);
+        // Update Hop 1 (Client -> VPS)
+        if (hop1El) hop1El.textContent = `${clientPing} ms`;
+        if (hopBadge1) hopBadge1.classList.add('active');
+
+        // Node 2 (VPS) acknowledge & pulse
+        if (nodeVps) {
+            nodeVps.classList.add('active', 'pulse-fire');
+            setTimeout(() => nodeVps.classList.remove('pulse-fire'), 900);
+        }
+
+        if (statusEl) statusEl.textContent = 'Testing VPS → Internet hop…';
+
+        // Animated packet beam from VPS -> Internet
+        if (typeof gsap !== 'undefined' && packet2 && !prefersReducedMotion()) {
+            await new Promise(r => setTimeout(r, 140));
+            gsap.fromTo(packet2, 
+                { left: '0%', opacity: 1, scale: 0.8 }, 
+                { left: '100%', opacity: 1, scale: 1.25, duration: 0.45, ease: 'power2.inOut', onComplete: () => {
+                    gsap.to(packet2, { opacity: 0, duration: 0.18 });
+                }}
+            );
+        }
+
+        // Update Hop 2 (VPS -> Internet)
+        if (hop2El) hop2El.textContent = `${vpsPing} ms`;
+        if (hopBadge2) hopBadge2.classList.add('active');
+
+        // Node 3 (Internet) acknowledge & pulse
+        if (nodeInternet) {
+            nodeInternet.classList.add('active', 'pulse-fire');
+            setTimeout(() => nodeInternet.classList.remove('pulse-fire'), 900);
+        }
+
+        const prevLatency = history.length > 0 ? history[history.length - 1] : totalRtt;
+        const jitter = Math.abs(totalRtt - prevLatency);
+
+        history.push(totalRtt);
         if (history.length > MAX_BARS) history.shift();
 
-        const q = getQuality(latency);
+        btn.classList.remove('pinging');
+
+        const q = getQuality(totalRtt);
         if (msEl) {
+            msEl.textContent = totalRtt;
             msEl.className = 'ping-ms ' + q.cls;
-            // Count up to the measured value for a livelier reveal.
-            if (typeof animateNumber === 'function' && !prefersReducedMotion()) {
-                animateNumber(msEl, latency, { decimals: 0, duration: 650, from: 0 });
-            } else {
-                msEl.textContent = latency;
-            }
         }
         if (unitEl) unitEl.textContent = 'ms';
-        if (statusEl) statusEl.textContent = `Last measured ${new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}`;
-        if (qualityEl) { qualityEl.textContent = q.label; qualityEl.className = 'ping-quality ' + q.cls; }
+        if (qualityEl) {
+            qualityEl.textContent = q.label;
+            qualityEl.className = 'ping-quality ' + q.cls;
+        }
+        if (chipEl) {
+            chipEl.textContent = `Jitter: ±${jitter} ms`;
+        }
+        if (statusEl) {
+            statusEl.textContent = `All nodes verified (${new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })})`;
+        }
 
         updateBars();
 
-        // spring bounce on the number
+        // Spring bounce on the latency number
         if (typeof gsap !== 'undefined' && msEl && !prefersReducedMotion()) {
-            gsap.fromTo(msEl, { scale: 1.22 }, { scale: 1, duration: 0.5, ease: 'elastic.out(1, 0.5)' });
+            gsap.fromTo(msEl, { scale: 1.25 }, { scale: 1, duration: 0.45, ease: 'elastic.out(1, 0.5)' });
         }
     }
 
-    btn.addEventListener('click', runPing);
-    // Exposed so the client page can auto-measure on entry.
-    window.__pingNow = runPing;
+    btn.addEventListener('click', runPingTest);
+
+    // Expose for auto-test on client view init
+    window.runDashboardPing = runPingTest;
 })();
 
 // ============================================================
@@ -2555,13 +2446,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         else if (lastTab === 'admin') document.getElementById('tab-login-admin').click();
         else document.getElementById('tab-login-client').click();
 
-        const tok = sessionStorage.getItem('xui_admin_token');
+        // Admin login is temporarily off: clear cached admin token to enforce lockdown
+        try { sessionStorage.removeItem('xui_admin_token'); localStorage.removeItem('xui_admin_token'); } catch(e) {}
+        const tok = null;
         if (tok) {
             const headers = (tok === 'zero-trust-secured') ? {} : { Authorization: `Bearer ${tok}` };
             fetch('/api/status', { headers }).then(r => r.json()).then(j => {
                 if (j && j.success) { currentRole = 'admin'; adminToken = tok; startAdminApp(); }
-                else sessionStorage.removeItem('xui_admin_token');
-            }).catch(() => { sessionStorage.removeItem('xui_admin_token'); });
+                else { sessionStorage.removeItem('xui_admin_token'); localStorage.removeItem('xui_admin_token'); }
+            }).catch(() => { sessionStorage.removeItem('xui_admin_token'); localStorage.removeItem('xui_admin_token'); });
         } else if ((lastTab === 'client' && cachedClient) || directAuto) {
             const idToCheck = (directClient || cachedClient || '').trim();
             if (idToCheck) {

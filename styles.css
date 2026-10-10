@@ -60,10 +60,6 @@
     --m3-std-slow:        750ms cubic-bezier(0.27, 1.06, 0.18, 1.00);
     --m3-effects:         200ms cubic-bezier(0.20, 0.00, 0.00, 1.00);
 
-    /* Material 3 Expressive — springy, overshooting motion */
-    --m3-expressive-fast:    350ms cubic-bezier(0.34, 1.56, 0.64, 1.00);
-    --m3-expressive-default: 500ms cubic-bezier(0.30, 1.40, 0.50, 1.00);
-
     /* Elevation */
     --shadow-1: 0 1px 3px rgba(0,0,0,0.7), 0 1px 2px rgba(0,0,0,0.55);
     --shadow-2: 0 4px 16px rgba(0,0,0,0.55), 0 1px 4px rgba(0,0,0,0.4);
@@ -105,12 +101,7 @@ body.theme-light {
    Reset & Base
    ============================================================ */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-/* `clip` (not `hidden`) contains horizontal overflow WITHOUT creating a scroll
-   container — `overflow-x: hidden` here breaks the sticky header on mobile. */
-html, body { width: 100%; overflow-x: clip; }
-/* Reserve scrollbar space so content (e.g. the header logo) doesn't shift left
-   when a scrollbar appears/disappears during animations like the ping refresh. */
-html { scrollbar-gutter: stable; }
+html, body { width: 100%; overflow-x: hidden; }
 body {
     font-family: var(--font);
     background: var(--bg);
@@ -265,6 +256,10 @@ header {
 }
 .hdr-btn:hover { color: var(--on-bg); background: var(--surface-0); }
 .hdr-btn i { font-size: 0.88rem; }
+.hdr-btn svg { display: inline-block; vertical-align: middle; flex-shrink: 0; }
+.hdr-github { text-decoration: none; color: var(--on-dim); }
+.hdr-github:hover { color: #ffffff; background: rgba(255, 255, 255, 0.08); }
+.login-github-link:hover { color: #ffffff !important; }
 .hdr-logout:hover { color: #e05c5c; }
 .desktop-nav { display: none; }
 
@@ -329,9 +324,120 @@ header {
 .unit { font-size: 0.95rem; color: var(--on-dim); font-weight: 500; }
 .traffic-split { display: flex; gap: 24px; margin-top: 18px; }
 .split-item .label { font-size: 0.68rem; color: var(--on-dim); display: block; margin-bottom: 4px; letter-spacing: 1px; text-transform: uppercase; }
-.split-item .val { font-size: 1rem; font-weight: 600; font-family: var(--font-mono); }
+.split-item .val { font-size: 1rem; font-weight: 600; font-family: var(--font-mono); display: inline-flex; align-items: center; gap: 6px; }
 .split-item.down .val { color: var(--blue); }
 .split-item.up .val { color: var(--on-bg); }
+
+/* Live Speed Badges */
+.user-live-speed-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 14px;
+}
+.live-speed-label {
+    font-size: 0.74rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--on-dim);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.live-speed-badges {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.speed-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    border-radius: var(--shape-full);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    font-size: 0.84rem;
+    font-family: var(--font-mono);
+    transition: all 0.3s ease;
+}
+.speed-pill.down {
+    color: var(--blue);
+    border-color: rgba(56, 189, 248, 0.25);
+}
+.speed-pill.down.active {
+    background: rgba(56, 189, 248, 0.12);
+    border-color: rgba(56, 189, 248, 0.45);
+    box-shadow: 0 0 14px rgba(56, 189, 248, 0.22);
+}
+.speed-pill.up {
+    color: var(--accent);
+    border-color: rgba(168, 85, 247, 0.25);
+}
+.speed-pill.up.active {
+    background: rgba(168, 85, 247, 0.12);
+    border-color: rgba(168, 85, 247, 0.45);
+    box-shadow: 0 0 14px rgba(168, 85, 247, 0.22);
+}
+.speed-arrow-box {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+}
+.speed-pill.down .speed-arrow-box { background: rgba(56, 189, 248, 0.15); }
+.speed-pill.up .speed-arrow-box { background: rgba(168, 85, 247, 0.15); }
+
+/* Dynamic Arrow Bounce Animations - frequency scaled dynamically via JS */
+.speed-arrow-icon, .split-arrow {
+    display: inline-block;
+    will-change: transform, opacity, filter;
+    transition: transform 0.2s ease;
+}
+.speed-arrow-icon.moving-down, .split-arrow.down-arrow.moving-down {
+    animation: arrowBobDown var(--dl-duration, 0.8s) cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+.speed-arrow-icon.moving-up, .split-arrow.up-arrow.moving-up {
+    animation: arrowBobUp var(--up-duration, 0.8s) cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+@keyframes arrowBobDown {
+    0% {
+        transform: translateY(-4px);
+        opacity: 0.65;
+    }
+    50% {
+        transform: translateY(4px);
+        opacity: 1;
+        filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.85));
+    }
+    100% {
+        transform: translateY(-4px);
+        opacity: 0.65;
+    }
+}
+
+@keyframes arrowBobUp {
+    0% {
+        transform: translateY(4px);
+        opacity: 0.65;
+    }
+    50% {
+        transform: translateY(-4px);
+        opacity: 1;
+        filter: drop-shadow(0 0 6px rgba(168, 85, 247, 0.85));
+    }
+    100% {
+        transform: translateY(4px);
+        opacity: 0.65;
+    }
+}
 
 /* Resource cards */
 .resource-card { position: relative; overflow: hidden; }
@@ -422,26 +528,31 @@ body.theme-light .ring-track { stroke: rgba(0,0,0,0.08); }
     background: rgba(255,255,255,0.07);
     border-radius: var(--shape-full);
     margin-top: 12px;
-    overflow: hidden;
+    position: relative;
+    overflow: visible;
 }
 body.theme-light .consumption-track { background: rgba(0,0,0,0.07); }
 
 .consumption-bar {
     height: 100%;
-    width: var(--bar-w);          /* driven by @property, animated by CSS */
+    width: 0%;
     background: var(--on-bg);
     border-radius: var(--shape-full);
     position: relative;
-    overflow: hidden;
-    transition: --bar-w var(--m3-std-default);  /* native @property interpolation */
+    overflow: visible;
+    transition: width 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+    will-change: width;
 }
 /* shimmer */
 .consumption-bar.anim::after {
     content: '';
     position: absolute;
     inset: 0;
+    border-radius: var(--shape-full);
     background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.30) 50%, transparent 100%);
     animation: shimmer 1.8s linear infinite;
+    pointer-events: none;
+    overflow: hidden;
 }
 body.theme-light .consumption-bar.anim::after {
     background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.50) 50%, transparent 100%);
@@ -450,6 +561,68 @@ body.theme-light .consumption-bar.anim::after {
 
 .consumption-bar.level-warn { background: var(--warn); }
 .consumption-bar.level-bad { background: var(--bad); }
+
+/* White Flares on Limited Data Progress Bar & Arc (Not shown on unlimited) */
+.flare-spark {
+    position: absolute;
+    right: -4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 
+        0 0 6px 2px #ffffff,
+        0 0 14px 6px rgba(255, 255, 255, 0.95),
+        0 0 24px 10px rgba(99, 102, 241, 0.75),
+        0 0 36px 14px rgba(255, 255, 255, 0.4);
+    pointer-events: none;
+    z-index: 10;
+    animation: whiteFlarePulse 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes whiteFlarePulse {
+    0% {
+        transform: translateY(-50%) scale(0.85);
+        box-shadow: 
+            0 0 5px 2px #ffffff,
+            0 0 12px 4px rgba(255, 255, 255, 0.85),
+            0 0 20px 7px rgba(99, 102, 241, 0.6);
+        opacity: 0.85;
+    }
+    100% {
+        transform: translateY(-50%) scale(1.3);
+        box-shadow: 
+            0 0 10px 4px #ffffff,
+            0 0 22px 9px rgba(255, 255, 255, 1),
+            0 0 35px 14px rgba(129, 140, 248, 0.9),
+            0 0 50px 18px rgba(255, 255, 255, 0.6);
+        opacity: 1;
+    }
+}
+
+/* White Flare on SVG Usage Ring (Limited Data Only) */
+.ring-flare-spark {
+    fill: #ffffff;
+    filter: drop-shadow(0 0 5px #ffffff) drop-shadow(0 0 12px rgba(255, 255, 255, 0.95)) drop-shadow(0 0 22px rgba(99, 102, 241, 0.85));
+    animation: ringFlarePulse 1.3s ease-in-out infinite alternate;
+    pointer-events: none;
+    transition: cx 0.8s cubic-bezier(0.2, 0.8, 0.2, 1), cy 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes ringFlarePulse {
+    0% {
+        r: 3.5;
+        opacity: 0.85;
+        filter: drop-shadow(0 0 4px #ffffff) drop-shadow(0 0 10px rgba(255, 255, 255, 0.8)) drop-shadow(0 0 18px rgba(99, 102, 241, 0.6));
+    }
+    100% {
+        r: 5.5;
+        opacity: 1;
+        filter: drop-shadow(0 0 9px #ffffff) drop-shadow(0 0 18px rgba(255, 255, 255, 1)) drop-shadow(0 0 28px rgba(147, 197, 253, 0.95));
+    }
+}
 
 .consumption-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
 .consumption-line {
@@ -614,10 +787,11 @@ body.theme-light .consumption-line { background: rgba(0,0,0,0.03); }
 
 .plan-bar-track {
     width: 100%;
-    height: 5px;
+    height: 6px;
     background: var(--surface-2);
     border-radius: var(--shape-full);
-    overflow: hidden;
+    position: relative;
+    overflow: visible;
 }
 .plan-bar-fill {
     height: 100%;
@@ -625,14 +799,19 @@ body.theme-light .consumption-line { background: rgba(0,0,0,0.03); }
     background: var(--on-bg);
     width: 0%;
     position: relative;
-    overflow: hidden;
+    overflow: visible;
+    transition: width 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+    will-change: width;
 }
 .plan-bar-fill::after {
     content: '';
     position: absolute;
     inset: 0;
+    border-radius: var(--shape-full);
     background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.28) 50%, transparent 100%);
     animation: shimmer 2.2s linear infinite;
+    pointer-events: none;
+    overflow: hidden;
 }
 .plan-bar-fill.warn { background: var(--warn); }
 .plan-bar-fill.bad  { background: var(--bad); }
@@ -1022,9 +1201,6 @@ body.theme-light .accent-btn { color: #fff; background: #0a0a0a; }
    ============================================================ */
 .tab-content { display: none; }
 .tab-content.active { display: block; animation: tab-reveal var(--m3-std-fast) both; }
-/* Client view: even, generous spacing between its stacked cards (id beats the
-   .tab-content.active block rule, so flex wins when this tab is active). */
-#tab-user-view.active { display: flex; flex-direction: column; gap: 24px; }
 @keyframes tab-reveal {
     from { opacity: 0; transform: translateY(8px); }
     to   { opacity: 1; transform: translateY(0); }
@@ -1265,50 +1441,452 @@ body.theme-light header { background: rgba(245,245,245,0.85); border-bottom: 1px
     .dashboard-wrapper { max-width: 100%; }
 }
 
-/* Medium (600–840px) — tablet */
-@media (max-width: 840px) {
-    .mobile-nav { display: flex; }
-    .dashboard-wrapper { padding: 14px; padding-bottom: calc(var(--nav-height) + 32px + env(safe-area-inset-bottom)); }
-    .overview-grid { grid-template-columns: 1fr; gap: 18px; }
-    .charts-row { display: block; }
-    .inbound-grid, .client-container, .system-grid { grid-template-columns: 1fr; }
-    .data-card-hero { grid-column: span 1; flex-direction: column; text-align: center; gap: 16px; padding: 20px; }
-    .traffic-split { justify-content: center; gap: 18px; }
-    header { margin-bottom: 16px; margin-inline: -14px; padding-inline: 14px; }
-    .hdr-label { display: none; }
-    .hdr-btn { padding: 8px 10px; }
-    /* Keep header controls reachable: truncate the long email, never clip the
-       theme/BG/logout buttons. */
-    .hdr-right { min-width: 0; flex-shrink: 1; }
-    .user-status { min-width: 0; flex: 0 1 auto; max-width: 44vw; overflow: hidden; }
-    .user-status span { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
-    .hdr-actions, .client-top-status, .logo { flex-shrink: 0; }
-    .main-value { font-size: 2.2rem; }
-    .usage-ring-wrap { width: 120px; height: 120px; }
-    .fab { bottom: calc(84px + env(safe-area-inset-bottom)); right: 16px; }
+/* Base Mobile Nav State */
+.mobile-nav {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: calc(58px + env(safe-area-inset-bottom, 0px));
+    background: rgba(10, 10, 10, 0.92);
+    backdrop-filter: blur(24px) saturate(1.2);
+    -webkit-backdrop-filter: blur(24px) saturate(1.2);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    justify-content: space-around;
+    align-items: center;
+    padding: 0 8px env(safe-area-inset-bottom, 0px);
+    z-index: 1000;
+    box-sizing: border-box;
+}
+body.theme-light .mobile-nav {
+    background: rgba(245, 245, 245, 0.92);
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
 }
 
-/* Compact (<600px) — phone */
+.m-nav-btn {
+    background: none;
+    border: none;
+    color: var(--on-dim);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    font-size: 0.68rem;
+    font-family: var(--font);
+    font-weight: 600;
+    transition: color 0.2s ease, transform 0.2s ease;
+    width: 25%;
+    height: 100%;
+    letter-spacing: 0.2px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.m-nav-btn i { font-size: 1.15rem; transition: transform 0.2s ease; }
+.m-nav-btn.active { color: var(--on-bg); font-weight: 700; }
+.m-nav-btn.active i { transform: translateY(-2px); color: var(--accent); }
+
+/* Dedicated prominent logout button styling */
+.hdr-logout {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: rgba(239, 68, 68, 0.14) !important;
+    color: #f87171 !important;
+    border: 1px solid rgba(239, 68, 68, 0.3) !important;
+    border-radius: var(--shape-full) !important;
+    padding: 7px 14px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0 !important;
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+.hdr-logout:hover, .hdr-logout:active {
+    background: rgba(239, 68, 68, 0.32) !important;
+    color: #ffffff !important;
+    border-color: rgba(239, 68, 68, 0.55) !important;
+    transform: scale(0.96);
+    box-shadow: 0 4px 14px rgba(239, 68, 68, 0.25);
+}
+
+/* Medium (600–840px) — tablet & phablet */
+@media (max-width: 840px) {
+    body.is-admin .mobile-nav { display: flex !important; }
+    body.is-admin .dashboard-wrapper {
+        padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)) !important;
+    }
+    body.is-admin .fab {
+        bottom: calc(78px + env(safe-area-inset-bottom, 0px)) !important;
+        right: 18px !important;
+    }
+    #admin-tab-select { display: none !important; }
+
+    .dashboard-wrapper { padding: 18px 16px; }
+    .overview-grid { grid-template-columns: 1fr; gap: 18px; margin-bottom: 20px; }
+    .charts-row { display: block; }
+    .inbound-grid, .client-container, .system-grid { grid-template-columns: 1fr; gap: 18px; }
+    .data-card-hero { grid-column: span 1; flex-direction: column; text-align: center; gap: 18px; padding: 22px 20px; }
+    .traffic-split { justify-content: center; gap: 20px; margin: 16px 0; }
+    header { margin-bottom: 20px; margin-inline: -16px; padding-inline: 16px; }
+    .hdr-label { display: none !important; }
+    .hdr-btn { padding: 8px 10px; }
+    .main-value { font-size: 2.2rem; }
+    .usage-ring-wrap { width: 120px; height: 120px; }
+    .user-view-card { margin-bottom: 22px !important; }
+}
+
+/* Compact (<600px) — phone layout with generous card & ping spacing */
 @media (max-width: 600px) {
-    .dashboard-wrapper { padding: 10px; }
-    header { margin-inline: -10px; padding-inline: 10px; gap: 8px; }
-    .hdr-label { display: none; }
-    .hdr-btn { padding: 8px; width: 34px; height: 34px; }
-    .hdr-right { gap: 6px; }
-    .user-status { padding: 7px 8px; }
-    .user-status .status-label { display: none; }
-    .logo-ext { display: none; }
-    .logo-name { font-size: 1.1rem; }
-    .card { padding: 16px; border-radius: var(--shape-xl); }
-    .overview-grid { gap: 16px; }
-    .data-card-hero { padding: 16px; }
-    .data-card-hero .main-value { font-size: 1.8rem; margin: 5px 0; }
-    .traffic-split { flex-direction: row; gap: 14px; margin-top: 10px; }
-    .split-item .val { font-size: 0.88rem; }
-    .usage-ring-wrap { width: 100px; height: 100px; }
-    .percent-val { top: 14px; right: 14px; font-size: 1.1rem; }
-    .mini-chart-container { height: 72px; }
-    .flip-digit { font-size: 1.3rem; min-width: 48px; padding: 8px 10px; }
+    .dashboard-wrapper {
+        padding: 16px 14px calc(76px + env(safe-area-inset-bottom, 20px)) !important;
+    }
+    body.is-admin .dashboard-wrapper {
+        padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)) !important;
+    }
+    body.is-admin .fab {
+        bottom: calc(76px + env(safe-area-inset-bottom, 0px)) !important;
+        right: 16px !important;
+    }
+
+    header {
+        margin-inline: -14px;
+        padding: 10px 14px;
+        gap: 8px;
+        margin-bottom: 18px;
+    }
+    .logo { gap: 8px; min-width: 0; flex-shrink: 1; }
+    .logo-icon { width: 32px; height: 32px; font-size: 0.85rem; border-radius: 9px; }
+    .logo-name { font-size: 1.1rem; white-space: nowrap; }
+    .logo-ext { display: none !important; }
+
+    .hdr-right { gap: 6px; flex-shrink: 0; }
+    .user-status { display: none !important; }
+
+    .hdr-actions { padding: 3px 6px; gap: 4px; }
+    .hdr-btn {
+        width: 34px !important;
+        height: 34px !important;
+        padding: 0 !important;
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+    }
+    .hdr-btn i { font-size: 0.88rem; }
+    .hdr-btn svg { width: 15px; height: 15px; }
+
+    .hdr-logout {
+        width: 34px !important;
+        height: 34px !important;
+        padding: 0 !important;
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+    }
+    .hdr-logout i { font-size: 0.88rem; }
+
+    /* Distinct Card Spacing - Completely eliminates stuck together cards */
+    .card {
+        padding: 22px 18px !important;
+        border-radius: 22px !important;
+        margin-bottom: 22px !important;
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    }
+    .user-view-card {
+        margin-bottom: 22px !important;
+        margin-top: 0 !important;
+    }
+    .overview-grid {
+        gap: 20px !important;
+        margin-bottom: 22px !important;
+    }
+
+    /* Hero Traffic Usage Card */
+    .data-card-hero {
+        padding: 22px 18px !important;
+        gap: 18px !important;
+    }
+    .data-card-hero .main-value {
+        font-size: 2.1rem !important;
+        margin: 6px 0 !important;
+    }
+    .traffic-split {
+        flex-direction: row !important;
+        gap: 16px !important;
+        margin: 18px 0 14px !important;
+        padding: 14px 12px !important;
+        background: rgba(255, 255, 255, 0.02) !important;
+        border-radius: 16px !important;
+        border: 1px solid rgba(255, 255, 255, 0.04) !important;
+        justify-content: space-around !important;
+    }
+    .split-item .val {
+        font-size: 0.95rem !important;
+        margin-top: 4px !important;
+    }
+    .user-live-speed-row {
+        margin-top: 18px !important;
+        padding-top: 16px !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+        gap: 10px !important;
+        flex-direction: column !important;
+        align-items: center !important;
+    }
+    .live-speed-badges {
+        display: flex !important;
+        gap: 10px !important;
+        width: 100% !important;
+        justify-content: center !important;
+    }
+    .speed-pill {
+        padding: 5px 12px !important;
+        font-size: 0.82rem !important;
+        gap: 8px !important;
+        border-radius: var(--shape-full) !important;
+    }
+    .usage-ring-wrap {
+        width: 110px !important;
+        height: 110px !important;
+        margin: 16px auto 4px auto !important;
+    }
+    .percent-val { top: 12px; right: 12px; font-size: 1.05rem; }
+    .mini-chart-container { height: 68px; }
+    .flip-digit { font-size: 1.2rem; min-width: 42px; padding: 6px 8px; }
+
+    /* Consumption Progress Bar Spacing */
+    .consumption-head {
+        margin-bottom: 16px !important;
+    }
+    .consumption-track {
+        height: 10px !important;
+        margin: 16px 0 !important;
+    }
+    .consumption-meta {
+        grid-template-columns: 1fr !important;
+        gap: 12px !important;
+        margin-top: 16px !important;
+    }
+    .consumption-line {
+        padding: 12px 14px !important;
+        border-radius: 14px !important;
+    }
+
+    /* M3 Plan Card Spacing */
+    .m3-plan-card {
+        padding: 22px 18px !important;
+    }
+    .plan-head {
+        margin-bottom: 22px !important;
+    }
+    .plan-usage {
+        margin-bottom: 22px !important;
+    }
+    .plan-usage-top {
+        margin-bottom: 10px !important;
+    }
+    .plan-bar-track {
+        height: 10px !important;
+        margin-bottom: 12px !important;
+    }
+    .plan-usage-nums {
+        margin-top: 12px !important;
+        font-size: 0.88rem !important;
+    }
+    .plan-stats {
+        grid-template-columns: 1fr !important;
+        gap: 10px !important;
+        background: transparent !important;
+        border: none !important;
+        margin-top: 18px !important;
+    }
+    .plan-stat-item {
+        border-radius: 14px !important;
+        border: 1px solid var(--border) !important;
+        padding: 12px 16px !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        text-align: left !important;
+    }
+    .plan-stat-lbl {
+        margin-bottom: 0 !important;
+        font-size: 0.75rem !important;
+    }
+    .plan-stat-val {
+        font-size: 0.95rem !important;
+    }
+
+    /* Account Details Spacing */
+    .info-row {
+        padding: 12px 0 !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        gap: 12px !important;
+    }
+
+    /* Forms */
+    input, select, textarea, .login-field-input {
+        font-size: 16px !important;
+    }
+
+    /* Modal dialogs */
+    .modal-overlay { padding: 12px; }
+    .modal-card { padding: 20px 16px; border-radius: 20px; max-width: 96vw; max-height: 88vh; }
+
+    /* Client drawer */
+    .drawer-panel {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        border-left: none !important;
+    }
+
+    /* Live status strip */
+    .live-strip-row { gap: 8px !important; margin-bottom: 16px !important; }
+    .live-pill { padding: 5px 11px !important; font-size: 0.75rem !important; gap: 6px !important; }
+
+    /* System action buttons on phone */
+    .sys-actions { gap: 10px !important; }
+    .sys-btn { padding: 10px 12px !important; font-size: 0.8rem !important; }
+
+    /* ============================================================
+       Ping Section (3-Node Network Pipeline) Mobile Revamp
+       Generous spacing, padded nodes, comfortable hop conduits
+       ============================================================ */
+    .ping-card {
+        padding: 22px 18px 20px !important;
+        margin-bottom: 24px !important;
+    }
+    .ping-head {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        margin-bottom: 20px !important;
+        padding-bottom: 16px !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+        gap: 12px !important;
+    }
+    .ping-val-row {
+        gap: 8px !important;
+        margin-top: 4px !important;
+    }
+    .ping-ms {
+        font-size: 2.1rem !important;
+    }
+    .ping-btn {
+        padding: 8px 14px !important;
+        font-size: 0.8rem !important;
+    }
+
+    /* 3-Node Topology: Spacious conduits with wide connectors */
+    .ping-topology {
+        padding: 20px 14px !important;
+        margin: 22px 0 20px !important;
+        background: rgba(255, 255, 255, 0.025) !important;
+        border-radius: 18px !important;
+        border: 1px solid rgba(255, 255, 255, 0.07) !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 6px !important;
+    }
+    .topo-node {
+        min-width: 58px !important;
+        gap: 8px !important;
+        flex-shrink: 0 !important;
+    }
+    .topo-icon-wrap {
+        width: 46px !important;
+        height: 46px !important;
+        border-radius: 50% !important;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35) !important;
+    }
+    .topo-icon {
+        font-size: 1.15rem !important;
+    }
+    .topo-name {
+        font-size: 0.78rem !important;
+        font-weight: 700 !important;
+        margin-top: 2px !important;
+    }
+    .topo-sub {
+        font-size: 0.62rem !important;
+        letter-spacing: 0.4px !important;
+    }
+    .topo-connector {
+        flex: 1 !important;
+        min-width: 36px !important;
+        padding: 0 4px !important;
+        gap: 8px !important;
+    }
+    .topo-track {
+        height: 4px !important;
+    }
+    .topo-hop-badge {
+        font-size: 0.68rem !important;
+        padding: 3px 6px !important;
+        border-radius: var(--shape-full) !important;
+        margin-top: 4px !important;
+    }
+    .topo-hop-arr { display: none; }
+
+    /* Stability Bars & Ping Footer Spacing */
+    .ping-history-section {
+        margin-top: 20px !important;
+        padding-top: 18px !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.07) !important;
+    }
+    .ping-bars-label {
+        font-size: 0.72rem !important;
+        margin-bottom: 12px !important;
+        letter-spacing: 1px !important;
+    }
+    .ping-bars {
+        height: 38px !important;
+        gap: 5px !important;
+        margin-bottom: 16px !important;
+    }
+    .ping-footer {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        gap: 12px !important;
+        padding-top: 10px !important;
+        margin-top: 10px !important;
+    }
+    .ping-status {
+        font-size: 0.78rem !important;
+    }
+    .ping-summary-chip {
+        font-size: 0.75rem !important;
+        padding: 4px 10px !important;
+    }
+
+    /* Connection Config Card */
+    #client-config-card {
+        padding: 22px 18px !important;
+        margin-bottom: 24px !important;
+    }
+    .client-logout-wrap {
+        margin: 28px 0 20px !important;
+        padding-bottom: 14px !important;
+    }
+}
+
+@media (max-width: 380px) {
+    .hdr-actions button#btn-bg {
+        display: none !important;
+    }
+    .traffic-split {
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+    }
 }
 
 /* Reduced motion */
@@ -1386,31 +1964,47 @@ body.theme-light .m3-ripple { background: rgba(0,0,0,0.08); }
 }
 
 /* ============================================================
-   Server Ping Card
+   Server Ping Card - 3-Node Interactive Latency Pipeline
    ============================================================ */
-.ping-card { padding: 18px 20px 14px; }
+.ping-card {
+    padding: 20px 22px 18px;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--shape-xl);
+    position: relative;
+    overflow: hidden;
+    transition: border-color var(--m3-effects), box-shadow var(--m3-effects);
+}
+.ping-card:hover {
+    border-color: var(--border-hi);
+    box-shadow: 0 8px 32px -8px rgba(0, 0, 0, 0.35);
+}
 
 .ping-head {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    margin-bottom: 16px;
+    margin-bottom: 18px;
 }
 .ping-eyebrow {
-    font-size: 0.67rem;
+    font-size: 0.68rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 1.2px;
     color: var(--on-dim);
-    margin-bottom: 5px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 .ping-val-row {
     display: flex;
     align-items: baseline;
-    gap: 4px;
+    gap: 6px;
+    flex-wrap: wrap;
 }
 .ping-ms {
-    font-size: 2rem;
+    font-size: 2.1rem;
     font-weight: 800;
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
@@ -1420,7 +2014,7 @@ body.theme-light .m3-ripple { background: rgba(0,0,0,0.08); }
     transition: color var(--m3-effects);
 }
 .ping-unit {
-    font-size: 0.78rem;
+    font-size: 0.8rem;
     font-weight: 600;
     color: var(--on-dim);
 }
@@ -1429,35 +2023,252 @@ body.theme-light .m3-ripple { background: rgba(0,0,0,0.08); }
 .ping-ms.bad   { color: var(--bad);  }
 
 .ping-btn {
-    width: 36px;
-    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 14px;
     border-radius: var(--shape-full);
     border: 1px solid var(--border);
-    background: transparent;
-    color: var(--on-dim);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    background: var(--surface-2);
+    color: var(--on-bg);
     cursor: pointer;
-    font-size: 0.88rem;
-    transition: color var(--m3-effects), background var(--m3-effects), transform var(--m3-spatial-fast);
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    transition: all var(--m3-effects);
     flex-shrink: 0;
     position: relative;
     overflow: hidden;
 }
-.ping-btn:hover { color: var(--on-bg); background: var(--surface-2); }
-.ping-btn.pinging { animation: ping-pulse 600ms ease-in-out infinite alternate; }
-@keyframes ping-pulse {
-    from { opacity: 0.4; }
-    to   { opacity: 1; }
+.ping-btn i {
+    color: var(--accent);
+    font-size: 0.85rem;
+    transition: transform 0.3s ease;
+}
+.ping-btn:hover {
+    background: var(--surface-3);
+    border-color: var(--border-hi);
+    transform: translateY(-1px);
+}
+.ping-btn:hover i {
+    transform: scale(1.15);
+}
+.ping-btn.pinging {
+    animation: ping-pulse 600ms ease-in-out infinite alternate;
+    pointer-events: none;
+    border-color: rgba(99, 102, 241, 0.6);
+}
+.ping-btn.pinging i {
+    animation: pingSpin 0.8s linear infinite;
+}
+@keyframes pingSpin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
-/* Bar chart */
+/* 3-Node Topology Diagram: Client -> VPS -> Internet */
+.ping-topology {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 18px 0 16px;
+    padding: 14px 12px;
+    border-radius: var(--shape-lg);
+    background: rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    position: relative;
+}
+body.theme-light .ping-topology {
+    background: rgba(0, 0, 0, 0.03);
+    border-color: rgba(0, 0, 0, 0.06);
+}
+
+.topo-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 6px;
+    flex-shrink: 0;
+    min-width: 64px;
+    z-index: 2;
+}
+.topo-icon-wrap {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface-2);
+    border: 1.5px solid var(--border);
+    position: relative;
+    transition: all 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.topo-icon {
+    font-size: 1.2rem;
+    transition: transform 0.3s ease;
+}
+
+/* Node Custom Accents & Glows */
+.topo-icon-wrap.client-glow {
+    border-color: rgba(56, 189, 248, 0.35);
+    color: #38bdf8;
+    box-shadow: 0 0 16px rgba(56, 189, 248, 0.15);
+}
+.topo-icon-wrap.vps-glow {
+    border-color: rgba(129, 140, 248, 0.35);
+    color: #818cf8;
+    box-shadow: 0 0 16px rgba(129, 140, 248, 0.15);
+}
+.topo-icon-wrap.internet-glow {
+    border-color: rgba(16, 185, 129, 0.35);
+    color: #10b981;
+    box-shadow: 0 0 16px rgba(16, 185, 129, 0.15);
+}
+
+.topo-node.active .topo-icon-wrap {
+    transform: scale(1.1);
+}
+.topo-node.active .topo-icon-wrap.client-glow {
+    box-shadow: 0 0 24px rgba(56, 189, 248, 0.55);
+    border-color: #38bdf8;
+}
+.topo-node.active .topo-icon-wrap.vps-glow {
+    box-shadow: 0 0 24px rgba(129, 140, 248, 0.55);
+    border-color: #818cf8;
+}
+.topo-node.active .topo-icon-wrap.internet-glow {
+    box-shadow: 0 0 24px rgba(16, 185, 129, 0.55);
+    border-color: #10b981;
+}
+
+.node-pulse-ring {
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    border: 1.5px solid currentColor;
+    opacity: 0;
+    pointer-events: none;
+}
+.topo-node.pulse-fire .node-pulse-ring {
+    animation: nodePulseWave 1s cubic-bezier(0.1, 0.8, 0.2, 1);
+}
+@keyframes nodePulseWave {
+    0% { transform: scale(1); opacity: 0.9; }
+    100% { transform: scale(1.6); opacity: 0; }
+}
+
+.topo-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.topo-name {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--on-bg);
+}
+.topo-sub {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--on-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Conduits / Connectors */
+.topo-connector {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+    position: relative;
+    padding: 0 4px;
+    min-width: 44px;
+    z-index: 1;
+}
+.topo-track {
+    width: 100%;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 99px;
+    position: relative;
+    overflow: hidden;
+}
+body.theme-light .topo-track { background: rgba(0, 0, 0, 0.08); }
+
+.topo-beam {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.7), transparent);
+    animation: beamFlow 2.2s ease-in-out infinite;
+    opacity: 0.6;
+}
+@keyframes beamFlow {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+.topo-packet {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    transform: translate(-50%, -50%);
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 0 6px 2px #fff, 0 0 12px 4px rgba(99, 102, 241, 0.9);
+    opacity: 0;
+    pointer-events: none;
+    will-change: left, opacity;
+}
+
+.topo-hop-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: var(--shape-full);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    font-size: 0.72rem;
+    font-family: var(--font-mono);
+    color: var(--on-dim);
+    font-weight: 600;
+    white-space: nowrap;
+    transition: all 0.3s ease;
+}
+.topo-hop-arr {
+    font-size: 0.62rem;
+    opacity: 0.6;
+}
+.topo-hop-badge.active {
+    color: var(--on-bg);
+    border-color: rgba(99, 102, 241, 0.45);
+    background: rgba(99, 102, 241, 0.12);
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
+}
+
+/* History / Stability Bars */
+.ping-history-section {
+    margin-top: 14px;
+}
+.ping-bars-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--on-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 6px;
+}
 .ping-bars {
     display: flex;
     align-items: flex-end;
     gap: 4px;
-    height: 36px;
+    height: 32px;
     margin-bottom: 12px;
 }
 .ping-bar {
@@ -1480,21 +2291,53 @@ body.theme-light .m3-ripple { background: rgba(0,0,0,0.08); }
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
 }
 .ping-status {
     font-size: 0.75rem;
     color: var(--on-dim);
+    font-weight: 500;
 }
 .ping-quality {
     font-size: 0.72rem;
     font-weight: 700;
     letter-spacing: 0.5px;
     text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: var(--shape-full);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
     color: var(--on-dim);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
-.ping-quality.good { color: var(--good); }
-.ping-quality.warn { color: var(--warn); }
-.ping-quality.bad  { color: var(--bad);  }
+.ping-quality.good {
+    color: var(--good);
+    border-color: rgba(16, 185, 129, 0.35);
+    background: rgba(16, 185, 129, 0.12);
+}
+.ping-quality.warn {
+    color: var(--warn);
+    border-color: rgba(245, 158, 11, 0.35);
+    background: rgba(245, 158, 11, 0.12);
+}
+.ping-quality.bad  {
+    color: var(--bad);
+    border-color: rgba(239, 68, 68, 0.35);
+    background: rgba(239, 68, 68, 0.12);
+}
+.ping-summary-chip {
+    font-size: 0.72rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    color: var(--on-dim);
+    background: var(--surface-2);
+    padding: 3px 8px;
+    border-radius: var(--shape-full);
+    border: 1px solid var(--border);
+}
 
 /* ============================================================
    Misc utility
@@ -1523,516 +2366,47 @@ body.theme-light ::selection { background: rgba(0,0,0,0.12); }
     transition: opacity 0.2s, transform 0.2s;
 }
 
-/* ======================================================================
-   FX layer — glow, animated status icons, number pop, shimmer skeletons
-   (paired with fx.js; all continuous motion gated on reduced-motion)
-   ====================================================================== */
-
-/* Soft breathing glow on the hero cards */
-@media (prefers-reduced-motion: no-preference) {
-    .data-card-hero {
-        animation: fx-hero-glow 4.6s ease-in-out infinite;
-    }
-}
-@keyframes fx-hero-glow {
-    0%, 100% { box-shadow: 0 0 0 1px rgba(124, 92, 255, 0.12), 0 8px 40px -14px rgba(124, 92, 255, 0.28); }
-    50%      { box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.22), 0 12px 50px -12px rgba(34, 211, 238, 0.34); }
-}
-
-/* vanilla-tilt glare: keep it inside the rounded corners */
-.data-card-hero, .card { transform-style: preserve-3d; }
-.js-tilt-glare { border-radius: inherit; overflow: hidden; }
-
-/* Animated "online" status — pulsing ring on the plan dot */
-@media (prefers-reduced-motion: no-preference) {
-    #plan-status-pill.online .plan-dot { position: relative; }
-    #plan-status-pill.online .plan-dot::after {
-        content: ""; position: absolute; inset: -4px; border-radius: 50%;
-        border: 2px solid var(--good, #34d399); opacity: 0.7;
-        animation: fx-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
-        pointer-events: none;
-    }
-}
-@keyframes fx-ping {
-    0%   { transform: scale(0.6); opacity: 0.7; }
-    80%, 100% { transform: scale(1.9); opacity: 0; }
-}
-
-/* Animated traffic arrows on the hero cards */
-@media (prefers-reduced-motion: no-preference) {
-    .data-card-hero .fa-arrow-down { animation: fx-bob-down 1.9s ease-in-out infinite; display: inline-block; }
-    .data-card-hero .fa-arrow-up   { animation: fx-bob-up   1.9s ease-in-out infinite; display: inline-block; }
-}
-@keyframes fx-bob-down { 0%, 100% { transform: translateY(-1px); } 50% { transform: translateY(2px); } }
-@keyframes fx-bob-up   { 0%, 100% { transform: translateY(1px); }  50% { transform: translateY(-2px); } }
-
-/* Number "settle" pop when the hero total finishes counting up */
-.main-value #user-used { display: inline-block; will-change: transform; }
-.fx-settle { animation: fx-pop 0.45s cubic-bezier(0.2, 0.7, 0.2, 1); }
-@keyframes fx-pop {
-    0%   { transform: scale(1); }
-    35%  { transform: scale(1.06); filter: brightness(1.3); }
-    100% { transform: scale(1); }
-}
-
-/* Shimmer skeleton while hero numbers load */
-.fx-skeleton {
-    color: transparent !important;
-    background: linear-gradient(100deg,
-        rgba(255, 255, 255, 0.05) 30%,
-        rgba(255, 255, 255, 0.16) 50%,
-        rgba(255, 255, 255, 0.05) 70%);
-    background-size: 200% 100%;
-    border-radius: 8px;
-    animation: fx-shimmer 1.15s ease-in-out infinite;
-}
-@keyframes fx-shimmer {
-    0%   { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-}
-@media (prefers-reduced-motion: reduce) {
-    .fx-skeleton { animation: none; color: inherit !important; background: none; }
-}
-
-/* ======================================================================
-   Multi-link lists — "All Servers" + "Subscription Links" (client view)
-   ====================================================================== */
-.links-list { display: flex; flex-direction: column; gap: 10px; width: 100%; }
-.link-item {
+/* --- Upgraded Interactive Micro-Animations & Live Pill Strip --- */
+.live-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 13px;
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    padding: 10px 12px;
-}
-.link-item-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.link-item-name {
-    font-size: 0.82rem; font-weight: 600; letter-spacing: 0.02em;
-    color: var(--accent, #7c5cff); text-transform: uppercase;
-}
-.link-item-acts { display: flex; gap: 6px; flex-shrink: 0; }
-.sys-btn.sm { padding: 6px 10px; font-size: 0.8rem; min-width: auto; }
-.link-item-url {
-    margin-top: 6px; font-size: 0.72rem; color: var(--text-dim, #9aa);
-    word-break: break-all; font-family: 'JetBrains Mono', monospace;
-}
-.link-qr {
-    margin-top: 10px; display: flex; justify-content: center; align-self: center;
-    background: #fff; border-radius: 12px; padding: 10px;
-}
-.link-qr canvas { display: block; border-radius: 6px; }
-
-/* ======================================================================
-   Livelier ping while measuring (paired with runPing / .ping-measuring)
-   ====================================================================== */
-@media (prefers-reduced-motion: no-preference) {
-    #btn-ping.pinging { animation: fx-ping-btn 0.9s ease-in-out infinite; }
-    .ping-measuring .ping-ms { animation: fx-ping-flash 0.85s ease-in-out infinite; }
-    .ping-measuring .ping-bar { animation: fx-ping-bar-pulse 0.85s ease-in-out infinite; }
-}
-@keyframes fx-ping-btn {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(124, 92, 255, 0.45); }
-    50%      { box-shadow: 0 0 0 10px rgba(124, 92, 255, 0); }
-}
-@keyframes fx-ping-flash { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
-@keyframes fx-ping-bar-pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.9; } }
-
-/* ======================================================================
-   Material 3 button interactions — state layer + press spring + focus ring
-   Applied to every button class so dynamically-added buttons get it too.
-   ====================================================================== */
-.sys-btn, .hdr-btn, .ping-btn, .login-btn, .accent-btn, .fab {
-    position: relative;
-    overflow: hidden;
-    isolation: isolate;
-    transition: transform var(--m3-spatial-fast),
-                background var(--m3-effects),
-                border-color var(--m3-effects),
-                color var(--m3-effects),
-                box-shadow var(--m3-effects),
-                opacity var(--m3-effects);
-}
-/* Translucent "state layer" of the on-color — the signature M3 feedback. */
-.sys-btn::after, .hdr-btn::after, .ping-btn::after,
-.login-btn::after, .accent-btn::after, .fab::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: currentColor;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity var(--m3-effects);
-    z-index: 0;
-}
-@media (hover: hover) {
-    .sys-btn:hover::after, .hdr-btn:hover::after, .ping-btn:hover::after,
-    .login-btn:hover::after, .accent-btn:hover::after, .fab:hover::after { opacity: 0.08; }
-}
-.sys-btn:active::after, .hdr-btn:active::after, .ping-btn:active::after,
-.login-btn:active::after, .accent-btn:active::after, .fab:active::after { opacity: 0.14; }
-
-/* Press-scale spring (overrides the older flat scale) */
-.sys-btn:active, .hdr-btn:active, .ping-btn:active,
-.login-btn:active, .accent-btn:active { transform: scale(0.96); }
-.fab:active { transform: scale(0.92); }
-
-/* Elevation lift on hover for the prominent buttons */
-@media (hover: hover) {
-    .login-btn:hover, .accent-btn:hover, .fab:hover { box-shadow: var(--shadow-2); }
-}
-
-/* Keyboard focus ring (accessibility) */
-.sys-btn:focus-visible, .hdr-btn:focus-visible, .ping-btn:focus-visible,
-.login-btn:focus-visible, .accent-btn:focus-visible, .fab:focus-visible {
-    outline: 2px solid var(--on-mid);
-    outline-offset: 2px;
-}
-
-/* Keep label/icon above the state layer. The ripple must stay ABSOLUTE — making
-   it position:relative turned it into a flex item and shoved the icon sideways. */
-.sys-btn > i, .sys-btn > span:not(.m3-ripple),
-.hdr-btn > i, .hdr-btn > span:not(.m3-ripple),
-.ping-btn > i, .ping-btn > span:not(.m3-ripple),
-.login-btn > i, .login-btn > span:not(.m3-ripple),
-.accent-btn > i, .accent-btn > span:not(.m3-ripple),
-.fab > i, .fab > span:not(.m3-ripple) { position: relative; z-index: 1; }
-/* Ripple always stays out of flow so it can't push the icon (order-independent). */
-.m3-ripple { position: absolute !important; z-index: 1; }
-
-@media (prefers-reduced-motion: reduce) {
-    .sys-btn, .hdr-btn, .ping-btn, .login-btn, .accent-btn, .fab { transition: none; }
-    .sys-btn:active, .hdr-btn:active, .ping-btn:active,
-    .login-btn:active, .accent-btn:active, .fab:active { transform: none; }
-}
-
-/* ======================================================================
-   Lazy-load feedback — the BG toggle fetches Three.js/Vanta (~617KB) on
-   first use, so show it's working instead of appearing unresponsive.
-   ====================================================================== */
-.hdr-btn.loading { pointer-events: none; opacity: 0.75; }
-.hdr-btn.loading > i {
-    animation: fx-spin 0.8s linear infinite;
-    transform-origin: 50% 50%;
-}
-@keyframes fx-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) {
-    .hdr-btn.loading > i { animation: none; }
-}
-
-/* ======================================================================
-   Interaction polish — pure CSS/GPU, zero added payload.
-   Rules:
-     • transform/opacity/box-shadow only (no layout thrash)
-     • hover effects gated on (hover: hover) so they don't stick on touch
-     • cards use shadow/glow NOT transform — vanilla-tilt owns their inline
-       transform, so a CSS transform here would simply never apply
-     • everything collapses under prefers-reduced-motion
-   ====================================================================== */
-
-/* --- Cards: depth + a light sweep on hover ------------------------------ */
-@media (hover: hover) {
-    .card {
-        transition: box-shadow var(--m3-std-fast), border-color var(--m3-effects), background-color var(--m3-effects);
-    }
-    .card:hover {
-        box-shadow: 0 10px 34px -14px rgba(0, 0, 0, 0.75), 0 0 0 1px var(--border-hi);
-    }
-    /* Slow diagonal sheen across the hero card */
-    .data-card-hero { position: relative; overflow: hidden; }
-    .data-card-hero::after {
-        content: "";
-        position: absolute;
-        top: -60%; left: -160%;
-        width: 60%; height: 220%;
-        background: linear-gradient(100deg, transparent, rgba(255,255,255,0.07), transparent);
-        transform: rotate(12deg);
-        pointer-events: none;
-        transition: left 0.75s cubic-bezier(0.22, 0.61, 0.36, 1);
-    }
-    .data-card-hero:hover::after { left: 160%; }
-}
-
-/* --- Account-detail rows: reveal an accent rail on hover ---------------- */
-.info-row {
-    position: relative;
-    border-radius: 8px;
-    padding-inline: 8px;
-    margin-inline: -8px;
-    transition: background-color var(--m3-effects);
-}
-.info-row::before {
-    content: "";
-    position: absolute;
-    left: 0; top: 6px; bottom: 6px;
-    width: 2px; border-radius: 2px;
-    background: var(--accent);
-    transform: scaleY(0);
-    transform-origin: 50% 50%;
-    opacity: 0;
-    transition: transform var(--m3-expressive-fast), opacity var(--m3-effects);
-}
-@media (hover: hover) {
-    .info-row:hover { background: rgba(255, 255, 255, 0.035); }
-    .info-row:hover::before { transform: scaleY(1); opacity: 0.8; }
-    .info-row strong { transition: transform var(--m3-std-fast); }
-    .info-row:hover strong { transform: translateX(-2px); }
-}
-body.theme-light .info-row:hover { background: rgba(0, 0, 0, 0.03); }
-
-/* --- Server / subscription link rows ----------------------------------- */
-.link-item {
-    position: relative;
-    overflow: hidden;
-    transition: transform var(--m3-expressive-fast), border-color var(--m3-effects), background-color var(--m3-effects);
-}
-.link-item::before {
-    content: "";
-    position: absolute;
-    left: 0; top: 0; bottom: 0;
-    width: 3px;
-    background: linear-gradient(180deg, var(--blue), var(--accent));
-    transform: scaleY(0);
-    transition: transform var(--m3-expressive-fast);
-}
-@media (hover: hover) {
-    .link-item:hover {
-        transform: translateX(3px);
-        border-color: var(--border-hi);
-        background: rgba(255, 255, 255, 0.06);
-    }
-    .link-item:hover::before { transform: scaleY(1); }
-    .link-item:hover .link-item-name { letter-spacing: 0.06em; }
-}
-.link-item-name { transition: letter-spacing var(--m3-std-fast); }
-
-/* Staggered entrance for dynamically-rendered link rows */
-@media (prefers-reduced-motion: no-preference) {
-    .links-list .link-item {
-        animation: fx-row-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
-    }
-    .links-list .link-item:nth-child(1) { animation-delay: 0.02s }
-    .links-list .link-item:nth-child(2) { animation-delay: 0.07s }
-    .links-list .link-item:nth-child(3) { animation-delay: 0.12s }
-    .links-list .link-item:nth-child(4) { animation-delay: 0.17s }
-    .links-list .link-item:nth-child(n+5) { animation-delay: 0.22s }
-}
-@keyframes fx-row-in {
-    from { opacity: 0; transform: translateY(10px) scale(0.985); }
-    to   { opacity: 1; transform: none; }
-}
-
-/* --- Download/upload stats: lift the number on hover -------------------- */
-@media (hover: hover) {
-    .split-item .val { display: inline-block; transition: transform var(--m3-expressive-fast); }
-    .split-item:hover .val { transform: translateY(-2px) scale(1.04); }
-}
-
-/* --- Buttons: nudge the icon on hover ----------------------------------- */
-@media (hover: hover) {
-    .sys-btn > i { transition: transform var(--m3-expressive-fast); }
-    .sys-btn:hover > i { transform: scale(1.14); }
-    .hdr-btn > i { transition: transform var(--m3-expressive-fast); }
-    .hdr-btn:hover > i { transform: rotate(-8deg) scale(1.1); }
-}
-
-/* Copy confirmation — flash the button green briefly (JS adds .copy-success) */
-.sys-btn.copy-success {
-    border-color: var(--good) !important;
-    color: var(--good) !important;
-}
-
-/* --- QR: gentle float so it reads as "live", and lift on hover ---------- */
-@media (prefers-reduced-motion: no-preference) {
-    #client-qr-canvas { animation: fx-float 5.5s ease-in-out infinite; }
-}
-@keyframes fx-float {
-    0%, 100% { transform: translateY(0); }
-    50%      { transform: translateY(-4px); }
-}
-@media (hover: hover) {
-    #client-qr-canvas { transition: transform var(--m3-expressive-default), box-shadow var(--m3-std-fast); }
-    #client-qr-canvas:hover {
-        animation-play-state: paused;
-        transform: scale(1.05);
-        box-shadow: 0 14px 40px -12px rgba(0, 0, 0, 0.6);
-    }
-}
-
-/* --- Status pill: subtle breathing when connected ----------------------- */
-@media (prefers-reduced-motion: no-preference) {
-    #plan-status-pill.online { animation: fx-breathe 3.2s ease-in-out infinite; }
-}
-@keyframes fx-breathe {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.0); }
-    50%      { box-shadow: 0 0 14px -2px rgba(52, 211, 153, 0.45); }
-}
-
-/* --- Respect reduced motion across everything above --------------------- */
-@media (prefers-reduced-motion: reduce) {
-    .card, .link-item, .info-row, .info-row::before, .link-item::before,
-    .split-item .val, .sys-btn > i, .hdr-btn > i, #client-qr-canvas {
-        transition: none !important;
-        animation: none !important;
-    }
-    .data-card-hero::after { display: none; }
-}
-
-/* ======================================================================
-   Ring tip sparks + live speed arrows
-   ====================================================================== */
-
-/* Particles thrown off the leading edge of the usage arc. Rendered inside the
-   SVG, positioned at the arc tip by JS, animated via the Web Animations API. */
-.ring-spark { pointer-events: none; }
-.ring-spark-dot {
-    fill: #fff;
-    filter: drop-shadow(0 0 3px rgba(255, 255, 255, 1)) drop-shadow(0 0 6px rgba(140, 190, 255, 0.75));
-    will-change: transform, opacity;
-}
-body.theme-light .ring-spark-dot {
-    fill: var(--on-bg);
-    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.35));
-}
-
-/* Give the arc tip itself a soft glow so the sparks look like they come from
-   somewhere hot rather than appearing out of nowhere. */
-.ring-fill { filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.28)); }
-body.theme-light .ring-fill { filter: none; }
-
-/* --- Speed arrows: still when idle, pulsing at the live throughput rate --- */
-.spd-arrow {
-    display: inline-block;
-    will-change: transform;
-    transition: opacity var(--m3-effects);
-    opacity: 0.55;
-}
-.spd-arrow.active { opacity: 1; }
-@media (prefers-reduced-motion: no-preference) {
-    .spd-arrow.dl.active { animation: spd-down var(--spd-dur, 1s) cubic-bezier(0.4, 0, 0.2, 1) infinite; }
-    .spd-arrow.ul.active { animation: spd-up   var(--spd-dur, 1s) cubic-bezier(0.4, 0, 0.2, 1) infinite; }
-    /* Saturated link: add a glow so it reads as "busy" at a glance. */
-    .spd-arrow.active.fast { filter: drop-shadow(0 0 5px currentColor); }
-}
-@keyframes spd-down {
-    0%   { transform: translateY(-3px); opacity: 0.35; }
-    45%  { transform: translateY(2px);  opacity: 1; }
-    100% { transform: translateY(-3px); opacity: 0.35; }
-}
-@keyframes spd-up {
-    0%   { transform: translateY(3px);  opacity: 0.35; }
-    45%  { transform: translateY(-2px); opacity: 1; }
-    100% { transform: translateY(3px);  opacity: 0.35; }
-}
-@media (prefers-reduced-motion: reduce) {
-    .spd-arrow { animation: none !important; opacity: 1; }
-    .ring-spark-dot { display: none; }
-}
-
-/* ======================================================================
-   Latency hop path:  You --> Server --> Panel
-   Two separate measurements so it's obvious which leg is the client's own
-   network and which is ours.
-   ====================================================================== */
-.hop-path {
-    display: grid;
-    grid-template-columns: auto 1fr auto 1fr auto;
-    align-items: center;
-    gap: 6px;
-    margin: 16px 0 4px;
-}
-
-.hop-node {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 5px;
-    min-width: 46px;
-    will-change: transform;
-}
-.hop-node > i {
-    width: 34px; height: 34px;
-    display: grid; place-items: center;
-    border-radius: 50%;
-    background: var(--surface-2);
     border: 1px solid var(--border);
-    color: var(--on-mid);
-    font-size: 0.82rem;
-    transition: color var(--m3-effects), border-color var(--m3-effects), box-shadow var(--m3-effects);
-}
-.hop-node-lbl {
-    font-size: 0.6rem;
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
-    color: var(--on-dim);
-    font-weight: 600;
-}
-.hop-node.offline > i {
-    color: var(--bad);
-    border-color: var(--bad);
-    box-shadow: 0 0 0 3px rgba(217, 83, 79, 0.14);
-}
-
-/* --- The connecting leg: a rail, a travelling pulse, and its own value --- */
-.hop-link { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
-.hop-line {
-    position: relative;
-    width: 100%; height: 2px;
-    border-radius: 2px;
-    background: var(--border);
-    overflow: hidden;
-    transition: background var(--m3-effects);
-}
-.hop-pulse {
-    position: absolute; inset: 0;
-    width: 38%;
-    border-radius: inherit;
-    background: linear-gradient(90deg, transparent, currentColor, transparent);
-    opacity: 0;
-    color: var(--on-mid);
-}
-.hop-val {
+    border-radius: var(--shape-full);
+    font-size: 0.78rem;
     font-family: var(--font-mono);
-    font-size: 0.76rem;
-    font-weight: 600;
     color: var(--on-mid);
-    display: flex; align-items: baseline; gap: 2px;
-    font-variant-numeric: tabular-nums;
-    transition: color var(--m3-effects);
+    backdrop-filter: blur(12px);
+    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-.hop-val em { font-style: normal; font-size: 0.58rem; color: var(--on-dim); }
-
-/* Quality grading, applied per-leg */
-.hop-link.good .hop-line { background: color-mix(in srgb, var(--good) 55%, transparent); }
-.hop-link.warn .hop-line { background: color-mix(in srgb, var(--warn) 55%, transparent); }
-.hop-link.bad  .hop-line { background: color-mix(in srgb, var(--bad)  55%, transparent); }
-.hop-link.good .hop-val,  .hop-link.good .hop-pulse { color: var(--good); }
-.hop-link.warn .hop-val,  .hop-link.warn .hop-pulse { color: var(--warn); }
-.hop-link.bad  .hop-val,  .hop-link.bad  .hop-pulse { color: var(--bad);  }
-.hop-link.dead .hop-line { background: repeating-linear-gradient(90deg, var(--border) 0 4px, transparent 4px 8px); }
-.hop-link.dead .hop-val  { color: var(--on-dim); }
-
-/* Idle: a slow pulse drifts along each leg so the path feels alive.
-   Measuring: it speeds up and brightens. */
-@media (prefers-reduced-motion: no-preference) {
-    .hop-pulse { animation: hop-travel 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite; opacity: 0.5; }
-    .hop-link:nth-of-type(4) .hop-pulse { animation-delay: 0.45s; }
-    .ping-measuring .hop-pulse { animation-duration: 0.75s; opacity: 0.95; }
-    .ping-measuring .hop-node > i {
-        color: var(--on-bg);
-        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
-    }
-}
-@keyframes hop-travel {
-    0%   { transform: translateX(-110%); }
-    100% { transform: translateX(290%); }
+.live-pill strong { color: var(--on-bg); font-weight: 600; }
+.live-pill:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(99, 102, 241, 0.4);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.15);
 }
 
-@media (max-width: 380px) {
-    .hop-path { gap: 3px; }
-    .hop-node { min-width: 38px; }
-    .hop-node > i { width: 29px; height: 29px; font-size: 0.72rem; }
-    .hop-val { font-size: 0.7rem; }
+.card {
+    transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.28s ease, border-color 0.28s ease !important;
+}
+.card:hover {
+    border-color: rgba(99, 102, 241, 0.35) !important;
+    transform: translateY(-3px) !important;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45), 0 0 18px rgba(99, 102, 241, 0.12) !important;
 }
 
-@media (prefers-reduced-motion: reduce) {
-    .hop-pulse { animation: none; opacity: 0.4; }
+button:active, .sys-btn:active, .nav-btn:active, .m-nav-btn:active {
+    transform: scale(0.95) !important;
+    transition: transform 0.1s ease !important;
+}
+
+@keyframes neon-pulse {
+    0%, 100% { opacity: 1; filter: drop-shadow(0 0 2px #5cb85c); }
+    50% { opacity: 0.55; filter: drop-shadow(0 0 8px #5cb85c); }
+}
+.status-dot.online {
+    animation: neon-pulse 2s infinite ease-in-out !important;
 }

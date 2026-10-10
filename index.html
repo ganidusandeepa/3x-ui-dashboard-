@@ -7,25 +7,20 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=34">
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
-    <!-- Kept render-blocking on purpose: deferring it makes every icon pop in
-         late on an icon-heavy UI, which looks worse than the ~30KB costs. -->
+    <link rel="stylesheet" href="styles.css?v=35">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-    <!-- Critical-path libraries only. `defer` so they never block HTML parsing.
-         Heavy extras are lazy-loaded on demand from main.js instead:
-           • Three.js + Vanta (~617KB) — only when the BG toggle is switched on
-           • Chart.js (~208KB)         — only when the admin view opens
-         Removed entirely: ScrollTrigger (never used — scroll reveal uses native
-         IntersectionObserver), anime.js (dead fallback; GSAP is always present),
-         Motion One (95KB for one button spring GSAP already handles). -->
-    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" data-cfasync="false"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/Draggable.min.js" data-cfasync="false"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js" data-cfasync="false"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/vanilla-tilt@1.8.1/dist/vanilla-tilt.min.js" data-cfasync="false"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js" data-cfasync="false"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" data-cfasync="false"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" data-cfasync="false"></script>
+    <!-- Vanta Globe background (WebGL) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" data-cfasync="false"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.globe.min.js" data-cfasync="false"></script>
+    <!-- GSAP plugins (free) -->
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/ScrollTrigger.min.js" data-cfasync="false"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/Draggable.min.js" data-cfasync="false"></script>
+    <!-- anime.js fallback -->
+    <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js" data-cfasync="false"></script>
+    <!-- QR code generation -->
+    <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js" data-cfasync="false"></script>
 </head>
 <body>
     <div id="toast-container"></div>
@@ -49,7 +44,7 @@
 
             <div class="login-seg">
                 <button id="tab-login-client" class="login-seg-btn active">Client</button>
-                <button id="tab-login-admin" class="login-seg-btn">Admin</button>
+                <button id="tab-login-admin" class="login-seg-btn" title="Admin login temporarily disabled">Admin <span style="font-size:0.68rem;opacity:0.75;">(Off)</span></button>
             </div>
 
             <div id="login-form-client">
@@ -64,27 +59,34 @@
             </div>
 
             <div id="login-form-admin" style="display:none;">
-                <div id="admin-maintenance-note" style="display:none; margin-bottom:14px; padding:12px 14px; border-radius:12px; background:rgba(230,168,23,0.12); border:1px solid rgba(230,168,23,0.4); color:var(--warn); font-size:0.85rem; text-align:center; line-height:1.5;">
-                    <i class="fa-solid fa-screwdriver-wrench"></i> Admin panel is temporarily under maintenance.<br>Please check back later.
+                <div class="admin-off-banner" style="background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.28); color:#fca5a5; padding:10px 14px; border-radius:12px; font-size:0.8rem; margin-bottom:14px; text-align:center;">
+                    <i class="fa-solid fa-lock"></i> Admin login is temporarily disabled.
                 </div>
-                <div class="login-field">
+                <div class="login-field" style="opacity:0.6;">
                     <label class="login-field-label">Panel Username</label>
                     <div class="login-field-wrap">
                         <i class="fa-regular fa-user login-field-icon"></i>
-                        <input type="text" id="admin-login-user" class="login-field-input" placeholder="admin" autocomplete="username">
+                        <input type="text" id="admin-login-user" class="login-field-input" placeholder="admin" autocomplete="username" disabled>
                     </div>
                 </div>
-                <div class="login-field">
+                <div class="login-field" style="opacity:0.6;">
                     <label class="login-field-label">Panel Password</label>
                     <div class="login-field-wrap">
                         <i class="fa-solid fa-lock login-field-icon"></i>
-                        <input type="password" id="admin-login-pass" class="login-field-input" placeholder="••••••••" autocomplete="current-password">
+                        <input type="password" id="admin-login-pass" class="login-field-input" placeholder="••••••••" autocomplete="current-password" disabled>
                     </div>
                 </div>
-                <button class="login-btn" id="btn-login-admin">Sign In</button>
-                <p class="login-hint">
-                    If sign-in fails, update <code>PANEL_USERNAME</code> &amp; <code>PANEL_PASSWORD</code> in Cloudflare Pages env vars.
+                <button class="login-btn" id="btn-login-admin" disabled style="opacity:0.5; cursor:not-allowed;">Sign In Disabled</button>
+                <p class="login-hint" style="color:var(--text-dim); text-align:center;">
+                    Admin portal is currently closed for maintenance. Client access remains active.
                 </p>
+            </div>
+
+            <div class="login-github-wrap" style="text-align:center; margin-top:16px; padding-top:14px; border-top:1px solid var(--outline-variant);">
+                <a href="https://github.com/ganidusandeepa/3x-ui-dashboard-" target="_blank" rel="noopener noreferrer" class="login-github-link" style="display:inline-flex; align-items:center; gap:8px; font-size:0.8rem; color:var(--text-dim); text-decoration:none;">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    <span>ganidusandeepa/3x-ui-dashboard-</span>
+                </a>
             </div>
 
         </div>
@@ -121,6 +123,12 @@
                 </div>
 
                 <div class="hdr-actions">
+                    <a href="https://github.com/ganidusandeepa/3x-ui-dashboard-" target="_blank" rel="noopener noreferrer" class="hdr-btn hdr-github" id="hdr-btn-github" title="GitHub Repository: ganidusandeepa/3x-ui-dashboard-">
+                        <svg class="github-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                        </svg>
+                        <span class="hdr-label">GitHub</span>
+                    </a>
                     <button id="btn-theme" class="hdr-btn" title="Toggle theme">
                         <i class="fa-solid fa-moon"></i>
                         <span class="hdr-label">Theme</span>
@@ -129,17 +137,26 @@
                         <i class="fa-solid fa-earth-asia"></i>
                         <span class="hdr-label">BG</span>
                     </button>
-                    <button id="btn-logout" class="hdr-btn hdr-logout" title="Logout">
-                        <i class="fa-solid fa-right-from-bracket"></i>
-                        <span class="hdr-label">Logout</span>
-                    </button>
                 </div>
+
+                <button id="btn-logout" class="hdr-btn hdr-logout" title="Logout" style="display:none;">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                    <span class="hdr-label">Logout</span>
+                </button>
             </div>
         </header>
 
         <main>
+            <!-- Live Server Health Bar (Visible on all views) -->
+            <div class="live-strip-row" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;">
+                <div class="live-pill" id="pill-xray-status"><span class="status-dot online"></span> Xray <strong id="strip-xray-ver">-</strong></div>
+                <div class="live-pill" id="pill-live-users"><i class="fa-solid fa-users"></i> Users: <strong id="live-users">-</strong></div>
+                <div class="live-pill"><i class="fa-solid fa-clock"></i> Uptime: <strong id="live-uptime">-</strong></div>
+                <div class="live-pill"><i class="fa-solid fa-hard-drive"></i> Disk: <strong id="live-disk">-</strong></div>
+            </div>
             <!-- USER VIEW TAB -->
             <section id="tab-user-view" class="tab-content">
+                
                 <div class="overview-grid">
                     <div class="card data-card-hero">
                         <div class="data-text">
@@ -147,30 +164,39 @@
                             <div class="main-value"><span id="user-used">0.00</span> <span class="unit">GB</span></div>
                             <p class="subtitle" style="font-size: 1.1rem; color:var(--text-dim);">Total Limit: <strong id="user-total" style="color:#fff;">0.00 GB</strong></p>
 
-                            <div class="traffic-split" style="margin-top: 30px;">
+                            <div class="traffic-split" style="margin-top: 24px;">
                                 <div class="split-item down">
                                     <span class="label">DOWNLOAD</span>
-                                    <span class="val"><i class="fa-solid fa-arrow-down"></i> <span id="user-dl">0.00</span> GB</span>
+                                    <span class="val"><i class="fa-solid fa-arrow-down split-arrow down-arrow" id="user-total-arrow-dl"></i> <span id="user-dl">0.00</span> GB</span>
                                 </div>
                                 <div class="split-item up">
                                     <span class="label">UPLOAD</span>
-                                    <span class="val"><i class="fa-solid fa-arrow-up"></i> <span id="user-up">0.00</span> GB</span>
+                                    <span class="val"><i class="fa-solid fa-arrow-up split-arrow up-arrow" id="user-total-arrow-up"></i> <span id="user-up">0.00</span> GB</span>
                                 </div>
                             </div>
-                            <p style="margin-top: 20px; color: var(--text-dim);">Status: <strong id="user-status-text" class="status-badge active" style="margin-left:10px;">Active</strong></p>
-                            <p style="margin-top: 10px; color: var(--text-dim);">
-                                Speed:
-                                <strong style="color:var(--blue)"><span class="spd-arrow dl" id="spd-arrow-dl">↓</span> <span id="user-dl-speed">0</span> Mbps</strong>
-                                &nbsp;&nbsp;
-                                <strong style="color:var(--accent)"><span class="spd-arrow ul" id="spd-arrow-ul">↑</span> <span id="user-up-speed">0</span> Mbps</strong>
+                            <p style="margin-top: 18px; color: var(--text-dim); display:flex; align-items:center;">
+                                Status: <strong id="user-status-text" class="status-badge active" style="margin-left:10px;">Active</strong>
                             </p>
+                            <div class="user-live-speed-row" style="margin-top: 14px;">
+                                <div class="live-speed-label"><i class="fa-solid fa-gauge-high"></i> Speed:</div>
+                                <div class="live-speed-badges">
+                                    <div class="speed-pill down" id="user-speed-pill-dl">
+                                        <span class="speed-arrow-box"><i class="fa-solid fa-arrow-down speed-arrow-icon" id="user-arrow-dl"></i></span>
+                                        <span class="speed-num"><strong id="user-dl-speed">0.00</strong> <span class="unit">Mbps</span></span>
+                                    </div>
+                                    <div class="speed-pill up" id="user-speed-pill-up">
+                                        <span class="speed-arrow-box"><i class="fa-solid fa-arrow-up speed-arrow-icon" id="user-arrow-up"></i></span>
+                                        <span class="speed-num"><strong id="user-up-speed">0.00</strong> <span class="unit">Mbps</span></span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <div class="usage-ring-wrap" style="width:160px;height:160px;">
                             <svg id="user-ring" class="usage-ring" viewBox="0 0 120 120" aria-hidden="true">
                                 <circle class="ring-track" cx="60" cy="60" r="52"/>
                                 <circle class="ring-fill" cx="60" cy="60" r="52" id="user-ring-fill"/>
-                                <!-- Sparks emitted from the leading tip of the arc -->
-                                <g id="user-ring-spark" class="ring-spark"></g>
+                                <!-- Luminous white flare (limited data only) -->
+                                <circle class="ring-flare-spark" cx="60" cy="8" r="4.5" id="user-ring-flare" style="display:none;"/>
                                 <text class="ring-pct-text" x="60" y="57" id="user-ring-pct">0%</text>
                                 <text class="ring-sub-text" x="60" y="71" id="user-ring-sub">USED</text>
                             </svg>
@@ -178,29 +204,32 @@
                     </div>
                 </div>
 
-                <!-- Progress Line -->
-                <div class="card">
+                <!-- Progress Line: Total Consumption -->
+                <div class="card user-view-card">
                     <div class="consumption-head">
-                        <h3 style="margin-bottom:0;">Consumption</h3>
+                        <h3 style="margin-bottom:0;"><i class="fa-solid fa-chart-pie"></i> Total Consumption</h3>
                         <div class="consumption-pct" id="user-progress-pct" style="display:none;">0%</div>
                     </div>
                     <div class="consumption-track">
-                        <div id="user-progress" class="consumption-bar" style="width: 0%; height:100%; transition:width 700ms;"></div>
+                        <div id="user-progress" class="consumption-bar">
+                            <!-- Dynamic white flare at bar tip (limited data only) -->
+                            <div class="flare-spark" id="user-progress-flare" style="display:none;"></div>
+                        </div>
                     </div>
                     <div class="consumption-meta">
                         <div class="consumption-line">
-                            <span class="lbl">Used</span>
+                            <span class="lbl">Total Used</span>
                             <strong id="user-progress-used">-</strong>
                         </div>
                         <div class="consumption-line">
-                            <span class="lbl">Remaining</span>
+                            <span class="lbl">Total Remaining</span>
                             <strong id="user-progress-remaining">-</strong>
                         </div>
                     </div>
                 </div>
 
-                <!-- M3 Live Plan Status -->
-                <div class="card m3-plan-card" id="plan-status-card">
+                <!-- M3 Live Plan Status: This Period (1st to 30th/31st) -->
+                <div class="card m3-plan-card user-view-card" id="plan-status-card">
 
                     <div class="plan-head">
                         <div class="plan-status-pill" id="plan-status-pill">
@@ -212,14 +241,17 @@
                         </button>
                     </div>
 
-                    <!-- Period usage bar -->
+                    <!-- Period usage bar (1st to 30th/31st of every month) -->
                     <div class="plan-usage">
                         <div class="plan-usage-top">
-                            <span class="plan-usage-lbl">This Period</span>
+                            <span class="plan-usage-lbl">This Period (<span id="plan-period-range">1st – 31st</span>)</span>
                             <span class="plan-usage-pct" id="plan-pct">—</span>
                         </div>
                         <div class="plan-bar-track">
-                            <div class="plan-bar-fill" id="plan-bar-fill"></div>
+                            <div class="plan-bar-fill" id="plan-bar-fill">
+                                <!-- Dynamic white flare at plan bar tip (limited data only) -->
+                                <div class="flare-spark" id="plan-bar-flare" style="display:none;"></div>
+                            </div>
                         </div>
                         <div class="plan-usage-nums">
                             <span><span id="plan-used-num">—</span> <span class="plan-unit">used</span></span>
@@ -234,7 +266,7 @@
                             <div class="plan-stat-val" id="plan-limit-val">—</div>
                         </div>
                         <div class="plan-stat-item">
-                            <div class="plan-stat-lbl">Expiry</div>
+                            <div class="plan-stat-lbl">Cycle End / Expiry</div>
                             <div class="plan-stat-val" id="plan-expiry-val">—</div>
                         </div>
                         <div class="plan-stat-item">
@@ -260,92 +292,148 @@
                 </div>
 
                 <!-- Account Details -->
-                <div class="card">
+                <div class="card user-view-card">
                     <h3><i class="fa-solid fa-id-card"></i> Account Details</h3>
                     <div class="info-row"><span>ID/Email:</span> <strong id="user-email">-</strong></div>
                     <div class="info-row"><span>Status:</span> <strong id="user-online">-</strong></div>
+                    <div class="info-row"><span>Active Users / Devices:</span> <strong id="user-active-count" style="color:var(--good);">-</strong></div>
                     <div class="info-row"><span>Last Online:</span> <strong id="user-last-online">-</strong></div>
                     <div class="info-row"><span>UUID:</span> <strong id="user-uuid" style="word-break:break-all;font-size:0.85rem;">-</strong></div>
                     <div class="info-row"><span>Subscription ID:</span> <strong id="user-subid">-</strong></div>
+                    <div class="info-row"><span>IPs:</span> <strong id="user-ips">-</strong></div>
                 </div>
 
-                <!-- Server Ping Card -->
-                <div class="card ping-card" id="ping-card">
+                <!-- Server Ping Card: 3-Node Interactive Network Pipeline -->
+                <div class="card ping-card user-view-card" id="ping-card">
                     <div class="ping-head">
                         <div>
-                            <div class="ping-eyebrow">Connection Latency</div>
+                            <div class="ping-eyebrow"><i class="fa-solid fa-network-wired"></i> Network Latency Pipeline</div>
                             <div class="ping-val-row">
                                 <span class="ping-ms" id="ping-ms">—</span>
                                 <span class="ping-unit" id="ping-unit">ms</span>
+                                <span class="ping-quality" id="ping-quality"></span>
                             </div>
                         </div>
-                        <button class="ping-btn" id="btn-ping" title="Measure latency">
-                            <i class="fa-solid fa-signal"></i>
+                        <button class="ping-btn" id="btn-ping" title="Run network latency test">
+                            <i class="fa-solid fa-bolt"></i> <span class="ping-btn-lbl">Test Ping</span>
                         </button>
                     </div>
 
-                    <!-- The two hops this number is made of, shown separately so
-                         it's clear which part is your network and which is ours. -->
-                    <div class="hop-path" id="hop-path">
-                        <div class="hop-node" id="hop-you">
-                            <i class="fa-solid fa-mobile-screen"></i>
-                            <span class="hop-node-lbl">You</span>
+                    <!-- 3-Node Topology: Client -> VPS -> Internet -->
+                    <div class="ping-topology" id="ping-topology">
+                        <!-- Node 1: Client -->
+                        <div class="topo-node" id="topo-node-client">
+                            <div class="topo-icon-wrap client-glow">
+                                <i class="fa-solid fa-laptop topo-icon"></i>
+                                <div class="node-pulse-ring"></div>
+                            </div>
+                            <div class="topo-meta">
+                                <span class="topo-name">Client</span>
+                                <span class="topo-sub">Device</span>
+                            </div>
                         </div>
 
-                        <div class="hop-link" id="hop-link-1">
-                            <div class="hop-line"><span class="hop-pulse"></span></div>
-                            <div class="hop-val"><span id="hop-ms-you">—</span><em>ms</em></div>
+                        <!-- Connector 1: Client -> VPS -->
+                        <div class="topo-connector" id="topo-conn-1">
+                            <div class="topo-track">
+                                <div class="topo-beam" id="topo-beam-1"></div>
+                                <div class="topo-packet" id="topo-packet-1"></div>
+                            </div>
+                            <div class="topo-hop-badge" id="topo-hop-1" title="Client to VPS Latency">
+                                <i class="fa-solid fa-arrow-right topo-hop-arr"></i>
+                                <span class="topo-hop-val" id="topo-hop-1-val">— ms</span>
+                            </div>
                         </div>
 
-                        <div class="hop-node" id="hop-server">
-                            <i class="fa-solid fa-server"></i>
-                            <span class="hop-node-lbl">Server</span>
+                        <!-- Node 2: VPS Server -->
+                        <div class="topo-node" id="topo-node-vps">
+                            <div class="topo-icon-wrap vps-glow">
+                                <i class="fa-solid fa-server topo-icon"></i>
+                                <div class="node-pulse-ring"></div>
+                            </div>
+                            <div class="topo-meta">
+                                <span class="topo-name">VPS Proxy</span>
+                                <span class="topo-sub">3x-ui Server</span>
+                            </div>
                         </div>
 
-                        <div class="hop-link" id="hop-link-2">
-                            <div class="hop-line"><span class="hop-pulse"></span></div>
-                            <div class="hop-val"><span id="hop-ms-panel">—</span><em>ms</em></div>
+                        <!-- Connector 2: VPS -> Internet -->
+                        <div class="topo-connector" id="topo-conn-2">
+                            <div class="topo-track">
+                                <div class="topo-beam" id="topo-beam-2"></div>
+                                <div class="topo-packet" id="topo-packet-2"></div>
+                            </div>
+                            <div class="topo-hop-badge" id="topo-hop-2" title="VPS to Internet Latency">
+                                <i class="fa-solid fa-arrow-right topo-hop-arr"></i>
+                                <span class="topo-hop-val" id="topo-hop-2-val">— ms</span>
+                            </div>
                         </div>
 
-                        <div class="hop-node" id="hop-panel">
-                            <i class="fa-solid fa-shield-halved"></i>
-                            <span class="hop-node-lbl">Panel</span>
+                        <!-- Node 3: Internet Target -->
+                        <div class="topo-node" id="topo-node-internet">
+                            <div class="topo-icon-wrap internet-glow">
+                                <i class="fa-solid fa-globe topo-icon"></i>
+                                <div class="node-pulse-ring"></div>
+                            </div>
+                            <div class="topo-meta">
+                                <span class="topo-name">Internet</span>
+                                <span class="topo-sub">Global Web</span>
+                            </div>
                         </div>
                     </div>
-                    <div class="ping-bars" id="ping-bars">
-                        <div class="ping-bar"></div>
-                        <div class="ping-bar"></div>
-                        <div class="ping-bar"></div>
-                        <div class="ping-bar"></div>
-                        <div class="ping-bar"></div>
-                        <div class="ping-bar"></div>
-                        <div class="ping-bar"></div>
-                        <div class="ping-bar"></div>
+
+                    <!-- Stability / History Bars -->
+                    <div class="ping-history-section">
+                        <div class="ping-bars-label">Latency Stability History</div>
+                        <div class="ping-bars" id="ping-bars">
+                            <div class="ping-bar"></div>
+                            <div class="ping-bar"></div>
+                            <div class="ping-bar"></div>
+                            <div class="ping-bar"></div>
+                            <div class="ping-bar"></div>
+                            <div class="ping-bar"></div>
+                            <div class="ping-bar"></div>
+                            <div class="ping-bar"></div>
+                        </div>
                     </div>
+
                     <div class="ping-footer">
-                        <span class="ping-status" id="ping-status">Tap to measure latency</span>
-                        <span class="ping-quality" id="ping-quality"></span>
+                        <span class="ping-status" id="ping-status">Ready to test connection</span>
+                        <span class="ping-summary-chip" id="ping-summary-chip">Round-Trip: —</span>
                     </div>
                 </div>
 
                 <!-- Config Link & QR Code (client view) -->
-                <div id="client-config-card" class="card" style="display:none;">
+                <div id="client-config-card" class="card user-view-card" style="display:none;">
                     <h3><i class="fa-solid fa-qrcode"></i> Connection Config</h3>
                     <p class="subtitle" style="margin-bottom:14px; font-size:0.85rem;">Scan the QR code or copy the config link to your proxy app.</p>
 
                     <div style="display:flex; flex-direction:column; align-items:center; gap:16px;">
                         <canvas id="client-qr-canvas" style="border-radius:12px; background:#fff; padding:10px;"></canvas>
 
-                        <div id="client-all-links" style="width:100%; display:none;">
-                            <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:8px;"><i class="fa-solid fa-server"></i> All Servers</div>
-                            <div id="client-all-links-list" class="links-list"></div>
+                        <div style="width:100%;">
+                            <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:6px;">Config Link</div>
+                            <div class="copy-row">
+                                <input id="client-config-link" type="text" readonly value="" style="font-size:0.78rem; word-break:break-all;">
+                                <button class="sys-btn" onclick="copyClientConfig()"><i class="fa-solid fa-copy"></i> Copy</button>
+                            </div>
                         </div>
 
-                        <div id="client-sub-links" style="width:100%; display:none;">
-                            <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:8px;"><i class="fa-solid fa-rss"></i> Subscription Links</div>
-                            <div id="client-sub-links-list" class="links-list"></div>
+                        <div id="client-sub-row" style="width:100%; display:none;">
+                            <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:6px;">Subscription URL</div>
+                            <div class="copy-row">
+                                <input id="client-sub-link" type="text" readonly value="">
+                                <button class="sys-btn" onclick="copyClientSub()"><i class="fa-solid fa-copy"></i> Copy</button>
+                            </div>
                         </div>
                     </div>
+                </div>
+
+                <!-- Client Mobile Logout -->
+                <div class="client-logout-wrap" style="margin-top:20px; text-align:center;">
+                    <button class="sys-btn danger" onclick="doLogout()" style="width:100%; max-width:280px; margin:0 auto; padding:12px 20px; font-size:0.9rem; border-radius:var(--shape-full);">
+                        <i class="fa-solid fa-right-from-bracket"></i> Sign Out
+                    </button>
                 </div>
             </section>
 
@@ -747,10 +835,26 @@
         </div>
     </div>
 
-    <!-- `defer` is REQUIRED here: the CDN libs above are deferred, and deferred
-         scripts run after non-deferred ones. Without defer these would execute
-         before GSAP/QRious existed. Deferred scripts run in document order. -->
-    <script defer src="main.js?v=47" data-cfasync="false"></script>
-    <script defer src="fx.js?v=2" data-cfasync="false"></script>
+        <!-- Mobile Bottom Navigation Bar (Admin) -->
+    <nav class="mobile-nav" id="admin-mobile-nav">
+        <button class="m-nav-btn active" data-tab="overview">
+            <i class="fa-solid fa-chart-line"></i>
+            <span>Overview</span>
+        </button>
+        <button class="m-nav-btn" data-tab="inbounds">
+            <i class="fa-solid fa-network-wired"></i>
+            <span>Inbounds</span>
+        </button>
+        <button class="m-nav-btn" data-tab="clients">
+            <i class="fa-solid fa-users"></i>
+            <span>Clients</span>
+        </button>
+        <button class="m-nav-btn" data-tab="system">
+            <i class="fa-solid fa-microchip"></i>
+            <span>System</span>
+        </button>
+    </nav>
+
+    <script src="main.js?v=48" data-cfasync="false"></script>
 </body>
 </html>

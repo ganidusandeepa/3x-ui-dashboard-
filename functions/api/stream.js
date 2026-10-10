@@ -10,9 +10,9 @@ export async function onRequest(context) {
 
   const PANEL_URL_RAW = env.PANEL_URL || 'http://127.0.0.1:2053';
   const PANEL_URL = PANEL_URL_RAW.replace(/\/$/, '');
+  const PANEL_API_TOKEN = (env.PANEL_API_TOKEN || env.PANEL_TOKEN || "").trim();
   const ADMIN_USER = env.PANEL_USERNAME || 'admin';
   const ADMIN_PASS = env.PANEL_PASSWORD || 'password';
-  const PANEL_API_TOKEN = env.PANEL_API_TOKEN || null;
 
   // ---- Auth (mirrors functions/api/[[path]].js logic) ----
   const authHeader = request.headers.get('Authorization');
@@ -23,7 +23,7 @@ export async function onRequest(context) {
   const hasCfAuthCookie = /(?:^|;\s*)CF_Authorization=/.test(cookieHdr);
   const isZeroTrustAdmin = hasEmailHeader || hasJwtAssertion || hasCfAuthCookie;
 
-  if (authHeader !== `Bearer ${ADMIN_PASS}` && !isZeroTrustAdmin) {
+  if (authHeader !== `Bearer ${ADMIN_PASS}` && !(PANEL_API_TOKEN && authHeader === `Bearer ${PANEL_API_TOKEN}`) && !isZeroTrustAdmin) {
     return new Response(JSON.stringify({ success: false, msg: 'Unauthorized' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' }
@@ -31,35 +31,31 @@ export async function onRequest(context) {
   }
 
   async function getSession() {
-    // If using API token, return it directly (no session needed)
+    if (PANEL_API_TOKEN) return null;
+    const loginRes = await fetch(`${PANEL_URL}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ username: ADMIN_USER, password: ADMIN_PASS }),
+      redirect: 'follow'
+    });
+    return loginRes.headers.get('set-cookie');
+  }
+
+  async function getAuthHeaders() {
     if (PANEL_API_TOKEN) {
-      return `Bearer ${PANEL_API_TOKEN}`;
+      return {
+        'Authorization': `Bearer ${PANEL_API_TOKEN}`,
+        'Accept': 'application/json',
+        'Referer': `${PANEL_URL}/`
+      };
     }
-
-    try {
-      // Try 3x-ui 3.6.0+ API first (JSON endpoint)
-      const loginRes = await fetch(`${PANEL_URL}/api/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: ADMIN_USER, password: ADMIN_PASS }),
-        redirect: 'follow'
-      });
-      const cookie = loginRes.headers.get('set-cookie');
-      if (cookie) return cookie;
-    } catch (e) {}
-
-    try {
-      // Fallback to old /login endpoint (form-encoded)
-      const loginRes = await fetch(`${PANEL_URL}/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ username: ADMIN_USER, password: ADMIN_PASS }),
-        redirect: 'follow'
-      });
-      return loginRes.headers.get('set-cookie');
-    } catch (e) {}
-
-    return null;
+    const cookie = await getSession();
+    if (!cookie) return null;
+    return {
+      'Cookie': cookie,
+      'Accept': 'application/json',
+      'Referer': `${PANEL_URL}/`
+    };
   }
 
   // Cache panel status for a few seconds to prevent hammering your origin.
@@ -74,16 +70,12 @@ export async function onRequest(context) {
         return await hit.json();
       }
 
-      const cookie = await getSession();
-      if (!cookie) throw new Error('Panel Auth Failed');
+      const authHeaders = await getAuthHeaders();
+      if (!authHeaders) throw new Error('Panel Auth Failed');
 
       const apiRes = await fetch(`${PANEL_URL}/panel/api/server/status`, {
         method: 'GET',
-        headers: {
-          ...(PANEL_API_TOKEN ? { "Authorization": `Bearer ${PANEL_API_TOKEN}` } : { "Cookie": cookie }),
-          Accept: 'application/json',
-          Referer: `${PANEL_URL}/`
-        }
+        headers: authHeaders
       });
 
       const data = await apiRes.json();
