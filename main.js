@@ -909,7 +909,7 @@ function applyClientDataToUI(client) {
     const down = parseFloat(toGB(client.down));
     const up = parseFloat(toGB(client.up));
     const totalUsed = (down + up).toFixed(2);
-    const limit = parseFloat(toGB(client.total));
+    const limit = parseFloat(toGB(client.total || client.subInfo?.total || client.traffic?.limit || 0));
     const remainDesc = limit === 0 ? "Unlimited GB" : `${limit.toFixed(2)} GB`;
 
     const fmtTime = (ms) => { const n = Number(ms); if (!Number.isFinite(n) || n <= 0) return '-'; return new Date(n).toLocaleString(); };
@@ -999,17 +999,13 @@ function applyClientDataToUI(client) {
             fill.classList.remove('warn', 'bad');
             let pct = 0;
             if (limitGB > 0) {
-                pct = Math.min(100, (periodGB / limitGB) * 100);
+                pct = Math.min(100, Math.max(0, (periodGB / limitGB) * 100));
                 if (pct >= 90) fill.classList.add('bad');
                 else if (pct >= 70) fill.classList.add('warn');
             } else {
                 pct = 100;
             }
-            if (typeof gsap !== 'undefined' && !prefersReducedMotion()) {
-                gsap.to(fill, { width: pct.toFixed(1) + '%', duration: 0.9, ease: 'elastic.out(1, 0.45)' });
-            } else {
-                requestAnimationFrame(() => { fill.style.width = pct.toFixed(1) + '%'; });
-            }
+            fill.style.width = ${pct.toFixed(1)}%;
             if (pctEl) pctEl.textContent = limitGB > 0 ? pct.toFixed(1) + '%' : '∞';
         }
 
@@ -1062,27 +1058,28 @@ function applyClientDataToUI(client) {
         }
     } catch(e) {}
 
-    // Hero consumption bar (legacy, keep for hero card)
+    // Hero consumption bar (smoothly animated with progress percentage)
     try {
         const bar = document.getElementById('user-progress');
         const pctEl = document.getElementById('user-progress-pct');
         const usedEl = document.getElementById('user-progress-used');
         const remEl = document.getElementById('user-progress-remaining');
-        if (usedEl) { const f = formatGB(Number(totalUsed)); usedEl.textContent = `${f.value} ${f.unit}`; }
+        if (usedEl) { const f = formatGB(Number(totalUsed)); usedEl.textContent = ${f.value} ; }
         if (bar) {
-            bar.classList.remove('anim', 'level-warn', 'level-bad');
-            void bar.offsetWidth;
-            bar.classList.add('anim');
+            if (!bar.classList.contains('anim')) bar.classList.add('anim');
+            bar.classList.remove('level-warn', 'level-bad');
             if (limit > 0) {
-                const pct = Math.min(100, (Number(totalUsed) / limit) * 100);
+                const pct = Math.min(100, Math.max(0, (Number(totalUsed) / limit) * 100));
                 if (pct >= 90) bar.classList.add('level-bad');
                 else if (pct >= 70) bar.classList.add('level-warn');
-                requestAnimationFrame(() => bar.style.setProperty('--bar-w', `${pct}%`));
-                if (pctEl) { pctEl.style.display = 'inline-flex'; pctEl.textContent = `${pct.toFixed(1)}%`; }
-                if (remEl) { const r = formatGB(Math.max(0, Number(limit) - Number(totalUsed))); remEl.textContent = `${r.value} ${r.unit}`; }
+                bar.style.width = ${pct.toFixed(1)}%;
+                bar.style.setProperty('--bar-w', ${pct.toFixed(1)}%);
+                if (pctEl) { pctEl.style.display = 'inline-flex'; pctEl.textContent = ${pct.toFixed(1)}%; }
+                if (remEl) { const r = formatGB(Math.max(0, Number(limit) - Number(totalUsed))); remEl.textContent = ${r.value} ; }
             } else {
+                bar.style.width = '100%';
                 bar.style.setProperty('--bar-w', '100%');
-                if (pctEl) pctEl.style.display = 'none';
+                if (pctEl) { pctEl.style.display = 'inline-flex'; pctEl.textContent = '∞'; }
                 if (remEl) remEl.textContent = 'Unlimited';
             }
         }

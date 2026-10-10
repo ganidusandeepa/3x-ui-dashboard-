@@ -428,12 +428,13 @@ body.theme-light .consumption-track { background: rgba(0,0,0,0.07); }
 
 .consumption-bar {
     height: 100%;
-    width: var(--bar-w);          /* driven by @property, animated by CSS */
+    width: var(--bar-w, 0%);
     background: var(--on-bg);
     border-radius: var(--shape-full);
     position: relative;
-    overflow: hidden;
-    transition: --bar-w var(--m3-std-default);  /* native @property interpolation */
+    overflow: visible;
+    transition: width 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+    will-change: width;
 }
 /* shimmer */
 .consumption-bar.anim::after {
@@ -625,7 +626,9 @@ body.theme-light .consumption-line { background: rgba(0,0,0,0.03); }
     background: var(--on-bg);
     width: 0%;
     position: relative;
-    overflow: hidden;
+    overflow: visible;
+    transition: width 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+    will-change: width;
 }
 .plan-bar-fill::after {
     content: '';
