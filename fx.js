@@ -67,17 +67,20 @@
     indicator.style.top = pct.toFixed(1) + '%';
     if (pctEl) pctEl.textContent = Math.round(pct) + '%';
 
-    // Proximity magnification wave on ruler ticks (macOS Dock / Rauno style)
+    // Fluid proximity wave on ruler ticks (Linear / Rauno dock wave)
     var currentTickIdx = (pct / 100) * (TOTAL_TICKS - 1);
     var allTicks = rail.querySelectorAll('.rail-tick');
     allTicks.forEach(function (tick, idx) {
       var dist = Math.abs(idx - currentTickIdx);
-      if (dist < 0.8) {
-        tick.classList.add('active');
-        tick.style.width = '16px';
-      } else if (dist < 1.8) {
-        tick.classList.remove('active');
-        tick.style.width = '11px';
+      if (dist < 2.5) {
+        var weight = Math.cos(dist * (Math.PI / 5));
+        var width = 6 + (weight * 11);
+        tick.style.width = width.toFixed(1) + 'px';
+        if (weight > 0.65) {
+          tick.classList.add('active');
+        } else {
+          tick.classList.remove('active');
+        }
       } else {
         tick.classList.remove('active');
         tick.style.width = (idx % 5 === 0) ? '10px' : '6px';
@@ -175,7 +178,7 @@
   }
 
   /* ---------------- 4. Magnetic Button Physics ---------------- */
-  var MAG_SEL = '.ping-btn, .plan-refresh, #btn-theme, #btn-bg, #btn-logout';
+  var MAG_SEL = '.ping-btn, .plan-refresh, #btn-theme, #btn-bg, #btn-logout, .accent-btn';
 
   function bindMagnetic(btn) {
     if (!btn || btn.__fxMag || reduce || isTouch || typeof gsap === 'undefined') return;
