@@ -178,10 +178,10 @@
                     </div>
                 </div>
 
-                <!-- Progress Line -->
+                <!-- Progress Line: Total Usage -->
                 <div class="card">
                     <div class="consumption-head">
-                        <h3 style="margin-bottom:0;">Consumption</h3>
+                        <h3 style="margin-bottom:0;"><i class="fa-solid fa-chart-pie"></i> Total Usage</h3>
                         <div class="consumption-pct" id="user-progress-pct">0.0%</div>
                     </div>
                     <div class="consumption-track">
@@ -189,17 +189,17 @@
                     </div>
                     <div class="consumption-meta">
                         <div class="consumption-line">
-                            <span class="lbl">Used</span>
+                            <span class="lbl">Total Used</span>
                             <strong id="user-progress-used">-</strong>
                         </div>
                         <div class="consumption-line">
-                            <span class="lbl">Remaining</span>
+                            <span class="lbl">Total Remaining</span>
                             <strong id="user-progress-remaining">-</strong>
                         </div>
                     </div>
                 </div>
 
-                <!-- M3 Live Plan Status -->
+                <!-- M3 Live Plan Status: This Period (1st to 30th/31st) -->
                 <div class="card m3-plan-card" id="plan-status-card">
 
                     <div class="plan-head">
@@ -212,10 +212,10 @@
                         </button>
                     </div>
 
-                    <!-- Period usage bar -->
+                    <!-- Period usage bar (1st to 30th/31st of every month) -->
                     <div class="plan-usage">
                         <div class="plan-usage-top">
-                            <span class="plan-usage-lbl">This Period</span>
+                            <span class="plan-usage-lbl">This Period (<span id="plan-period-range">1st – 31st</span>)</span>
                             <span class="plan-usage-pct" id="plan-pct">—</span>
                         </div>
                         <div class="plan-bar-track">
@@ -750,7 +750,7 @@
     <!-- `defer` is REQUIRED here: the CDN libs above are deferred, and deferred
          scripts run after non-deferred ones. Without defer these would execute
          before GSAP/QRious existed. Deferred scripts run in document order. -->
-    <script defer src="main.js?v=50" data-cfasync="false"></script>
+    <script defer src="main.js?v=51" data-cfasync="false"></script>
     <script defer src="fx.js?v=4" data-cfasync="false"></script>
 </body>
 </html>

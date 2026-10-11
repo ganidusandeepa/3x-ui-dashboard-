@@ -17,6 +17,7 @@
 //   METRICS_INTERVAL_MS / METRICS_CACHE_TTL   optional SSE tuning
 
 const express = require('express');
+const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
 const compression = require('compression');
@@ -207,6 +208,115 @@ async function cachedJson(key, ttlS, producer) {
   return value;
 }
 
+// ---- Persistent Monthly Client Traffic Tracker ----
+// Tracks baseline usage per client to distinguish Lifetime Total Usage from Monthly Period (1st - 30/31st)
+const TRAFFIC_STORE_PATH = path.join(__dirname, 'traffic_history.json');
+let _trafficRecords = {};
+
+function loadTrafficRecords() {
+  try {
+    if (fs.existsSync(TRAFFIC_STORE_PATH)) {
+      const raw = fs.readFileSync(TRAFFIC_STORE_PATH, 'utf8');
+      const loaded = JSON.parse(raw || '{}') || {};
+      _trafficRecords = {};
+      for (const [k, v] of Object.entries(loaded)) {
+        if (v && typeof v === 'object') {
+          _trafficRecords[k] = {
+            currentMonth: v.currentMonth,
+            baselineRaw: Number(v.baselineRaw) || 0,
+            lastRaw: Number(v.lastRaw) || 0,
+            updatedAt: v.updatedAt || Date.now()
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[Traffic Tracker] Failed to load records:', err.message);
+    _trafficRecords = {};
+  }
+}
+
+let _saveTimeout = null;
+function scheduleSaveTrafficRecords() {
+  if (_saveTimeout) return;
+  _saveTimeout = setTimeout(() => {
+    _saveTimeout = null;
+    try {
+      fs.writeFileSync(TRAFFIC_STORE_PATH, JSON.stringify(_trafficRecords, null, 2), 'utf8');
+    } catch (err) {
+      console.error('[Traffic Tracker] Failed to persist records:', err.message);
+    }
+  }, 1000);
+}
+
+loadTrafficRecords();
+
+function getClientTrafficMetrics(email, rawUp, rawDown, limitBytes) {
+  const up = Math.max(0, Number(rawUp) || 0);
+  const down = Math.max(0, Number(rawDown) || 0);
+  const rawTotal = up + down;
+
+  if (!email) {
+    return { lifetimeUsed: rawTotal, monthlyUsed: rawTotal, rawTotal, baselineRaw: 0 };
+  }
+
+  const normEmail = String(email).trim().toLowerCase();
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  let rec = _trafficRecords[normEmail];
+  let dirty = false;
+
+  if (!rec) {
+    rec = {
+      currentMonth,
+      baselineRaw: 0,
+      lastRaw: rawTotal,
+      createdAt: now.getTime(),
+      updatedAt: now.getTime()
+    };
+    _trafficRecords[normEmail] = rec;
+    dirty = true;
+  } else {
+    // 1. Calendar month rollover check (1st of month at 00:00:00)
+    if (rec.currentMonth !== currentMonth) {
+      rec.baselineRaw = rawTotal;
+      rec.currentMonth = currentMonth;
+      rec.lastRaw = rawTotal;
+      rec.updatedAt = now.getTime();
+      dirty = true;
+    } else {
+      // 2. Mid-month check: if panel was reset (rawTotal dropped below baseline)
+      if (rawTotal < (rec.baselineRaw || 0)) {
+        rec.baselineRaw = 0;
+      }
+      if (rawTotal !== rec.lastRaw) {
+        rec.lastRaw = rawTotal;
+        rec.updatedAt = now.getTime();
+        dirty = true;
+      }
+    }
+  }
+
+  if (dirty) {
+    scheduleSaveTrafficRecords();
+  }
+
+  const lifetimeUsed = rawTotal;
+  const monthlyUsed = Math.max(0, Math.min(rawTotal, rawTotal - (rec.baselineRaw || 0)));
+
+  return {
+    lifetimeUsed,
+    monthlyUsed,
+    rawTotal,
+    baselineRaw: rec.baselineRaw || 0,
+    month: rec.currentMonth,
+    up,
+    down,
+    limit: Number(limitBytes) || 0
+  };
+}
+
 // ---- Client lookup + config-link builder, scoped to ONE panel (master or a
 // node) so the same logic can search either. Returns the clientData object,
 // or null if this panel doesn't have the client (so the caller can try the
@@ -394,7 +504,14 @@ async function resolveClientFromPanel(baseUrl, authHeaders, id, sourceLabel) {
     } catch (e) {}
   }
 
-  return { ...foundClient, isOnline, subLink, vlessLink, vmessLink, trojanLink, configLink, protocol, subInfo, allLinks, subProtoLinks, lastOnlineTs, sourceNode: sourceLabel || null };
+  const trafficMetrics = getClientTrafficMetrics(
+    foundClient.email,
+    foundClient.up,
+    foundClient.down,
+    foundClient.total || (subInfo && subInfo.total) || 0
+  );
+
+  return { ...foundClient, isOnline, subLink, vlessLink, vmessLink, trojanLink, configLink, protocol, subInfo, allLinks, subProtoLinks, lastOnlineTs, sourceNode: sourceLabel || null, traffic: trafficMetrics };
 }
 
 // ---- Shared client lookup (mirrors /api auth 'client') ----
@@ -772,10 +889,18 @@ app.get('/public/stream', async (req, res) => {
           if (Array.isArray(onlines)) isOnline = onlines.includes(client.email);
         } catch (e) {}
 
+        const trafficMetrics = getClientTrafficMetrics(
+          client.email,
+          client.up,
+          client.down,
+          client.total
+        );
+
         sseSend(res, 'client', {
           ts: Date.now(), email: client.email, down: client.down, up: client.up,
           total: client.total, enable: client.enable, isOnline, lastOnline: client.lastOnline,
-          uuid: client.uuid, subId: client.subId, expiryTime: client.expiryTime
+          uuid: client.uuid, subId: client.subId, expiryTime: client.expiryTime,
+          traffic: trafficMetrics
         });
       }
       res.write(`: ping ${Date.now()}\n\n`);
@@ -785,6 +910,21 @@ app.get('/public/stream', async (req, res) => {
     await new Promise(r => setTimeout(r, INTERVAL_MS));
   }
   try { res.end(); } catch (e) {}
+});
+
+// Dedicated client traffic endpoint
+app.get('/api/clients/traffic/:email', async (req, res) => {
+  try {
+    const email = (req.params.email || '').trim();
+    if (!email) return res.status(400).json({ success: false, msg: 'Missing email' });
+    const out = await resolveClient(email);
+    if (out.status === 200 && out.body?.clientData) {
+      return res.json({ success: true, traffic: out.body.clientData.traffic, client: out.body.clientData });
+    }
+    return res.status(out.status).json(out.body);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 // ============================ Node diagnostics ============================

@@ -1071,15 +1071,35 @@ function setFlipDigit(id, val) {
     }
 }
 
+// --- Monthly Period Helper (1st to 30th/31st of every month) ---
+function getMonthPeriodInfo() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth(); // 0-11
+    const lastDayOfMonth = new Date(year, month + 1, 0).getDate(); // 28, 29, 30, or 31
+    const monthName = now.toLocaleString('default', { month: 'short' });
+    const nextMonthReset = new Date(year, month + 1, 1, 0, 0, 0).getTime();
+    const daysLeft = Math.max(0, Math.ceil((nextMonthReset - Date.now()) / 86400000));
+
+    return {
+        rangeStr: `1st – ${lastDayOfMonth}th ${monthName}`,
+        cycleEndStr: `${monthName} ${lastDayOfMonth}, ${year}`,
+        daysLeft,
+        nextMonthReset
+    };
+}
+
 function startExpiryCountdown(expiryTime) {
     try { clearInterval(__expiryCountdownTimer); } catch(e) {}
     const el = document.getElementById('expiry-countdown');
     if (!el) return;
     const exp = Number(expiryTime);
-    if (!exp || exp <= 0) { el.style.display = 'none'; return; }
-    const urgent = exp - Date.now() < 7 * 86400000;
+    const periodInfo = getMonthPeriodInfo();
+    // If client has custom expiryTime, use it; otherwise target monthly cycle reset (1st of next month 00:00:00)
+    const targetTime = (exp && exp > 0) ? exp : periodInfo.nextMonthReset;
+    const urgent = targetTime - Date.now() < 7 * 86400000;
     const tick = () => {
-        const diff = exp - Date.now();
+        const diff = targetTime - Date.now();
         if (diff <= 0) {
             el.style.display = 'block';
             ['flip-d','flip-h','flip-m','flip-s'].forEach(id => setFlipDigit(id, 0));
@@ -1092,8 +1112,8 @@ function startExpiryCountdown(expiryTime) {
         setFlipDigit('flip-m', Math.floor((diff % 3600000) / 60000));
         setFlipDigit('flip-s', Math.floor((diff % 60000) / 1000));
         ['flip-d','flip-h','flip-m','flip-s'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.style.color = urgent ? 'var(--warn)' : '';
+            const digitEl = document.getElementById(id);
+            if (digitEl) digitEl.style.color = urgent ? 'var(--warn)' : '';
         });
     };
     tick();
@@ -1110,11 +1130,17 @@ function applyClientDataToUI(client) {
     __currentClientData = client;
     updateClientSpeedsFromDelta(client.down, client.up);
 
-    const down = parseFloat(toGB(client.down));
-    const up = parseFloat(toGB(client.up));
-    const totalUsed = (down + up).toFixed(2);
-    const rawTotalBytes = Number(client.total || client.subInfo?.total || client.traffic?.limit || 0);
-    const limit = parseFloat(toGB(rawTotalBytes));
+    const downBytes = Math.max(0, Number(client.down) || 0);
+    const upBytes = Math.max(0, Number(client.up) || 0);
+    const rawTotalBytes = (client.traffic && client.traffic.lifetimeUsed !== undefined)
+        ? Math.max(downBytes + upBytes, Number(client.traffic.lifetimeUsed) || 0)
+        : (downBytes + upBytes);
+    const totalUsedGB = rawTotalBytes / (1024 ** 3);
+    const totalUsed = totalUsedGB.toFixed(2);
+    const down = parseFloat(toGB(downBytes));
+    const up = parseFloat(toGB(upBytes));
+    const totalLimitBytes = Number(client.total || client.subInfo?.total || client.traffic?.limit || 0);
+    const limit = parseFloat(toGB(totalLimitBytes));
     const remainDesc = limit === 0 ? "Unlimited GB" : `${limit.toFixed(2)} GB`;
     const clientKey = client.email || client.uuid || client.subId || 'active-client';
 
@@ -1153,10 +1179,11 @@ function applyClientDataToUI(client) {
     animateNumber('#user-up', Number(up), { decimals: 2, duration: 500 });
     setTextSafe('#user-total', remainDesc);
 
-    // --- M3 Plan Status Card ---
+    // --- M3 Plan Status Card: This Period (1st to 30th/31st) ---
     try {
         const active = client.enable !== false;
-        const isOnline = client.isOnline === true;
+        const lastOnline = Number(client.lastOnlineTs || client.lastOnline || 0);
+        const isOnline = client.isOnline === true || (lastOnline > 0 && (Date.now() - lastOnline) < 180000);
         const exp = Number(client.expiryTime ?? client.expiry ?? 0);
 
         // Status pill
@@ -1175,16 +1202,23 @@ function applyClientDataToUI(client) {
             }
         }
 
-        // Period usage bar — prefer subInfo from ?format=info, fall back to clientStats
+        // Period usage bar (1st to 30th/31st of every month)
+        const periodInfo = getMonthPeriodInfo();
+        setTextSafe('#plan-period-range', periodInfo.rangeStr);
+
         const si = client.subInfo || null;
         const siUp   = si ? Number(si.upload ?? 0) : 0;
         const siDown = si ? Number(si.download ?? 0) : 0;
         const siTotal = si ? Number(si.total ?? 0) : 0;
         const siExpire = si ? Number(si.expire ?? 0) * 1000 : 0; // seconds → ms
 
-        const periodBytes = (si && (siUp + siDown) > 0) ? (siUp + siDown) : (Number(client.up || 0) + Number(client.down || 0));
-        const limitBytes  = (si && siTotal > 0) ? siTotal : rawTotalBytes;
-        const periodGB    = periodBytes / (1024 ** 3);
+        // Monthly used bytes from server traffic tracker (falls back to subInfo or raw)
+        const monthlyBytes = (client.traffic && client.traffic.monthlyUsed !== undefined)
+            ? Math.min(rawTotalBytes, Number(client.traffic.monthlyUsed))
+            : ((si && (siUp + siDown) > 0) ? Math.min(rawTotalBytes, siUp + siDown) : rawTotalBytes);
+
+        const limitBytes  = (si && siTotal > 0) ? siTotal : totalLimitBytes;
+        const periodGB    = monthlyBytes / (1024 ** 3);
         const limitGB     = limitBytes  / (1024 ** 3);
 
         const periodFmt = formatGB(periodGB);
@@ -1216,14 +1250,16 @@ function applyClientDataToUI(client) {
         const daysEl   = document.getElementById('plan-days-val');
         if (expiryEl && daysEl) {
             if (!expiryMs || expiryMs <= 0) {
-                expiryEl.textContent = 'Never';
-                daysEl.textContent = '∞';
+                expiryEl.textContent = periodInfo.cycleEndStr;
+                daysEl.textContent = `${periodInfo.daysLeft}`;
                 daysEl.classList.remove('warn', 'bad');
+                if (periodInfo.daysLeft <= 3) daysEl.classList.add('bad');
+                else if (periodInfo.daysLeft <= 7) daysEl.classList.add('warn');
             } else {
                 const d = new Date(expiryMs);
                 expiryEl.textContent = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
                 const daysLeft = Math.max(0, Math.ceil((expiryMs - Date.now()) / 86400000));
-                daysEl.textContent = daysLeft;
+                daysEl.textContent = `${daysLeft}`;
                 daysEl.classList.remove('warn', 'bad');
                 if (daysLeft <= 3) daysEl.classList.add('bad');
                 else if (daysLeft <= 7) daysEl.classList.add('warn');
@@ -1256,16 +1292,16 @@ function applyClientDataToUI(client) {
         }
     } catch(e) {}
 
-    // Hero consumption bar (choreographed sweep + leading-edge sparks)
+    // Total Usage bar (cumulative lifetime usage + choreographed sweep + leading-edge sparks)
     try {
         const bar = document.getElementById('user-progress');
         const pctEl = document.getElementById('user-progress-pct');
         const usedEl = document.getElementById('user-progress-used');
         const remEl = document.getElementById('user-progress-remaining');
-        if (usedEl) { const f = formatGB(Number(totalUsed)); usedEl.textContent = `${f.value} ${f.unit}`; }
+        if (usedEl) { const f = formatGB(totalUsedGB); usedEl.textContent = `${f.value} ${f.unit}`; }
         if (bar) {
             const isUnlimited = !(limit > 0);
-            const pct = !isUnlimited ? Math.min(100, Math.max(0, (Number(totalUsed) / limit) * 100)) : 100;
+            const pct = !isUnlimited ? Math.min(100, Math.max(0, (totalUsedGB / limit) * 100)) : 100;
             animateProgressBar(bar, pctEl, pct, {
                 isUnlimited,
                 warnClass: 'level-warn',
@@ -1277,7 +1313,7 @@ function applyClientDataToUI(client) {
             });
             if (remEl) {
                 if (!isUnlimited) {
-                    const r = formatGB(Math.max(0, Number(limit) - Number(totalUsed)));
+                    const r = formatGB(Math.max(0, limit - totalUsedGB));
                     remEl.textContent = `${r.value} ${r.unit}`;
                 } else {
                     remEl.textContent = 'Unlimited';
