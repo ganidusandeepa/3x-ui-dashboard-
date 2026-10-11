@@ -23,6 +23,24 @@ const cors = require('cors');
 const compression = require('compression');
 const { Agent, setGlobalDispatcher } = require('undici');
 
+// Auto-load local .env file if present (zero-dependency)
+try {
+  const envPath = path.join(__dirname, '.env');
+  if (fs.existsSync(envPath)) {
+    const rawLines = fs.readFileSync(envPath, 'utf8').split(/\r?\n/);
+    for (const rawLine of rawLines) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#')) continue;
+      const eqIdx = line.indexOf('=');
+      if (eqIdx > 0) {
+        const k = line.slice(0, eqIdx).trim();
+        const v = line.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '');
+        if (process.env[k] === undefined) process.env[k] = v;
+      }
+    }
+  }
+} catch (e) {}
+
 // Reuse HTTP connections to the panel (and nodes) instead of a fresh TCP/TLS
 // handshake per request. A single client login can make 6+ calls to the same
 // panel host back to back — keep-alive turns those into one warm connection.
