@@ -2299,321 +2299,349 @@ body.theme-light .live-pill {
 }
 
 /* ============================================================
-   Award-Winning UX — Laser Scroll Progress Bar
+   Award-Winning Left-Side Vertical Scroll Telemetry Rail
+   (Linear / Rauno / Monolith Precision Ruler)
    ============================================================ */
-#scroll-progress-bar {
+.scroll-side-rail {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 0%;
-    height: 3px;
-    background: linear-gradient(90deg, #60a5fa, #a855f7, #ec4899, #38bdf8);
-    background-size: 300% 100%;
-    animation: laser-flow 3s linear infinite;
-    z-index: 99999;
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 28px;
+    height: 280px;
+    z-index: 999;
     pointer-events: none;
-    box-shadow: 0 0 10px rgba(168, 85, 247, 0.7), 0 0 20px rgba(56, 189, 248, 0.4);
-    transition: width 0.08s ease-out;
+    opacity: 0;
+    transition: opacity 0.4s ease;
 }
-@keyframes laser-flow {
-    0% { background-position: 0% 50%; }
-    100% { background-position: 300% 50%; }
+body.is-scrolling .scroll-side-rail,
+.scroll-side-rail.visible {
+    opacity: 1;
 }
-
-/* ============================================================
-   Ambient Aurora Mesh Glow
-   ============================================================ */
-.ambient-aurora {
-    position: fixed;
-    inset: 0;
-    overflow: hidden;
-    pointer-events: none;
-    z-index: -2;
-    opacity: 0.65;
+.rail-track {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
 }
-body.theme-light .ambient-aurora {
-    opacity: 0.35;
-}
-.aurora-orb {
+.rail-progress-line {
     position: absolute;
+    left: 0;
+    top: 0;
+    width: 1.5px;
+    height: 0%;
+    background: linear-gradient(180deg, var(--on-bg) 0%, rgba(255, 255, 255, 0.4) 100%);
+    box-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
+    transition: height 0.08s ease-out;
+}
+body.theme-light .rail-progress-line {
+    background: #09090b;
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
+}
+.rail-ticks {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.rail-tick {
+    width: 6px;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.22);
+    transform-origin: left center;
+    transition: width 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.22s ease;
+}
+body.theme-light .rail-tick {
+    background: rgba(0, 0, 0, 0.22);
+}
+.rail-tick.major {
+    width: 10px;
+    background: rgba(255, 255, 255, 0.5);
+}
+body.theme-light .rail-tick.major {
+    background: rgba(0, 0, 0, 0.5);
+}
+.rail-tick.active {
+    width: 16px;
+    background: #ffffff;
+    box-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
+}
+body.theme-light .rail-tick.active {
+    background: #09090b;
+    box-shadow: none;
+}
+.rail-indicator {
+    position: absolute;
+    left: -2px;
+    top: 0%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    pointer-events: auto;
+    cursor: default;
+    transform: translateY(-50%);
+    transition: top 0.1s ease-out;
+}
+.rail-ind-dot {
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
-    filter: blur(90px);
-    will-change: transform;
-    opacity: 0.45;
+    background: #ffffff;
+    box-shadow: 0 0 8px #ffffff;
 }
-.aurora-orb.orb-1 {
-    width: 480px;
-    height: 480px;
-    top: -120px;
-    left: 10%;
-    background: radial-gradient(circle, rgba(124, 92, 255, 0.35) 0%, rgba(56, 189, 248, 0.08) 60%, transparent 80%);
-    animation: orb-drift-1 22s ease-in-out infinite alternate;
+body.theme-light .rail-ind-dot {
+    background: #09090b;
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
 }
-.aurora-orb.orb-2 {
-    width: 540px;
-    height: 540px;
-    bottom: 5%;
-    right: 5%;
-    background: radial-gradient(circle, rgba(236, 72, 153, 0.28) 0%, rgba(139, 92, 246, 0.10) 65%, transparent 80%);
-    animation: orb-drift-2 26s ease-in-out infinite alternate;
+.rail-ind-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: rgba(20, 20, 20, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    white-space: nowrap;
+    opacity: 0;
+    transform: translateX(-4px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
 }
-.aurora-orb.orb-3 {
-    width: 420px;
-    height: 420px;
-    top: 45%;
-    left: 60%;
-    background: radial-gradient(circle, rgba(16, 185, 129, 0.22) 0%, rgba(14, 165, 233, 0.06) 65%, transparent 80%);
-    animation: orb-drift-3 19s ease-in-out infinite alternate;
+body.is-scrolling .rail-ind-meta,
+.scroll-side-rail:hover .rail-ind-meta {
+    opacity: 1;
+    transform: translateX(0);
 }
-@keyframes orb-drift-1 {
-    0%   { transform: translate(0, 0) scale(1); }
-    50%  { transform: translate(60px, 80px) scale(1.15); }
-    100% { transform: translate(-40px, 120px) scale(0.95); }
+body.theme-light .rail-ind-meta {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(0, 0, 0, 0.1);
 }
-@keyframes orb-drift-2 {
-    0%   { transform: translate(0, 0) scale(1); }
-    50%  { transform: translate(-80px, -60px) scale(1.2); }
-    100% { transform: translate(50px, -100px) scale(0.9); }
+.rail-ind-sec {
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--on-dim);
+    text-transform: uppercase;
 }
-@keyframes orb-drift-3 {
-    0%   { transform: translate(0, 0) scale(1); }
-    50%  { transform: translate(-70px, 50px) scale(1.1); }
-    100% { transform: translate(90px, -40px) scale(1.05); }
+.rail-ind-pct {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: var(--on-bg);
+}
+@media (max-width: 900px) {
+    .scroll-side-rail { display: none !important; }
 }
 
 /* ============================================================
-   Glassmorphism & Spotlight Tracking
+   Refined Minimal Specular Glassmorphism & Card Assurance
    ============================================================ */
 .card, .login-card {
     position: relative;
-    backdrop-filter: blur(24px) saturate(160%);
-    -webkit-backdrop-filter: blur(24px) saturate(160%);
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.015) 100%), var(--card-bg, rgba(20, 20, 20, 0.75));
-    border: 1px solid rgba(255, 255, 255, 0.09);
-    box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.55), inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
-    overflow: hidden;
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0.01) 100%), var(--card-bg, rgba(20, 20, 20, 0.75));
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 12px 36px -10px rgba(0, 0, 0, 0.55), inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
 }
 body.theme-light .card, body.theme-light .login-card {
-    backdrop-filter: blur(20px) saturate(140%);
-    -webkit-backdrop-filter: blur(20px) saturate(140%);
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.65) 100%);
+    backdrop-filter: blur(16px) saturate(130%);
+    -webkit-backdrop-filter: blur(16px) saturate(130%);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.88) 0%, rgba(255, 255, 255, 0.70) 100%);
     border: 1px solid rgba(0, 0, 0, 0.08);
-    box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.08), inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+    box-shadow: 0 10px 28px -8px rgba(0, 0, 0, 0.08), inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
 }
-.card::before, .login-card::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: radial-gradient(450px circle at var(--spot-x, -500px) var(--spot-y, -500px), rgba(255, 255, 255, 0.075), transparent 70%);
-    pointer-events: none;
-    z-index: 1;
-    opacity: 0;
-    transition: opacity 0.35s ease;
+#tab-user-view .card {
+    opacity: 1 !important;
 }
-.card:hover::before, .login-card:hover::before {
-    opacity: 1;
-}
-body.theme-light .card::before, body.theme-light .login-card::before {
-    background: radial-gradient(450px circle at var(--spot-x, -500px) var(--spot-y, -500px), rgba(0, 0, 0, 0.04), transparent 70%);
+#tab-user-view .info-row {
+    opacity: 1 !important;
 }
 
 /* ============================================================
-   Award-Winning 3D Split-Flap Kinetic Chrono Display
+   Modern Linear / Vercel Odometer Chrono Strip (No Boxy Cards)
    ============================================================ */
-.chrono-countdown-section {
+.chrono-modern {
     margin-top: 18px;
-    padding: 16px 18px;
-    border-radius: var(--shape-xl);
-    background: linear-gradient(145deg, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0.008) 100%);
+    border-radius: var(--shape-lg);
+    background: rgba(255, 255, 255, 0.02);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 24px -6px rgba(0, 0, 0, 0.35);
-    perspective: 800px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+    overflow: hidden;
 }
-body.theme-light .chrono-countdown-section {
-    background: linear-gradient(145deg, rgba(0, 0, 0, 0.02) 0%, rgba(0, 0, 0, 0.005) 100%);
-    border-color: rgba(0, 0, 0, 0.06);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 6px 18px -4px rgba(0, 0, 0, 0.05);
+body.theme-light .chrono-modern {
+    background: rgba(0, 0, 0, 0.02);
+    border-color: rgba(0, 0, 0, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
-.chrono-header {
+.chrono-modern-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 14px;
+    padding: 11px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.015);
 }
-.chrono-eyebrow {
+body.theme-light .chrono-modern-head {
+    border-bottom-color: rgba(0, 0, 0, 0.06);
+    background: rgba(0, 0, 0, 0.015);
+}
+.chrono-modern-title {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 1.2px;
+    letter-spacing: 0.12em;
     color: var(--on-dim);
 }
-.chrono-live-dot {
-    width: 7px;
-    height: 7px;
+.chrono-pulse-dot {
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background: var(--good);
-    box-shadow: 0 0 8px var(--good);
-    animation: chrono-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    box-shadow: 0 0 6px var(--good);
+    animation: chrono-beat 2.2s ease-in-out infinite;
 }
-@keyframes chrono-pulse {
+@keyframes chrono-beat {
     0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.35); opacity: 0.55; }
+    50% { transform: scale(1.3); opacity: 0.5; }
 }
-.chrono-hourglass {
-    color: var(--on-dim);
-    font-size: 0.78rem;
-    animation: chrono-rock 3s ease-in-out infinite;
+.chrono-modern-tag {
+    font-family: var(--font-mono);
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--on-mid);
+    border: 1px solid rgba(255, 255, 255, 0.08);
 }
-@keyframes chrono-rock {
-    0%, 100% { transform: rotate(0deg); }
-    25% { transform: rotate(-15deg); }
-    75% { transform: rotate(15deg); }
-}
-.chrono-badge {
-    padding: 3px 9px;
-    border-radius: var(--shape-full);
-    font-size: 0.65rem;
-    font-weight: 800;
-    letter-spacing: 0.8px;
-    text-transform: uppercase;
-    background: rgba(96, 165, 250, 0.14);
-    border: 1px solid rgba(96, 165, 250, 0.35);
-    color: #93c5fd;
-}
-.chrono-countdown-section.urgent .chrono-badge {
-    background: rgba(245, 158, 11, 0.16);
-    border-color: rgba(245, 158, 11, 0.4);
+.chrono-modern.urgent .chrono-modern-tag {
+    background: rgba(245, 158, 11, 0.14);
+    border-color: rgba(245, 158, 11, 0.35);
     color: #fbbf24;
 }
-.chrono-countdown-section.urgent .chrono-live-dot {
-    background: #fbbf24;
-    box-shadow: 0 0 8px #fbbf24;
-}
-
-/* Split-Flap Shell */
-.flip-card-shell {
-    position: relative;
-    border-radius: var(--shape-md);
-    background: linear-gradient(180deg, #18181b 0%, #111113 49%, #09090b 51%, #141416 100%);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 8px 18px -4px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.18), inset 0 -1px 0 rgba(0, 0, 0, 0.8);
-    transform-style: preserve-3d;
-    overflow: hidden;
-}
-body.theme-light .flip-card-shell {
-    background: linear-gradient(180deg, #ffffff 0%, #f4f4f5 49%, #e4e4e7 51%, #fafafa 100%);
-    border-color: rgba(0, 0, 0, 0.12);
-    box-shadow: 0 6px 14px -3px rgba(0, 0, 0, 0.12), inset 0 1px 0 #ffffff;
-}
-.flip-card-shell::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 50%;
-    height: 1.5px;
-    background: rgba(0, 0, 0, 0.65);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08);
-    transform: translateY(-50%);
-    z-index: 4;
-    pointer-events: none;
-}
-body.theme-light .flip-card-shell::after {
-    background: rgba(0, 0, 0, 0.18);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
-}
-.flip-hinge-left, .flip-hinge-right {
-    position: absolute;
-    top: 50%;
-    width: 4px;
-    height: 8px;
-    background: #09090b;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    transform: translateY(-50%);
-    z-index: 5;
-    pointer-events: none;
-}
-.flip-hinge-left { left: 0; border-left: none; border-radius: 0 3px 3px 0; }
-.flip-hinge-right { right: 0; border-right: none; border-radius: 3px 0 0 3px; }
-body.theme-light .flip-hinge-left, body.theme-light .flip-hinge-right {
-    background: #d4d4d8;
-    border-color: rgba(0, 0, 0, 0.15);
-}
-
-.flip-clock {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-}
-.flip-unit {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    perspective: 500px;
-}
-.flip-digit {
-    min-width: 62px;
-    padding: 12px 14px;
-    font-family: var(--font-mono);
-    font-size: 1.95rem;
-    font-weight: 800;
-    color: #ffffff;
-    text-align: center;
-    letter-spacing: 0.5px;
-    font-variant-numeric: tabular-nums;
-    line-height: 1;
-    transform-style: preserve-3d;
-    transition: color 0.3s ease, filter 0.15s ease;
-    will-change: transform, filter;
-}
-body.theme-light .flip-digit {
-    color: #09090b;
-}
-.flip-digit.tick-glow {
-    filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.85));
-}
-.chrono-countdown-section.urgent .flip-digit.tick-glow {
-    filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.85));
-}
-
-.flip-sep {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding-bottom: 22px;
-    user-select: none;
-}
-.sep-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: #60a5fa;
-    box-shadow: 0 0 6px #60a5fa;
-    animation: sep-blink 1s ease-in-out infinite alternate;
-}
-@keyframes sep-blink {
-    0% { opacity: 0.35; transform: scale(0.85); }
-    100% { opacity: 1; transform: scale(1.15); }
-}
-.chrono-countdown-section.urgent .sep-dot {
+.chrono-modern.urgent .chrono-pulse-dot {
     background: #fbbf24;
     box-shadow: 0 0 6px #fbbf24;
 }
 
+/* 4 Frameless Telemetry Columns */
+.chrono-modern-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+}
+.chrono-cell {
+    padding: 14px 16px 12px;
+    position: relative;
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+body.theme-light .chrono-cell {
+    border-right-color: rgba(0, 0, 0, 0.06);
+}
+.chrono-cell:last-child {
+    border-right: none;
+}
+.chrono-cell-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--on-dim);
+}
+.chrono-val-row {
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
+}
+.chrono-slot {
+    display: inline-block;
+    overflow: hidden;
+    height: 2.2rem;
+    line-height: 2.2rem;
+}
+.chrono-slot .flip-digit {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 1.95rem;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    color: var(--on-bg);
+    line-height: 2.2rem;
+    min-width: auto;
+    padding: 0;
+    background: none;
+    border: none;
+    font-variant-numeric: tabular-nums;
+    transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.22s ease;
+}
+.chrono-unit-sub {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--on-dim);
+    font-weight: 600;
+    bottom: 0;
+}
+.chrono-micro-track {
+    width: 100%;
+    height: 2px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.07);
+    overflow: hidden;
+    margin-top: 2px;
+}
+body.theme-light .chrono-micro-track {
+    background: rgba(0, 0, 0, 0.07);
+}
+.chrono-micro-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--on-bg);
+    border-radius: inherit;
+    transition: width 0.3s ease;
+}
+.chrono-modern.urgent .chrono-micro-fill {
+    background: #fbbf24;
+}
+
 @media (max-width: 600px) {
-    .chrono-countdown-section { padding: 12px 10px; }
-    .flip-clock { gap: 6px; }
-    .flip-digit { min-width: 46px; font-size: 1.4rem; padding: 9px 8px; }
-    .flip-sep { gap: 6px; padding-bottom: 18px; }
-    .sep-dot { width: 4px; height: 4px; }
+    .chrono-modern-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .chrono-cell:nth-child(2) {
+        border-right: none;
+    }
+    .chrono-cell:nth-child(1),
+    .chrono-cell:nth-child(2) {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    body.theme-light .chrono-cell:nth-child(1),
+    body.theme-light .chrono-cell:nth-child(2) {
+        border-bottom-color: rgba(0, 0, 0, 0.06);
+    }
+    .chrono-cell {
+        padding: 10px 12px 10px;
+    }
+    .chrono-slot {
+        height: 1.8rem;
+        line-height: 1.8rem;
+    }
+    .chrono-slot .flip-digit {
+        font-size: 1.55rem;
+        line-height: 1.8rem;
+    }
 }
 
 /* ============================================================

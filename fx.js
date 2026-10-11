@@ -1,8 +1,8 @@
 /* fx.js — Award-winning animation & interactive UX layer for the 3x-ui dashboard.
  *
  * Capabilities:
- *   1. Lenis Butter-Smooth Kinetic Scrolling synced with GSAP ticker & ScrollTrigger
- *   2. Top Laser Scroll Progress Bar (#scroll-progress-bar)
+ *   1. Left-Side Vertical Scroll Telemetry Rail (#scroll-side-rail) with proximity dock wave & live section detection
+ *   2. Lenis Butter-Smooth Kinetic Scrolling synced with GSAP ticker
  *   3. Dynamic cursor-tracking glass spotlight on cards & pills (--spot-x, --spot-y)
  *   4. Magnetic hover physics on interactive control buttons
  *   5. 3D card tilt & specular glare (vanilla-tilt)
@@ -19,14 +19,104 @@
   try { reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
   var isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
-  /* ---------------- 1. Lenis Smooth Scrolling ---------------- */
+  /* ---------------- 1. Left-Side Vertical Scroll Telemetry Rail ---------------- */
+  var scrollTimeout = null;
+  var TOTAL_TICKS = 21; // 0% to 100% in 5% increments
+
+  function initSideRail() {
+    var rail = document.getElementById('scroll-side-rail');
+    var ticksContainer = document.getElementById('rail-ticks');
+    if (!rail || !ticksContainer || rail.__initialized) return;
+    rail.__initialized = true;
+
+    // Generate precision ruler tick marks
+    ticksContainer.innerHTML = '';
+    for (var i = 0; i < TOTAL_TICKS; i++) {
+      var tick = document.createElement('div');
+      tick.className = 'rail-tick' + (i % 5 === 0 ? ' major' : '');
+      tick.setAttribute('data-index', i);
+      ticksContainer.appendChild(tick);
+    }
+
+    // Click on rail to jump-scroll
+    rail.addEventListener('click', function (e) {
+      var rect = ticksContainer.getBoundingClientRect();
+      var clickY = e.clientY - rect.top;
+      var ratio = Math.max(0, Math.min(1, clickY / rect.height));
+      var maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      var targetScroll = ratio * maxScroll;
+      if (lenisInstance) {
+        lenisInstance.scrollTo(targetScroll, { duration: 1.1 });
+      } else {
+        window.scrollTo({ top: targetScroll, behavior: 'smooth' });
+      }
+    });
+  }
+
+  function updateSideRail(scrollPos, maxScroll) {
+    var rail = document.getElementById('scroll-side-rail');
+    var progLine = document.getElementById('rail-progress-line');
+    var indicator = document.getElementById('rail-indicator');
+    var pctEl = document.getElementById('rail-ind-pct');
+    var secEl = document.getElementById('rail-ind-sec');
+    if (!rail || !indicator) return;
+
+    var pct = maxScroll > 0 ? Math.min(100, Math.max(0, (scrollPos / maxScroll) * 100)) : 0;
+
+    if (progLine) progLine.style.height = pct.toFixed(1) + '%';
+    indicator.style.top = pct.toFixed(1) + '%';
+    if (pctEl) pctEl.textContent = Math.round(pct) + '%';
+
+    // Proximity magnification wave on ruler ticks (macOS Dock / Rauno style)
+    var currentTickIdx = (pct / 100) * (TOTAL_TICKS - 1);
+    var allTicks = rail.querySelectorAll('.rail-tick');
+    allTicks.forEach(function (tick, idx) {
+      var dist = Math.abs(idx - currentTickIdx);
+      if (dist < 0.8) {
+        tick.classList.add('active');
+        tick.style.width = '16px';
+      } else if (dist < 1.8) {
+        tick.classList.remove('active');
+        tick.style.width = '11px';
+      } else {
+        tick.classList.remove('active');
+        tick.style.width = (idx % 5 === 0) ? '10px' : '6px';
+      }
+    });
+
+    // Detect active card in viewport
+    if (secEl) {
+      var cards = document.querySelectorAll('#tab-user-view .card');
+      var activeLabel = '01 · TRAFFIC';
+      var midScreen = window.innerHeight * 0.42;
+
+      cards.forEach(function (c, i) {
+        var r = c.getBoundingClientRect();
+        if (r.top <= midScreen && r.bottom >= midScreen) {
+          var h3 = c.querySelector('h3, .plan-status-pill, .ping-eyebrow');
+          var text = h3 ? h3.textContent.trim().replace(/^[^a-zA-Z0-9]+/, '') : ('SECTION ' + (i + 1));
+          activeLabel = '0' + (i + 1) + ' · ' + text.toUpperCase().slice(0, 14);
+        }
+      });
+      secEl.textContent = activeLabel;
+    }
+
+    // Show rail while scrolling, tuck away after 1.2s idle
+    document.body.classList.add('is-scrolling');
+    clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(function () {
+      document.body.classList.remove('is-scrolling');
+    }, 1200);
+  }
+
+  /* ---------------- 2. Lenis Smooth Scrolling ---------------- */
   var lenisInstance = null;
 
   function initSmoothScroll() {
     if (reduce || isTouch || typeof Lenis === 'undefined') return;
     try {
       lenisInstance = new Lenis({
-        duration: 1.18,
+        duration: 1.15,
         easing: function (t) { return Math.min(1, 1.001 - Math.pow(2, -10 * t)); },
         direction: 'vertical',
         gestureDirection: 'vertical',
@@ -36,9 +126,6 @@
       });
 
       if (typeof gsap !== 'undefined') {
-        if (typeof ScrollTrigger !== 'undefined') {
-          lenisInstance.on('scroll', ScrollTrigger.update);
-        }
         gsap.ticker.add(function (time) {
           lenisInstance.raf(time * 1000);
         });
@@ -51,31 +138,24 @@
         requestAnimationFrame(raf);
       }
 
-      // Sync top laser progress bar
-      var progBar = document.getElementById('scroll-progress-bar');
-      if (progBar) {
-        lenisInstance.on('scroll', function (e) {
-          var max = document.documentElement.scrollHeight - window.innerHeight;
-          var pct = max > 0 ? Math.min(100, Math.max(0, (e.scroll / max) * 100)) : 0;
-          progBar.style.width = pct.toFixed(2) + '%';
-        });
-      }
+      lenisInstance.on('scroll', function (e) {
+        var max = document.documentElement.scrollHeight - window.innerHeight;
+        updateSideRail(e.scroll, max);
+      });
     } catch (e) {}
   }
 
-  // Fallback scroll progress bar for touch / reduced motion / no Lenis
-  function initScrollProgressFallback() {
-    var progBar = document.getElementById('scroll-progress-bar');
-    if (!progBar || lenisInstance) return;
+  // Native window scroll fallback (for touch / reduced motion / no Lenis)
+  function initNativeScrollFallback() {
     window.addEventListener('scroll', function () {
+      if (lenisInstance) return;
       var max = document.documentElement.scrollHeight - window.innerHeight;
       var scroll = window.scrollY || window.pageYOffset || 0;
-      var pct = max > 0 ? Math.min(100, Math.max(0, (scroll / max) * 100)) : 0;
-      progBar.style.width = pct.toFixed(2) + '%';
+      updateSideRail(scroll, max);
     }, { passive: true });
   }
 
-  /* ---------------- 2. Cursor-Tracking Glass Spotlight ---------------- */
+  /* ---------------- 3. Cursor-Tracking Glass Spotlight ---------------- */
   function bindSpotlight(el) {
     if (!el || el.__fxSpot || reduce || isTouch) return;
     el.__fxSpot = true;
@@ -94,19 +174,19 @@
     } catch (e) {}
   }
 
-  /* ---------------- 3. Magnetic Button Physics ---------------- */
+  /* ---------------- 4. Magnetic Button Physics ---------------- */
   var MAG_SEL = '.ping-btn, .plan-refresh, #btn-theme, #btn-bg, #btn-logout';
 
   function bindMagnetic(btn) {
     if (!btn || btn.__fxMag || reduce || isTouch || typeof gsap === 'undefined') return;
     btn.__fxMag = true;
-    var pullFactor = 0.32;
+    var pullFactor = 0.30;
 
     btn.addEventListener('mousemove', function (e) {
       var rect = btn.getBoundingClientRect();
       var x = (e.clientX - (rect.left + rect.width / 2)) * pullFactor;
       var y = (e.clientY - (rect.top + rect.height / 2)) * pullFactor;
-      gsap.to(btn, { x: x, y: y, duration: 0.25, ease: 'power2.out' });
+      gsap.to(btn, { x: x, y: y, duration: 0.24, ease: 'power2.out' });
     });
 
     btn.addEventListener('mouseleave', function () {
@@ -120,24 +200,23 @@
     } catch (e) {}
   }
 
-  /* ---------------- 4. 3D Card Tilt (Vanilla-Tilt) ---------------- */
+  /* ---------------- 5. 3D Card Tilt (Vanilla-Tilt) ---------------- */
   var TILT_SEL = '.data-card-hero, .card';
 
   function initTiltOn(el) {
     if (!el || el.__fxTilt) return;
     if (typeof VanillaTilt === 'undefined' || reduce || isTouch) return;
-    // Skip chart cards & live canvases
     if (el.classList.contains('main-chart-card')) return;
     try { if (el.querySelector && el.querySelector('canvas')) return; } catch (e) {}
     el.__fxTilt = true;
     try {
       VanillaTilt.init(el, {
-        max: 5,
+        max: 4,
         speed: 400,
-        scale: 1.012,
+        scale: 1.01,
         perspective: 1200,
         glare: true,
-        'max-glare': 0.15,
+        'max-glare': 0.12,
         gyroscope: false
       });
     } catch (e) { el.__fxTilt = false; }
@@ -147,26 +226,25 @@
     try { (root || document).querySelectorAll(TILT_SEL).forEach(initTiltOn); } catch (e) {}
   }
 
-  /* ---------------- 5. Canvas Confetti ---------------- */
+  /* ---------------- 6. Canvas Confetti ---------------- */
   function fire(opts) {
     if (reduce || typeof confetti !== 'function') return;
     try { confetti(Object.assign({ disableForReducedMotion: true, zIndex: 9999 }, opts)); } catch (e) {}
   }
 
-  var PALETTE = ['#60a5fa', '#a855f7', '#ec4899', '#34d399', '#ffffff'];
+  var PALETTE = ['#5cb85c', '#38bdf8', '#818cf8', '#ffffff'];
 
   function celebrate() {
     if (reduce || typeof confetti !== 'function') return;
-    fire({ particleCount: 90, spread: 72, startVelocity: 44, origin: { y: 0.35 }, colors: PALETTE });
-    setTimeout(function () { fire({ particleCount: 42, angle: 60, spread: 55, origin: { x: 0, y: 0.62 }, colors: PALETTE }); }, 130);
-    setTimeout(function () { fire({ particleCount: 42, angle: 120, spread: 55, origin: { x: 1, y: 0.62 }, colors: PALETTE }); }, 130);
+    fire({ particleCount: 80, spread: 70, startVelocity: 42, origin: { y: 0.35 }, colors: PALETTE });
+    setTimeout(function () { fire({ particleCount: 36, angle: 60, spread: 50, origin: { x: 0, y: 0.62 }, colors: PALETTE }); }, 120);
+    setTimeout(function () { fire({ particleCount: 36, angle: 120, spread: 50, origin: { x: 1, y: 0.62 }, colors: PALETTE }); }, 120);
   }
 
   function popAt(x, y) {
-    fire({ particleCount: 28, spread: 50, startVelocity: 26, scalar: 0.85, origin: { x: x, y: y }, colors: PALETTE });
+    fire({ particleCount: 26, spread: 48, startVelocity: 24, scalar: 0.85, origin: { x: x, y: y }, colors: PALETTE });
   }
 
-  /* Wrap showToast so copy/success toasts get a burst */
   function wrapToast() {
     if (typeof window.showToast !== 'function' || window.showToast.__fx) return;
     var orig = window.showToast;
@@ -182,7 +260,7 @@
     window.showToast = wrapped;
   }
 
-  /* ---------------- 6. Shimmer Skeleton on Hero Numbers ---------------- */
+  /* ---------------- 7. Shimmer Skeleton on Hero Numbers ---------------- */
   var SKEL_IDS = ['user-used', 'user-dl', 'user-up'];
 
   function skeletonOn() {
@@ -216,21 +294,21 @@
           mo.observe(used, { childList: true, characterData: true, subtree: true });
         } catch (e) {}
       }
-      setTimeout(finish, 4000); // Safety net
+      setTimeout(finish, 4000);
     });
   }
 
   /* ---------------- Boot ---------------- */
   function boot() {
+    initSideRail();
     initSmoothScroll();
-    initScrollProgressFallback();
+    initNativeScrollFallback();
     initTiltAll(document);
     initSpotlightsAll(document);
     initMagneticAll(document);
     wrapToast();
     watchClientLoad();
 
-    // Listen for dynamically created cards and controls
     try {
       var mo = new MutationObserver(function (muts) {
         for (var i = 0; i < muts.length; i++) {

@@ -164,117 +164,59 @@ function addRipple(el) {
 }
 
 // GSAP card-entry timeline for client dashboard
+// GSAP card-entry timeline for client dashboard
 function animateClientEntry() {
     try {
-        if (typeof gsap === 'undefined' || prefersReducedMotion()) return;
         const cards = document.querySelectorAll('#tab-user-view .card');
         if (!cards.length) return;
-        const tl = gsap.timeline();
+
+        if (typeof gsap === 'undefined' || prefersReducedMotion()) {
+            cards.forEach(c => { c.style.opacity = '1'; c.style.transform = 'none'; });
+            document.querySelectorAll('#tab-user-view .info-row').forEach(r => { r.style.opacity = '1'; });
+            return;
+        }
+
+        const tl = gsap.timeline({
+            onComplete: () => {
+                // Failsafe clearProps so nothing ever stays hidden
+                gsap.set('#tab-user-view .card, #tab-user-view .info-row', { clearProps: 'all' });
+            }
+        });
 
         const heroCard = document.querySelector('#tab-user-view .data-card-hero');
         const otherCards = [...cards].filter(c => !c.classList.contains('data-card-hero'));
 
-        // Hero card enters first with a slight scale pop
         if (heroCard) {
-            tl.from(heroCard, { y: 26, opacity: 0, scale: 0.97, duration: 0.5, ease: 'power3.out', clearProps: 'all' });
-            const heroChildren = heroCard.querySelectorAll('.usage-ring-wrap, .main-value, .traffic-split .split-item');
-            if (heroChildren.length) {
-                tl.from(heroChildren, { y: 14, opacity: 0, duration: 0.34, stagger: 0.08, ease: 'power2.out', clearProps: 'all' }, '-=0.3');
-            }
+            tl.fromTo(heroCard, { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: 'power2.out', clearProps: 'all' });
         }
-
-        // Remaining cards cascade in
         if (otherCards.length) {
-            tl.from(otherCards, { y: 22, opacity: 0, duration: 0.42, ease: 'power3.out', stagger: 0.08, clearProps: 'all' }, heroCard ? '-=0.18' : 0);
+            tl.fromTo(otherCards, { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.38, stagger: 0.06, ease: 'power2.out', clearProps: 'all' }, '-=0.25');
         }
-
-        // Plan status pill pops with elastic spring
-        tl.from('#plan-status-pill', { scale: 0.55, opacity: 0, duration: 0.46, ease: 'elastic.out(1, 0.62)' }, '-=0.32');
-
-        // Plan stat trio items stagger up
-        tl.from('.plan-stat-item', { y: 10, opacity: 0, duration: 0.28, stagger: 0.07, ease: 'power2.out', clearProps: 'all' }, '-=0.3');
-
-        // Info rows slide in from left
-        const infoRows = document.querySelectorAll('#tab-user-view .card:not(.data-card-hero) .info-row');
-        if (infoRows.length) {
-            tl.from(infoRows, { x: -10, opacity: 0, duration: 0.22, stagger: 0.04, ease: 'power2.out', clearProps: 'all' }, '-=0.22');
-        }
-    } catch(e) {}
+    } catch(e) {
+        document.querySelectorAll('#tab-user-view .card, #tab-user-view .info-row').forEach(el => {
+            el.style.opacity = '1';
+        });
+    }
 }
 
-// IntersectionObserver scroll reveal
-let __scrollObserver = null;
+// Left-side scroll rail updater (guarantees cards are always 100% visible)
 function initScrollReveal() {
     try {
-        if (__scrollObserver) { __scrollObserver.disconnect(); __scrollObserver = null; }
-        if (typeof gsap === 'undefined' || prefersReducedMotion()) return;
-
+        const rail = document.getElementById('scroll-side-rail');
         const cards = document.querySelectorAll('#tab-user-view .card');
         if (!cards.length) return;
 
-        if (typeof ScrollTrigger !== 'undefined') {
-            try {
-                gsap.registerPlugin(ScrollTrigger);
-                cards.forEach((card, i) => {
-                    if (i > 0) {
-                        gsap.fromTo(card,
-                            { y: 35, opacity: 0, rotateX: 6, transformPerspective: 1000 },
-                            {
-                                y: 0,
-                                opacity: 1,
-                                rotateX: 0,
-                                duration: 0.65,
-                                ease: 'power3.out',
-                                scrollTrigger: {
-                                    trigger: card,
-                                    start: 'top 88%',
-                                    toggleActions: 'play none none none'
-                                }
-                            }
-                        );
-                        const rows = card.querySelectorAll('.info-row');
-                        if (rows.length) {
-                            gsap.from(rows, {
-                                x: -12,
-                                opacity: 0,
-                                duration: 0.28,
-                                stagger: 0.04,
-                                ease: 'power2.out',
-                                scrollTrigger: {
-                                    trigger: card,
-                                    start: 'top 85%',
-                                    toggleActions: 'play none none none'
-                                }
-                            });
-                        }
-                    }
-                });
-                return;
-            } catch(e) {}
-        }
-
-        __scrollObserver = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    const card = entry.target;
-                    gsap.to(card, { y: 0, opacity: 1, duration: 0.42, ease: 'power3.out', clearProps: 'all' });
-                    // Stagger inner info-rows as the card slides in
-                    const rows = card.querySelectorAll('.info-row');
-                    if (rows.length) {
-                        gsap.from(rows, { x: -10, opacity: 0, duration: 0.22, stagger: 0.04, ease: 'power2.out', clearProps: 'all', delay: 0.14 });
-                    }
-                    __scrollObserver.unobserve(card);
-                }
-            });
-        }, { threshold: 0.08, rootMargin: '0px 0px -20px 0px' });
-
-        cards.forEach((card, i) => {
-            if (i > 0) {
-                card.style.opacity = '0';
-                card.style.transform = 'translateY(18px)';
-                __scrollObserver.observe(card);
-            }
+        // Ensure all cards and info-rows are completely visible
+        cards.forEach(card => {
+            card.style.opacity = '1';
+            card.style.transform = 'none';
         });
+        document.querySelectorAll('#tab-user-view .info-row').forEach(row => {
+            row.style.opacity = '1';
+            row.style.transform = 'none';
+        });
+
+        if (rail) rail.classList.add('visible');
     } catch(e) {}
 }
 
@@ -1096,27 +1038,22 @@ function animateProgressBar(barEl, pctEl, targetPct, opts = {}) {
     }
 }
 
-// --- Expiry Countdown (3D Split-Flap Kinetic Chrono) ---
+// --- Expiry Countdown (Modern Odometer Chrono) ---
 function setFlipDigit(id, val) {
     const el = document.getElementById(id);
     if (!el) return;
     const str = String(val).padStart(2, '0');
     if (el.textContent === str) return;
-    const shell = el.closest('.flip-card-shell') || el;
     if (typeof gsap !== 'undefined' && !prefersReducedMotion()) {
         const tl = gsap.timeline();
-        tl.to(shell, { rotateX: -90, scale: 0.95, duration: 0.14, ease: 'power2.in' });
+        tl.to(el, { y: -14, opacity: 0, duration: 0.12, ease: 'power2.in' });
         tl.call(() => {
             el.textContent = str;
-            el.classList.add('tick-glow');
+            gsap.set(el, { y: 14, opacity: 0 });
         });
-        tl.to(shell, { rotateX: 0, scale: 1, duration: 0.22, ease: 'back.out(1.4)' });
-        tl.to(el, { duration: 0.4, onComplete: () => el.classList.remove('tick-glow') }, '+=0.1');
+        tl.to(el, { y: 0, opacity: 1, duration: 0.20, ease: 'power2.out' });
     } else {
         el.textContent = str;
-        el.classList.remove('tick');
-        void el.offsetWidth;
-        el.classList.add('tick');
     }
 }
 
@@ -1163,14 +1100,32 @@ function startExpiryCountdown(expiryTime) {
         if (diff <= 0) {
             el.style.display = 'block';
             ['flip-d','flip-h','flip-m','flip-s'].forEach(id => setFlipDigit(id, 0));
+            ['chrono-bar-d','chrono-bar-h','chrono-bar-m','chrono-bar-s'].forEach(id => {
+                const b = document.getElementById(id); if (b) b.style.width = '0%';
+            });
             clearInterval(__expiryCountdownTimer);
             return;
         }
         el.style.display = 'block';
-        setFlipDigit('flip-d', Math.floor(diff / 86400000));
-        setFlipDigit('flip-h', Math.floor((diff % 86400000) / 3600000));
-        setFlipDigit('flip-m', Math.floor((diff % 3600000) / 60000));
-        setFlipDigit('flip-s', Math.floor((diff % 60000) / 1000));
+        const d = Math.floor(diff / 86400000);
+        const h = Math.floor((diff % 86400000) / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        const s = Math.floor((diff % 60000) / 1000);
+
+        setFlipDigit('flip-d', d);
+        setFlipDigit('flip-h', h);
+        setFlipDigit('flip-m', m);
+        setFlipDigit('flip-s', s);
+
+        const barD = document.getElementById('chrono-bar-d');
+        if (barD) barD.style.width = Math.min(100, Math.max(0, (d / 31) * 100)) + '%';
+        const barH = document.getElementById('chrono-bar-h');
+        if (barH) barH.style.width = Math.min(100, Math.max(0, (h / 24) * 100)) + '%';
+        const barM = document.getElementById('chrono-bar-m');
+        if (barM) barM.style.width = Math.min(100, Math.max(0, (m / 60) * 100)) + '%';
+        const barS = document.getElementById('chrono-bar-s');
+        if (barS) barS.style.width = Math.min(100, Math.max(0, (s / 60) * 100)) + '%';
+
         ['flip-d','flip-h','flip-m','flip-s'].forEach(id => {
             const digitEl = document.getElementById(id);
             if (digitEl) digitEl.style.color = urgent ? 'var(--warn)' : '';

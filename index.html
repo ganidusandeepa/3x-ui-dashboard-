@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=38">
+    <link rel="stylesheet" href="styles.css?v=39">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <link rel="preconnect" href="https://unpkg.com" crossorigin>
@@ -25,12 +25,20 @@
     <script defer src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js" data-cfasync="false"></script>
 </head>
 <body>
-    <div id="scroll-progress-bar" aria-hidden="true"></div>
-    <div class="ambient-aurora" aria-hidden="true">
-        <div class="aurora-orb orb-1"></div>
-        <div class="aurora-orb orb-2"></div>
-        <div class="aurora-orb orb-3"></div>
-    </div>
+    <!-- Left-Side Vertical Scroll Telemetry Rail (Linear / Rauno / Monolith Style) -->
+    <aside id="scroll-side-rail" class="scroll-side-rail" aria-hidden="true">
+        <div class="rail-track" id="rail-track">
+            <div class="rail-progress-line" id="rail-progress-line"></div>
+            <div class="rail-ticks" id="rail-ticks"></div>
+            <div class="rail-indicator" id="rail-indicator">
+                <span class="rail-ind-dot"></span>
+                <div class="rail-ind-meta">
+                    <span class="rail-ind-sec" id="rail-ind-sec">01 · OVERVIEW</span>
+                    <span class="rail-ind-pct" id="rail-ind-pct">00%</span>
+                </div>
+            </div>
+        </div>
+    </aside>
     <div id="toast-container"></div>
     <div id="vanta-bg" aria-hidden="true"></div>
 
@@ -262,51 +270,47 @@
                         </div>
                     </div>
 
-                    <!-- Award-Winning 3D Glassmorphic Split-Flap Countdown -->
-                    <div id="expiry-countdown" class="chrono-countdown-section" style="display:none;">
-                        <div class="chrono-header">
-                            <div class="chrono-eyebrow">
-                                <span class="chrono-live-dot"></span>
-                                <i class="fa-regular fa-hourglass-half chrono-hourglass"></i>
-                                <span>Time Remaining</span>
+                    <!-- Modern Linear / Vercel Odometer Chrono Strip -->
+                    <div id="expiry-countdown" class="chrono-modern" style="display:none;">
+                        <div class="chrono-modern-head">
+                            <div class="chrono-modern-title">
+                                <span class="chrono-pulse-dot"></span>
+                                <span>TIME REMAINING</span>
                             </div>
-                            <span class="chrono-badge" id="chrono-cycle-badge">ACTIVE CYCLE</span>
+                            <span class="chrono-modern-tag" id="chrono-cycle-badge">ACTIVE CYCLE</span>
                         </div>
-                        <div class="flip-clock">
-                            <div class="flip-unit" data-unit="days">
-                                <div class="flip-card-shell">
-                                    <div class="flip-digit" id="flip-d">00</div>
-                                    <span class="flip-hinge-left"></span>
-                                    <span class="flip-hinge-right"></span>
+                        <div class="chrono-modern-grid">
+                            <div class="chrono-cell" data-unit="days">
+                                <div class="chrono-cell-top"><span>01</span><span>DAYS</span></div>
+                                <div class="chrono-val-row">
+                                    <span class="chrono-slot"><span class="flip-digit" id="flip-d">00</span></span>
+                                    <sub class="chrono-unit-sub">d</sub>
                                 </div>
-                                <div class="flip-label">Days</div>
+                                <div class="chrono-micro-track"><div class="chrono-micro-fill" id="chrono-bar-d"></div></div>
                             </div>
-                            <div class="flip-sep" aria-hidden="true"><span class="sep-dot"></span><span class="sep-dot"></span></div>
-                            <div class="flip-unit" data-unit="hours">
-                                <div class="flip-card-shell">
-                                    <div class="flip-digit" id="flip-h">00</div>
-                                    <span class="flip-hinge-left"></span>
-                                    <span class="flip-hinge-right"></span>
+                            <div class="chrono-cell" data-unit="hours">
+                                <div class="chrono-cell-top"><span>02</span><span>HOURS</span></div>
+                                <div class="chrono-val-row">
+                                    <span class="chrono-slot"><span class="flip-digit" id="flip-h">00</span></span>
+                                    <sub class="chrono-unit-sub">h</sub>
                                 </div>
-                                <div class="flip-label">Hours</div>
+                                <div class="chrono-micro-track"><div class="chrono-micro-fill" id="chrono-bar-h"></div></div>
                             </div>
-                            <div class="flip-sep" aria-hidden="true"><span class="sep-dot"></span><span class="sep-dot"></span></div>
-                            <div class="flip-unit" data-unit="mins">
-                                <div class="flip-card-shell">
-                                    <div class="flip-digit" id="flip-m">00</div>
-                                    <span class="flip-hinge-left"></span>
-                                    <span class="flip-hinge-right"></span>
+                            <div class="chrono-cell" data-unit="mins">
+                                <div class="chrono-cell-top"><span>03</span><span>MINUTES</span></div>
+                                <div class="chrono-val-row">
+                                    <span class="chrono-slot"><span class="flip-digit" id="flip-m">00</span></span>
+                                    <sub class="chrono-unit-sub">m</sub>
                                 </div>
-                                <div class="flip-label">Mins</div>
+                                <div class="chrono-micro-track"><div class="chrono-micro-fill" id="chrono-bar-m"></div></div>
                             </div>
-                            <div class="flip-sep" aria-hidden="true"><span class="sep-dot"></span><span class="sep-dot"></span></div>
-                            <div class="flip-unit flip-unit-sec" data-unit="secs">
-                                <div class="flip-card-shell">
-                                    <div class="flip-digit" id="flip-s">00</div>
-                                    <span class="flip-hinge-left"></span>
-                                    <span class="flip-hinge-right"></span>
+                            <div class="chrono-cell chrono-cell-sec" data-unit="secs">
+                                <div class="chrono-cell-top"><span>04</span><span>SECONDS</span></div>
+                                <div class="chrono-val-row">
+                                    <span class="chrono-slot"><span class="flip-digit" id="flip-s">00</span></span>
+                                    <sub class="chrono-unit-sub">s</sub>
                                 </div>
-                                <div class="flip-label">Secs</div>
+                                <div class="chrono-micro-track"><div class="chrono-micro-fill" id="chrono-bar-s"></div></div>
                             </div>
                         </div>
                         <div id="expiry-countdown-val" style="display:none;"></div>
@@ -826,7 +830,7 @@
     <!-- `defer` is REQUIRED here: the CDN libs above are deferred, and deferred
          scripts run after non-deferred ones. Without defer these would execute
          before GSAP/QRious existed. Deferred scripts run in document order. -->
-    <script defer src="main.js?v=53" data-cfasync="false"></script>
-    <script defer src="fx.js?v=5" data-cfasync="false"></script>
+    <script defer src="main.js?v=54" data-cfasync="false"></script>
+    <script defer src="fx.js?v=6" data-cfasync="false"></script>
 </body>
 </html>
