@@ -1,8 +1,8 @@
 /* fx.js — Award-winning animation & interactive UX layer for the 3x-ui dashboard.
  *
  * Capabilities:
- *   1. Left-Side Vertical Scroll Telemetry Rail (#scroll-side-rail) with proximity dock wave & live section detection
- *   2. Lenis Butter-Smooth Kinetic Scrolling synced with GSAP ticker
+ *   1. Apple Fluid Kinetic Momentum Scrolling (Lenis + GSAP ticker)
+ *   2. Optical Glass Specular Refraction tracking on scroll & cursor
  *   3. Dynamic cursor-tracking glass spotlight on cards & pills (--spot-x, --spot-y)
  *   4. Magnetic hover physics on interactive control buttons
  *   5. 3D card tilt & specular glare (vanilla-tilt)
@@ -19,113 +19,52 @@
   try { reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
   var isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
-  /* ---------------- 1. Left-Side Vertical Scroll Telemetry Rail ---------------- */
-  var scrollTimeout = null;
-  var TOTAL_TICKS = 21; // 0% to 100% in 5% increments
-
-  function initSideRail() {
-    var rail = document.getElementById('scroll-side-rail');
-    var ticksContainer = document.getElementById('rail-ticks');
-    if (!rail || !ticksContainer || rail.__initialized) return;
-    rail.__initialized = true;
-
-    // Generate precision ruler tick marks
-    ticksContainer.innerHTML = '';
-    for (var i = 0; i < TOTAL_TICKS; i++) {
-      var tick = document.createElement('div');
-      tick.className = 'rail-tick' + (i % 5 === 0 ? ' major' : '');
-      tick.setAttribute('data-index', i);
-      ticksContainer.appendChild(tick);
-    }
-
-    // Click on rail to jump-scroll
-    rail.addEventListener('click', function (e) {
-      var rect = ticksContainer.getBoundingClientRect();
-      var clickY = e.clientY - rect.top;
-      var ratio = Math.max(0, Math.min(1, clickY / rect.height));
-      var maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-      var targetScroll = ratio * maxScroll;
-      if (lenisInstance) {
-        lenisInstance.scrollTo(targetScroll, { duration: 1.1 });
-      } else {
-        window.scrollTo({ top: targetScroll, behavior: 'smooth' });
-      }
-    });
-  }
-
-  function updateSideRail(scrollPos, maxScroll) {
-    var rail = document.getElementById('scroll-side-rail');
-    var progLine = document.getElementById('rail-progress-line');
-    var indicator = document.getElementById('rail-indicator');
-    var pctEl = document.getElementById('rail-ind-pct');
-    var secEl = document.getElementById('rail-ind-sec');
-    if (!rail || !indicator) return;
-
-    var pct = maxScroll > 0 ? Math.min(100, Math.max(0, (scrollPos / maxScroll) * 100)) : 0;
-
-    if (progLine) progLine.style.height = pct.toFixed(1) + '%';
-    indicator.style.top = pct.toFixed(1) + '%';
-    if (pctEl) pctEl.textContent = Math.round(pct) + '%';
-
-    // Fluid proximity wave on ruler ticks (Linear / Rauno dock wave)
-    var currentTickIdx = (pct / 100) * (TOTAL_TICKS - 1);
-    var allTicks = rail.querySelectorAll('.rail-tick');
-    allTicks.forEach(function (tick, idx) {
-      var dist = Math.abs(idx - currentTickIdx);
-      if (dist < 2.5) {
-        var weight = Math.cos(dist * (Math.PI / 5));
-        var width = 6 + (weight * 11);
-        tick.style.width = width.toFixed(1) + 'px';
-        if (weight > 0.65) {
-          tick.classList.add('active');
-        } else {
-          tick.classList.remove('active');
-        }
-      } else {
-        tick.classList.remove('active');
-        tick.style.width = (idx % 5 === 0) ? '10px' : '6px';
-      }
-    });
-
-    // Detect active card in viewport
-    if (secEl) {
-      var cards = document.querySelectorAll('#tab-user-view .card');
-      var activeLabel = '01 · TRAFFIC';
-      var midScreen = window.innerHeight * 0.42;
-
-      cards.forEach(function (c, i) {
-        var r = c.getBoundingClientRect();
-        if (r.top <= midScreen && r.bottom >= midScreen) {
-          var h3 = c.querySelector('h3, .plan-status-pill, .ping-eyebrow');
-          var text = h3 ? h3.textContent.trim().replace(/^[^a-zA-Z0-9]+/, '') : ('SECTION ' + (i + 1));
-          activeLabel = '0' + (i + 1) + ' · ' + text.toUpperCase().slice(0, 14);
-        }
-      });
-      secEl.textContent = activeLabel;
-    }
-
-    // Show rail while scrolling, tuck away after 1.2s idle
-    document.body.classList.add('is-scrolling');
-    clearTimeout(scrollTimeout);
-    scrollTimeout = setTimeout(function () {
-      document.body.classList.remove('is-scrolling');
-    }, 1200);
-  }
-
-  /* ---------------- 2. Lenis Smooth Scrolling ---------------- */
+  /* ---------------- 1. Apple Fluid Kinetic Momentum Scrolling ---------------- */
   var lenisInstance = null;
+  var rafId = null;
+
+  function updateCardRefraction() {
+    if (reduce) return;
+    try {
+      var viewH = window.innerHeight || 800;
+      var cards = document.querySelectorAll('.card, .login-card');
+      for (var i = 0; i < cards.length; i++) {
+        var card = cards[i];
+        var rect = card.getBoundingClientRect();
+        // Calculate vertical progress relative to viewport (-1 top, 0 center, 1 bottom)
+        var centerOffset = (rect.top + rect.height * 0.5 - viewH * 0.5) / (viewH * 0.5);
+        if (centerOffset >= -1.5 && centerOffset <= 1.5) {
+          // Adjust subtle specular reflection offset
+          var shift = Math.round(centerOffset * 12);
+          card.style.setProperty('--scroll-shine', shift + 'px');
+        }
+      }
+    } catch (e) {}
+  }
+
+  function onScrollTick() {
+    if (rafId) return;
+    rafId = requestAnimationFrame(function () {
+      rafId = null;
+      updateCardRefraction();
+    });
+  }
 
   function initSmoothScroll() {
-    if (reduce || isTouch || typeof Lenis === 'undefined') return;
+    if (reduce || isTouch || typeof Lenis === 'undefined') {
+      window.addEventListener('scroll', onScrollTick, { passive: true });
+      return;
+    }
     try {
       lenisInstance = new Lenis({
-        duration: 1.15,
+        duration: 1.25,
         easing: function (t) { return Math.min(1, 1.001 - Math.pow(2, -10 * t)); },
         direction: 'vertical',
         gestureDirection: 'vertical',
         smooth: true,
         smoothTouch: false,
-        wheelMultiplier: 1.05
+        wheelMultiplier: 1.0,
+        lerp: 0.08
       });
 
       if (typeof gsap !== 'undefined') {
@@ -141,24 +80,15 @@
         requestAnimationFrame(raf);
       }
 
-      lenisInstance.on('scroll', function (e) {
-        var max = document.documentElement.scrollHeight - window.innerHeight;
-        updateSideRail(e.scroll, max);
+      lenisInstance.on('scroll', function () {
+        onScrollTick();
       });
-    } catch (e) {}
+    } catch (e) {
+      window.addEventListener('scroll', onScrollTick, { passive: true });
+    }
   }
 
-  // Native window scroll fallback (for touch / reduced motion / no Lenis)
-  function initNativeScrollFallback() {
-    window.addEventListener('scroll', function () {
-      if (lenisInstance) return;
-      var max = document.documentElement.scrollHeight - window.innerHeight;
-      var scroll = window.scrollY || window.pageYOffset || 0;
-      updateSideRail(scroll, max);
-    }, { passive: true });
-  }
-
-  /* ---------------- 3. Cursor-Tracking Glass Spotlight ---------------- */
+  /* ---------------- 2. Cursor-Tracking Glass Spotlight ---------------- */
   function bindSpotlight(el) {
     if (!el || el.__fxSpot || reduce || isTouch) return;
     el.__fxSpot = true;
@@ -177,13 +107,13 @@
     } catch (e) {}
   }
 
-  /* ---------------- 4. Magnetic Button Physics ---------------- */
+  /* ---------------- 3. Magnetic Button Physics ---------------- */
   var MAG_SEL = '.ping-btn, .plan-refresh, #btn-theme, #btn-bg, #btn-logout, .accent-btn';
 
   function bindMagnetic(btn) {
     if (!btn || btn.__fxMag || reduce || isTouch || typeof gsap === 'undefined') return;
     btn.__fxMag = true;
-    var pullFactor = 0.30;
+    var pullFactor = 0.28;
 
     btn.addEventListener('mousemove', function (e) {
       var rect = btn.getBoundingClientRect();
@@ -203,7 +133,7 @@
     } catch (e) {}
   }
 
-  /* ---------------- 5. 3D Card Tilt (Vanilla-Tilt) ---------------- */
+  /* ---------------- 4. 3D Card Tilt (Vanilla-Tilt) ---------------- */
   var TILT_SEL = '.data-card-hero, .card';
 
   function initTiltOn(el) {
@@ -214,12 +144,12 @@
     el.__fxTilt = true;
     try {
       VanillaTilt.init(el, {
-        max: 4,
+        max: 3.5,
         speed: 400,
-        scale: 1.01,
+        scale: 1.008,
         perspective: 1200,
         glare: true,
-        'max-glare': 0.12,
+        'max-glare': 0.10,
         gyroscope: false
       });
     } catch (e) { el.__fxTilt = false; }
@@ -229,7 +159,7 @@
     try { (root || document).querySelectorAll(TILT_SEL).forEach(initTiltOn); } catch (e) {}
   }
 
-  /* ---------------- 6. Canvas Confetti ---------------- */
+  /* ---------------- 5. Canvas Confetti ---------------- */
   function fire(opts) {
     if (reduce || typeof confetti !== 'function') return;
     try { confetti(Object.assign({ disableForReducedMotion: true, zIndex: 9999 }, opts)); } catch (e) {}
@@ -263,7 +193,7 @@
     window.showToast = wrapped;
   }
 
-  /* ---------------- 7. Shimmer Skeleton on Hero Numbers ---------------- */
+  /* ---------------- 6. Shimmer Skeleton on Hero Numbers ---------------- */
   var SKEL_IDS = ['user-used', 'user-dl', 'user-up'];
 
   function skeletonOn() {
@@ -303,9 +233,7 @@
 
   /* ---------------- Boot ---------------- */
   function boot() {
-    initSideRail();
     initSmoothScroll();
-    initNativeScrollFallback();
     initTiltAll(document);
     initSpotlightsAll(document);
     initMagneticAll(document);
@@ -331,6 +259,7 @@
 
     setTimeout(wrapToast, 600);
     setTimeout(wrapToast, 1800);
+    updateCardRefraction();
   }
 
   window.FX = {

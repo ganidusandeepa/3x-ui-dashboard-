@@ -199,24 +199,18 @@ function animateClientEntry() {
     }
 }
 
-// Left-side scroll rail updater (guarantees cards are always 100% visible)
+// Ensure cards and info-rows in client view are always 100% visible
 function initScrollReveal() {
     try {
-        const rail = document.getElementById('scroll-side-rail');
         const cards = document.querySelectorAll('#tab-user-view .card');
         if (!cards.length) return;
 
-        // Ensure all cards and info-rows are completely visible
         cards.forEach(card => {
             card.style.opacity = '1';
-            card.style.transform = 'none';
         });
         document.querySelectorAll('#tab-user-view .info-row').forEach(row => {
             row.style.opacity = '1';
-            row.style.transform = 'none';
         });
-
-        if (rail) rail.classList.add('visible');
     } catch(e) {}
 }
 

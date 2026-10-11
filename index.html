@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=39">
+    <link rel="stylesheet" href="styles.css?v=41">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <link rel="preconnect" href="https://unpkg.com" crossorigin>
@@ -25,20 +25,6 @@
     <script defer src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js" data-cfasync="false"></script>
 </head>
 <body>
-    <!-- Left-Side Vertical Scroll Telemetry Rail (Linear / Rauno / Monolith Style) -->
-    <aside id="scroll-side-rail" class="scroll-side-rail" aria-hidden="true">
-        <div class="rail-track" id="rail-track">
-            <div class="rail-progress-line" id="rail-progress-line"></div>
-            <div class="rail-ticks" id="rail-ticks"></div>
-            <div class="rail-indicator" id="rail-indicator">
-                <span class="rail-ind-dot"></span>
-                <div class="rail-ind-meta">
-                    <span class="rail-ind-sec" id="rail-ind-sec">01 · OVERVIEW</span>
-                    <span class="rail-ind-pct" id="rail-ind-pct">00%</span>
-                </div>
-            </div>
-        </div>
-    </aside>
     <div id="toast-container"></div>
     <div id="vanta-bg" aria-hidden="true"></div>
 
@@ -381,15 +367,11 @@
 
                         <div class="hop-node topo-node" id="hop-panel">
                             <div class="topo-icon-wrap internet-glow">
-                                <svg class="topo-icon xray-node-svg" viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
-                                    <circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3.4 2.4" opacity="0.78"/>
-                                    <path d="M5.8 5.8L18.2 18.2M18.2 5.8L5.8 18.2" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/>
-                                    <circle cx="12" cy="12" r="2.7" fill="currentColor"/>
-                                </svg>
+                                <i class="fa-solid fa-globe topo-icon"></i>
                                 <div class="node-pulse-ring"></div>
                             </div>
-                            <span class="hop-node-lbl">Xray</span>
-                            <span class="hop-node-sub">Core Panel</span>
+                            <span class="hop-node-lbl">Internet</span>
+                            <span class="hop-node-sub">Global Web</span>
                         </div>
                     </div>
                     <div class="ping-bars" id="ping-bars">
@@ -415,6 +397,26 @@
 
                     <div style="display:flex; flex-direction:column; align-items:center; gap:16px;">
                         <canvas id="client-qr-canvas" style="border-radius:12px; background:#fff; padding:10px;"></canvas>
+
+                        <div id="client-main-link-wrap" style="width:100%;">
+                            <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:6px;"><i class="fa-solid fa-link"></i> Config URL / Link</div>
+                            <div class="copy-input-row">
+                                <input type="text" id="client-config-link" readonly spellcheck="false" class="glass-input" />
+                                <button type="button" class="sys-btn" onclick="copyClientConfig()" title="Copy Config Link">
+                                    <i class="fa-solid fa-copy"></i> <span>Copy</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="client-sub-row" style="width:100%; display:none;">
+                            <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:6px;"><i class="fa-solid fa-rss"></i> Subscription URL</div>
+                            <div class="copy-input-row">
+                                <input type="text" id="client-sub-link" readonly spellcheck="false" class="glass-input" />
+                                <button type="button" class="sys-btn" onclick="copyClientSub()" title="Copy Subscription URL">
+                                    <i class="fa-solid fa-copy"></i> <span>Copy</span>
+                                </button>
+                            </div>
+                        </div>
 
                         <div id="client-all-links" style="width:100%; display:none;">
                             <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:8px;"><i class="fa-solid fa-server"></i> All Servers</div>
@@ -830,7 +832,7 @@
     <!-- `defer` is REQUIRED here: the CDN libs above are deferred, and deferred
          scripts run after non-deferred ones. Without defer these would execute
          before GSAP/QRious existed. Deferred scripts run in document order. -->
-    <script defer src="main.js?v=54" data-cfasync="false"></script>
-    <script defer src="fx.js?v=6" data-cfasync="false"></script>
+    <script defer src="main.js?v=55" data-cfasync="false"></script>
+    <script defer src="fx.js?v=7" data-cfasync="false"></script>
 </body>
 </html>

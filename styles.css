@@ -2299,170 +2299,55 @@ body.theme-light .live-pill {
 }
 
 /* ============================================================
-   Award-Winning Left-Side Vertical Scroll Telemetry Rail
-   (Linear / Rauno / Monolith Precision Ruler)
-   ============================================================ */
-.scroll-side-rail {
-    position: fixed;
-    left: 20px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 28px;
-    height: 280px;
-    z-index: 999;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.4s ease;
-}
-body.is-scrolling .scroll-side-rail,
-.scroll-side-rail.visible {
-    opacity: 1;
-}
-.rail-track {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: space-between;
-}
-.rail-progress-line {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 1.5px;
-    height: 0%;
-    background: linear-gradient(180deg, var(--on-bg) 0%, rgba(255, 255, 255, 0.4) 100%);
-    box-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
-    transition: height 0.08s ease-out;
-}
-body.theme-light .rail-progress-line {
-    background: #09090b;
-    box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
-}
-.rail-ticks {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-}
-.rail-tick {
-    width: 6px;
-    height: 1px;
-    background: rgba(255, 255, 255, 0.22);
-    transform-origin: left center;
-    transition: width 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.22s ease;
-}
-body.theme-light .rail-tick {
-    background: rgba(0, 0, 0, 0.22);
-}
-.rail-tick.major {
-    width: 10px;
-    background: rgba(255, 255, 255, 0.5);
-}
-body.theme-light .rail-tick.major {
-    background: rgba(0, 0, 0, 0.5);
-}
-.rail-tick.active {
-    width: 16px;
-    background: #ffffff;
-    box-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
-}
-body.theme-light .rail-tick.active {
-    background: #09090b;
-    box-shadow: none;
-}
-.rail-indicator {
-    position: absolute;
-    left: -2px;
-    top: 0%;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    pointer-events: auto;
-    cursor: default;
-    transform: translateY(-50%);
-    transition: top 0.1s ease-out;
-}
-.rail-ind-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #ffffff;
-    box-shadow: 0 0 8px #ffffff;
-}
-body.theme-light .rail-ind-dot {
-    background: #09090b;
-    box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
-}
-.rail-ind-meta {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 3px 8px;
-    border-radius: 6px;
-    background: rgba(20, 20, 20, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    white-space: nowrap;
-    opacity: 0;
-    transform: translateX(-4px);
-    transition: opacity 0.25s ease, transform 0.25s ease;
-}
-body.is-scrolling .rail-ind-meta,
-.scroll-side-rail:hover .rail-ind-meta {
-    opacity: 1;
-    transform: translateX(0);
-}
-body.theme-light .rail-ind-meta {
-    background: rgba(255, 255, 255, 0.9);
-    border-color: rgba(0, 0, 0, 0.1);
-}
-.rail-ind-sec {
-    font-size: 0.62rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    color: var(--on-dim);
-    text-transform: uppercase;
-}
-.rail-ind-pct {
-    font-family: var(--font-mono);
-    font-size: 0.65rem;
-    font-weight: 700;
-    color: var(--on-bg);
-}
-@media (max-width: 900px) {
-    .scroll-side-rail { display: none !important; }
-}
-
-/* ============================================================
-   Linear Obsidian Precision + Fluid Micro-Interactions
+   Apple Glassmorphic Fluid Architecture (VisionOS / macOS Sonoma)
+   Deep optical frosted blur, specular bevel rim highlights,
+   and fluid buoyancy physics.
    ============================================================ */
 .card, .login-card {
     position: relative;
-    backdrop-filter: blur(20px) saturate(150%);
-    -webkit-backdrop-filter: blur(20px) saturate(150%);
-    background: linear-gradient(180deg, rgba(22, 22, 24, 0.75) 0%, rgba(14, 14, 16, 0.80) 100%);
-    border: 1px solid rgba(255, 255, 255, 0.075);
-    box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.65), inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
-    transition: border-color 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    backdrop-filter: blur(28px) saturate(190%) contrast(102%);
+    -webkit-backdrop-filter: blur(28px) saturate(190%) contrast(102%);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.015) 100%), rgba(16, 16, 20, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    box-shadow: 0 20px 48px -12px rgba(0, 0, 0, 0.65),
+                inset 0 1px 1px 0 rgba(255, 255, 255, 0.16),
+                inset 0 -1px 1px 0 rgba(0, 0, 0, 0.25);
+    border-radius: var(--shape-lg, 16px);
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 0.25s ease;
+    will-change: transform, box-shadow;
 }
 body.theme-light .card, body.theme-light .login-card {
-    backdrop-filter: blur(16px) saturate(130%);
-    -webkit-backdrop-filter: blur(16px) saturate(130%);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.90) 0%, rgba(248, 248, 250, 0.85) 100%);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.88) 0%, rgba(248, 248, 250, 0.75) 100%);
     border: 1px solid rgba(0, 0, 0, 0.08);
-    box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.07), inset 0 1px 0 0 rgba(255, 255, 255, 0.95);
+    box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.08),
+                inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.95),
+                inset 0 -1px 1px 0 rgba(0, 0, 0, 0.03);
+}
+@media (hover: hover) {
+    .card:hover, .login-card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(255, 255, 255, 0.18);
+        box-shadow: 0 26px 58px -12px rgba(0, 0, 0, 0.72),
+                    inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.24),
+                    inset 0 -1px 1px 0 rgba(0, 0, 0, 0.25);
+    }
+    body.theme-light .card:hover, body.theme-light .login-card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(0, 0, 0, 0.14);
+        box-shadow: 0 22px 48px -8px rgba(0, 0, 0, 0.12),
+                    inset 0 1px 2px 0 rgba(255, 255, 255, 1);
+    }
 }
 .card::before, .login-card::before {
     content: '';
     position: absolute;
     inset: 0;
     border-radius: inherit;
-    background: radial-gradient(400px circle at var(--spot-x, -999px) var(--spot-y, -999px), rgba(255, 255, 255, 0.045), transparent 65%);
+    background: radial-gradient(420px circle at var(--spot-x, -999px) var(--spot-y, -999px), rgba(255, 255, 255, 0.06), transparent 70%);
     pointer-events: none;
     z-index: 0;
     opacity: 0;
@@ -2472,7 +2357,51 @@ body.theme-light .card, body.theme-light .login-card {
     opacity: 1;
 }
 body.theme-light .card::before, body.theme-light .login-card::before {
-    background: radial-gradient(400px circle at var(--spot-x, -999px) var(--spot-y, -999px), rgba(0, 0, 0, 0.03), transparent 65%);
+    background: radial-gradient(420px circle at var(--spot-x, -999px) var(--spot-y, -999px), rgba(0, 0, 0, 0.035), transparent 70%);
+}
+
+/* Apple Glassmorphic Copy Input Row (Config & Subscription links) */
+.copy-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    margin-bottom: 4px;
+}
+.glass-input {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 14px;
+    font-size: 0.82rem;
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+    color: var(--on-bg, #fff);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--shape-md, 10px);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+    outline: none;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.glass-input:focus {
+    border-color: rgba(56, 189, 248, 0.6);
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2), inset 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+body.theme-light .glass-input {
+    color: #0f172a;
+    background: rgba(0, 0, 0, 0.03);
+    border-color: rgba(0, 0, 0, 0.12);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+body.theme-light .glass-input:focus {
+    border-color: rgba(14, 165, 233, 0.6);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
 }
 #tab-user-view .card {
     opacity: 1 !important;
