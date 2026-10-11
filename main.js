@@ -281,7 +281,7 @@ function animateNumber(elOrSelector, to, opts = {}) {
     const el = typeof elOrSelector === 'string' ? document.querySelector(elOrSelector) : elOrSelector;
     if (!el) return;
 
-    let startVal = (fromRaw !== null && Number.isFinite(fromRaw)) ? fromRaw : Number(el.textContent);
+    let startVal = (fromRaw !== null && Number.isFinite(fromRaw)) ? fromRaw : parseFloat(el.textContent);
     if (!Number.isFinite(startVal)) startVal = 0;
     const endVal = Number(to);
     if (!Number.isFinite(endVal)) { el.textContent = formatter(0); return; }
@@ -377,6 +377,14 @@ function doLogout() {
     __expiryCountdownTimer = null; __currentClientData = null;
     __clientLast = null; __clientSpeedEma = { dl: null, ul: null };
     try { stopRingSparks('user-ring-fill'); stopRingSparks('usage-ring-fill'); } catch(e) {}
+    try {
+        stopBarSparks('user-progress');
+        stopBarSparks('plan-bar-fill');
+        const b1 = document.getElementById('user-progress');
+        const b2 = document.getElementById('plan-bar-fill');
+        if (b1) { b1.__barState = null; b1.style.width = '0%'; b1.classList.remove('has-fill', 'is-sweeping'); }
+        if (b2) { b2.__barState = null; b2.style.width = '0%'; b2.classList.remove('has-fill', 'is-sweeping'); }
+    } catch(e) {}
     try { setSpeedArrowActivity('#spd-arrow-dl', 0); setSpeedArrowActivity('#spd-arrow-ul', 0); } catch(e) {}
     currentRole = null; adminToken = null;
     try { sessionStorage.removeItem('xui_admin_token'); } catch(e) {}
@@ -844,9 +852,205 @@ function startRingSparks(ringFillId, pct) {
 try {
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) return;
-        document.querySelectorAll('.ring-spark-dot').forEach(el => el.remove());
+        document.querySelectorAll('.ring-spark-dot, .bar-spark-dot').forEach(el => el.remove());
     });
 } catch (e) {}
+
+// --- Progress Bar Leading-Edge Sparks & Choreographed Animator -------------
+const __barSparkState = new Map(); // barId -> { timer, pct, burstUntil }
+
+function stopBarSparks(barId) {
+    const st = __barSparkState.get(barId);
+    if (st && st.timer) clearInterval(st.timer);
+    __barSparkState.delete(barId);
+    try {
+        const bar = document.getElementById(barId);
+        bar?.querySelectorAll('.bar-spark-dot').forEach(el => {
+            try { el.getAnimations().forEach(a => a.cancel()); } catch (e) {}
+            el.remove();
+        });
+    } catch (e) {}
+}
+
+function startBarSparks(barEl, pct, burst = false) {
+    if (!barEl || !barEl.id) return;
+    if (!(pct > 0.4) || prefersReducedMotion()) {
+        stopBarSparks(barEl.id);
+        return;
+    }
+
+    let layer = barEl.querySelector('.bar-spark-layer');
+    if (!layer) {
+        layer = document.createElement('span');
+        layer.className = 'bar-spark-layer';
+        barEl.appendChild(layer);
+    }
+
+    const now = Date.now();
+    const prev = __barSparkState.get(barEl.id);
+    if (prev) {
+        prev.pct = pct;
+        if (burst) prev.burstUntil = now + 1450;
+        return;
+    }
+
+    const state = { pct, burstUntil: burst ? now + 1450 : 0, timer: null };
+    const emit = () => {
+        if (document.hidden || !barEl.isConnected || !barEl.getClientRects().length) return;
+        const isBurst = Date.now() < state.burstUntil;
+        if (!isBurst && Math.random() > 0.55) return;
+
+        const count = isBurst ? (1 + Math.floor(Math.random() * 2)) : 1;
+        for (let i = 0; i < count; i++) {
+            const dot = document.createElement('span');
+            dot.className = 'bar-spark-dot';
+            const sz = (2.2 + Math.random() * 2.4).toFixed(1);
+            dot.style.width = `${sz}px`;
+            dot.style.height = `${sz}px`;
+            layer.appendChild(dot);
+
+            // Drift outward & slightly backward/forward from the leading plasma tip
+            const angle = (Math.random() - 0.5) * Math.PI * 1.45;
+            const dist = (isBurst ? 10 : 6) + Math.random() * 14;
+            const dx = Math.cos(angle) * dist - (isBurst ? 3 : 0);
+            const dy = Math.sin(angle) * (dist * 0.85);
+
+            const anim = dot.animate([
+                { transform: 'translate(-50%, -50%) scale(1.1)', opacity: 0.95 },
+                { transform: `translate(calc(-50% + ${dx.toFixed(1)}px), calc(-50% + ${dy.toFixed(1)}px)) scale(0.15)`, opacity: 0 }
+            ], {
+                duration: (isBurst ? 480 : 620) + Math.random() * 360,
+                easing: 'cubic-bezier(0.16, 1, 0.3, 1)'
+            });
+            anim.onfinish = () => dot.remove();
+            anim.oncancel = () => dot.remove();
+        }
+    };
+
+    state.timer = setInterval(emit, 120);
+    __barSparkState.set(barEl.id, state);
+    emit();
+}
+
+function animateProgressBar(barEl, pctEl, targetPct, opts = {}) {
+    if (!barEl) return;
+    const isUnlimited = Boolean(opts.isUnlimited);
+    const warnClass = opts.warnClass || 'warn';
+    const badClass = opts.badClass || 'bad';
+    const unlimitedClass = opts.unlimitedClass || 'unlimited';
+    const clientKey = String(opts.clientKey || 'default');
+    const staggerDelay = Number(opts.staggerDelay || 0);
+
+    const clampedPct = isUnlimited ? 100 : Math.min(100, Math.max(0, Number(targetPct) || 0));
+
+    barEl.classList.remove(warnClass, badClass, unlimitedClass);
+    if (isUnlimited) {
+        barEl.classList.add(unlimitedClass);
+    } else if (clampedPct >= 90) {
+        barEl.classList.add(badClass);
+    } else if (clampedPct >= 70) {
+        barEl.classList.add(warnClass);
+    }
+
+    if (clampedPct > 0.3 || isUnlimited) barEl.classList.add('has-fill');
+    else barEl.classList.remove('has-fill');
+
+    const state = barEl.__barState;
+    const isFirstLoad = !state || state.clientKey !== clientKey;
+
+    if (pctEl && opts.alwaysShowPct) {
+        pctEl.style.display = 'inline-flex';
+    }
+
+    if (isFirstLoad) {
+        barEl.__barState = {
+            clientKey,
+            lastPct: clampedPct,
+            isUnlimited
+        };
+
+        if (typeof gsap !== 'undefined' && !prefersReducedMotion()) {
+            gsap.killTweensOf(barEl);
+            barEl.classList.add('is-sweeping');
+            gsap.fromTo(
+                barEl,
+                { width: '0%' },
+                {
+                    width: `${clampedPct.toFixed(1)}%`,
+                    duration: 1.45,
+                    delay: staggerDelay,
+                    ease: 'expo.out',
+                    overwrite: 'auto',
+                    onComplete: () => barEl.classList.remove('is-sweeping')
+                }
+            );
+            if (pctEl) {
+                gsap.fromTo(
+                    pctEl,
+                    { scale: 0.78, opacity: 0, y: 3 },
+                    { scale: 1, opacity: 1, y: 0, duration: 0.55, delay: staggerDelay + 0.05, ease: 'back.out(1.8)' }
+                );
+            }
+        } else {
+            barEl.style.width = `${clampedPct.toFixed(1)}%`;
+        }
+
+        if (pctEl) {
+            if (isUnlimited) {
+                pctEl.textContent = '∞';
+            } else {
+                animateNumber(pctEl, clampedPct, {
+                    from: 0,
+                    decimals: 1,
+                    duration: 1380,
+                    formatter: (v) => `${Number(v).toFixed(1)}%`
+                });
+            }
+        }
+
+        try { startBarSparks(barEl, clampedPct, true); } catch (e) {}
+        return;
+    }
+
+    // Subsequent live SSE updates: only tween when the value meaningfully changes
+    const prevPct = state.lastPct;
+    const delta = Math.abs(clampedPct - prevPct);
+    const modeChanged = state.isUnlimited !== isUnlimited;
+
+    if (delta > 0.02 || modeChanged) {
+        state.lastPct = clampedPct;
+        state.isUnlimited = isUnlimited;
+
+        if (typeof gsap !== 'undefined' && !prefersReducedMotion()) {
+            barEl.classList.add('is-sweeping');
+            gsap.to(barEl, {
+                width: `${clampedPct.toFixed(1)}%`,
+                duration: 0.85,
+                ease: 'power3.out',
+                overwrite: 'auto',
+                onComplete: () => barEl.classList.remove('is-sweeping')
+            });
+        } else {
+            barEl.style.width = `${clampedPct.toFixed(1)}%`;
+        }
+
+        if (pctEl) {
+            if (isUnlimited) {
+                pctEl.textContent = '∞';
+            } else {
+                animateNumber(pctEl, clampedPct, {
+                    from: prevPct,
+                    decimals: 1,
+                    duration: 800,
+                    formatter: (v) => `${Number(v).toFixed(1)}%`
+                });
+            }
+        }
+        try { startBarSparks(barEl, clampedPct, delta > 2); } catch (e) {}
+    } else {
+        try { startBarSparks(barEl, clampedPct, false); } catch (e) {}
+    }
+}
 
 // --- Expiry Countdown (flip-clock) ---
 function setFlipDigit(id, val) {
@@ -909,8 +1113,10 @@ function applyClientDataToUI(client) {
     const down = parseFloat(toGB(client.down));
     const up = parseFloat(toGB(client.up));
     const totalUsed = (down + up).toFixed(2);
-    const limit = parseFloat(toGB(client.total || client.subInfo?.total || client.traffic?.limit || 0));
+    const rawTotalBytes = Number(client.total || client.subInfo?.total || client.traffic?.limit || 0);
+    const limit = parseFloat(toGB(rawTotalBytes));
     const remainDesc = limit === 0 ? "Unlimited GB" : `${limit.toFixed(2)} GB`;
+    const clientKey = client.email || client.uuid || client.subId || 'active-client';
 
     const fmtTime = (ms) => { const n = Number(ms); if (!Number.isFinite(n) || n <= 0) return '-'; return new Date(n).toLocaleString(); };
     const fmtLastSeen = (ms, online) => {
@@ -958,19 +1164,13 @@ function applyClientDataToUI(client) {
         const dot = document.getElementById('plan-dot');
         const lbl = document.getElementById('plan-status-lbl');
         if (pill && dot && lbl) {
+            const prevStatus = lbl.textContent;
             pill.classList.remove('online', 'away');
-            if (!active) {
-                pill.classList.add('away');
-                lbl.textContent = 'DISABLED';
-            } else if (isOnline) {
-                pill.classList.add('online');
-                lbl.textContent = 'CONNECTED';
-            } else {
-                pill.classList.add('away');
-                lbl.textContent = 'AWAY';
-            }
-            // M3 spring pop-in
-            if (typeof gsap !== 'undefined' && !prefersReducedMotion()) {
+            const nextStatus = !active ? 'DISABLED' : (isOnline ? 'CONNECTED' : 'AWAY');
+            pill.classList.add(!active ? 'away' : (isOnline ? 'online' : 'away'));
+            lbl.textContent = nextStatus;
+            // M3 spring pop-in only when status actually transitions
+            if (prevStatus !== nextStatus && typeof gsap !== 'undefined' && !prefersReducedMotion()) {
                 gsap.fromTo(pill, { scale: 0.65, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.38, ease: 'elastic.out(1, 0.62)' });
             }
         }
@@ -982,8 +1182,8 @@ function applyClientDataToUI(client) {
         const siTotal = si ? Number(si.total ?? 0) : 0;
         const siExpire = si ? Number(si.expire ?? 0) * 1000 : 0; // seconds → ms
 
-        const periodBytes = si ? (siUp + siDown) : (Number(client.up || 0) + Number(client.down || 0));
-        const limitBytes  = si && siTotal > 0 ? siTotal : Number(client.total || 0);
+        const periodBytes = (si && (siUp + siDown) > 0) ? (siUp + siDown) : (Number(client.up || 0) + Number(client.down || 0));
+        const limitBytes  = (si && siTotal > 0) ? siTotal : rawTotalBytes;
         const periodGB    = periodBytes / (1024 ** 3);
         const limitGB     = limitBytes  / (1024 ** 3);
 
@@ -996,17 +1196,15 @@ function applyClientDataToUI(client) {
         const fill = document.getElementById('plan-bar-fill');
         const pctEl = document.getElementById('plan-pct');
         if (fill) {
-            fill.classList.remove('warn', 'bad');
-            let pct = 0;
-            if (limitGB > 0) {
-                pct = Math.min(100, Math.max(0, (periodGB / limitGB) * 100));
-                if (pct >= 90) fill.classList.add('bad');
-                else if (pct >= 70) fill.classList.add('warn');
-            } else {
-                pct = 100;
-            }
-            fill.style.width = ${pct.toFixed(1)}%;
-            if (pctEl) pctEl.textContent = limitGB > 0 ? pct.toFixed(1) + '%' : '∞';
+            const pct = limitGB > 0 ? Math.min(100, Math.max(0, (periodGB / limitGB) * 100)) : 100;
+            animateProgressBar(fill, pctEl, pct, {
+                isUnlimited: !(limitGB > 0),
+                warnClass: 'warn',
+                badClass: 'bad',
+                unlimitedClass: 'unlimited',
+                clientKey,
+                staggerDelay: 0.1
+            });
         }
 
         // Stats trio
@@ -1058,29 +1256,32 @@ function applyClientDataToUI(client) {
         }
     } catch(e) {}
 
-    // Hero consumption bar (smoothly animated with progress percentage)
+    // Hero consumption bar (choreographed sweep + leading-edge sparks)
     try {
         const bar = document.getElementById('user-progress');
         const pctEl = document.getElementById('user-progress-pct');
         const usedEl = document.getElementById('user-progress-used');
         const remEl = document.getElementById('user-progress-remaining');
-        if (usedEl) { const f = formatGB(Number(totalUsed)); usedEl.textContent = ${f.value} ; }
+        if (usedEl) { const f = formatGB(Number(totalUsed)); usedEl.textContent = `${f.value} ${f.unit}`; }
         if (bar) {
-            if (!bar.classList.contains('anim')) bar.classList.add('anim');
-            bar.classList.remove('level-warn', 'level-bad');
-            if (limit > 0) {
-                const pct = Math.min(100, Math.max(0, (Number(totalUsed) / limit) * 100));
-                if (pct >= 90) bar.classList.add('level-bad');
-                else if (pct >= 70) bar.classList.add('level-warn');
-                bar.style.width = ${pct.toFixed(1)}%;
-                bar.style.setProperty('--bar-w', ${pct.toFixed(1)}%);
-                if (pctEl) { pctEl.style.display = 'inline-flex'; pctEl.textContent = ${pct.toFixed(1)}%; }
-                if (remEl) { const r = formatGB(Math.max(0, Number(limit) - Number(totalUsed))); remEl.textContent = ${r.value} ; }
-            } else {
-                bar.style.width = '100%';
-                bar.style.setProperty('--bar-w', '100%');
-                if (pctEl) { pctEl.style.display = 'inline-flex'; pctEl.textContent = '∞'; }
-                if (remEl) remEl.textContent = 'Unlimited';
+            const isUnlimited = !(limit > 0);
+            const pct = !isUnlimited ? Math.min(100, Math.max(0, (Number(totalUsed) / limit) * 100)) : 100;
+            animateProgressBar(bar, pctEl, pct, {
+                isUnlimited,
+                warnClass: 'level-warn',
+                badClass: 'level-bad',
+                unlimitedClass: 'level-unlimited',
+                clientKey,
+                alwaysShowPct: true,
+                staggerDelay: 0
+            });
+            if (remEl) {
+                if (!isUnlimited) {
+                    const r = formatGB(Math.max(0, Number(limit) - Number(totalUsed)));
+                    remEl.textContent = `${r.value} ${r.unit}`;
+                } else {
+                    remEl.textContent = 'Unlimited';
+                }
             }
         }
     } catch(e) {}
@@ -1270,6 +1471,12 @@ try {
             });
             const data = await res.json();
             if (data && data.success && data.clientData) {
+                try {
+                    const b1 = document.getElementById('user-progress');
+                    const b2 = document.getElementById('plan-bar-fill');
+                    if (b1) b1.__barState = null;
+                    if (b2) b2.__barState = null;
+                } catch(e) {}
                 applyClientDataToUI(data.clientData);
                 showToast('Plan status refreshed');
             }

@@ -418,39 +418,148 @@ body.theme-light .ring-track { stroke: rgba(0,0,0,0.08); }
 }
 .consumption-track {
     width: 100%;
-    height: 8px;
-    background: rgba(255,255,255,0.07);
+    height: 10px;
+    background: rgba(255,255,255,0.065);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.48), 0 1px 0 rgba(255,255,255,0.04);
     border-radius: var(--shape-full);
-    margin-top: 12px;
-    overflow: hidden;
+    margin-top: 14px;
+    position: relative;
+    overflow: visible;
 }
-body.theme-light .consumption-track { background: rgba(0,0,0,0.07); }
+body.theme-light .consumption-track {
+    background: rgba(0,0,0,0.075);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.12);
+}
 
 .consumption-bar {
     height: 100%;
-    width: var(--bar-w, 0%);
-    background: var(--on-bg);
+    width: 0%;
+    --bar-glow: rgba(140, 195, 255, 0.78);
+    background: linear-gradient(90deg,
+        rgba(255,255,255,0.82) 0%,
+        #ffffff 38%,
+        rgba(175,218,255,1) 50%,
+        #ffffff 62%,
+        rgba(255,255,255,0.82) 100%);
+    background-size: 220% 100%;
     border-radius: var(--shape-full);
     position: relative;
     overflow: visible;
-    transition: width 0.8s cubic-bezier(0.25, 1, 0.5, 1);
     will-change: width;
+    animation: bar-liquid-flow 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
-/* shimmer */
-.consumption-bar.anim::after {
+body.theme-light .consumption-bar {
+    --bar-glow: rgba(25, 25, 35, 0.32);
+    background: linear-gradient(90deg,
+        #18181b 0%,
+        #3f3f46 45%,
+        #71717a 50%,
+        #3f3f46 55%,
+        #18181b 100%);
+    background-size: 220% 100%;
+}
+
+/* Soft ambient under-glow along the filled bar */
+.consumption-bar::before {
     content: '';
     position: absolute;
-    inset: 0;
-    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.30) 50%, transparent 100%);
-    animation: shimmer 1.8s linear infinite;
+    inset: -1px 0;
+    border-radius: inherit;
+    background: inherit;
+    filter: blur(7px);
+    opacity: 0;
+    z-index: -1;
+    pointer-events: none;
+    transition: opacity 0.45s ease;
 }
-body.theme-light .consumption-bar.anim::after {
-    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.50) 50%, transparent 100%);
+.consumption-bar.has-fill::before { opacity: 0.48; }
+body.theme-light .consumption-bar.has-fill::before { opacity: 0.18; }
+
+/* Leading-edge plasma comet tip */
+.consumption-bar::after {
+    content: '';
+    position: absolute;
+    right: -4px;
+    top: 50%;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: #ffffff;
+    transform: translateY(-50%) scale(0);
+    opacity: 0;
+    pointer-events: none;
+    box-shadow:
+        0 0 8px 2px rgba(255, 255, 255, 0.95),
+        0 0 18px 5px var(--bar-glow);
+    transition: opacity 0.35s ease, transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.35s ease;
+}
+body.theme-light .consumption-bar::after {
+    background: var(--on-bg);
+    box-shadow: 0 0 6px 1px var(--bar-glow);
+}
+.consumption-bar.has-fill::after {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+    animation: bar-tip-pulse 2s ease-in-out infinite;
+}
+.consumption-bar.is-sweeping::after {
+    transform: translateY(-50%) scale(1.28);
+    box-shadow:
+        0 0 12px 3px #ffffff,
+        0 0 26px 8px var(--bar-glow);
+}
+
+@keyframes bar-liquid-flow {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -20% 0; }
+}
+@keyframes bar-tip-pulse {
+    0%, 100% { transform: translateY(-50%) scale(0.92); }
+    50%      { transform: translateY(-50%) scale(1.16); }
 }
 @keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(200%); } }
 
-.consumption-bar.level-warn { background: var(--warn); }
-.consumption-bar.level-bad { background: var(--bad); }
+.consumption-bar.level-warn {
+    --bar-glow: rgba(251, 191, 36, 0.82);
+    background: linear-gradient(90deg, #d99b16 0%, #fbbf24 42%, #fef08a 50%, #fbbf24 58%, #d99b16 100%);
+    background-size: 220% 100%;
+}
+.consumption-bar.level-bad {
+    --bar-glow: rgba(239, 68, 68, 0.85);
+    background: linear-gradient(90deg, #b91c1c 0%, #ef4444 42%, #fecaca 50%, #ef4444 58%, #b91c1c 100%);
+    background-size: 220% 100%;
+}
+.consumption-bar.level-unlimited {
+    --bar-glow: rgba(52, 211, 153, 0.78);
+    background: linear-gradient(90deg, rgba(255,255,255,0.85) 0%, #a7f3d0 42%, #ffffff 50%, #a5f3fc 58%, rgba(255,255,255,0.85) 100%);
+    background-size: 220% 100%;
+}
+
+/* Leading-edge micro-sparks shared by both bars */
+.bar-spark-layer {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+    overflow: visible;
+    z-index: 3;
+}
+.bar-spark-dot {
+    position: absolute;
+    left: 0;
+    top: 0;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 0 4px #ffffff, 0 0 8px var(--bar-glow, rgba(140, 195, 255, 0.85));
+    pointer-events: none;
+    will-change: transform, opacity;
+}
+body.theme-light .bar-spark-dot {
+    background: var(--on-bg);
+    box-shadow: 0 0 3px rgba(0, 0, 0, 0.35);
+}
 
 .consumption-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
 .consumption-line {
@@ -615,30 +724,111 @@ body.theme-light .consumption-line { background: rgba(0,0,0,0.03); }
 
 .plan-bar-track {
     width: 100%;
-    height: 5px;
-    background: var(--surface-2);
+    height: 8px;
+    background: rgba(255,255,255,0.065);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.48), 0 1px 0 rgba(255,255,255,0.04);
     border-radius: var(--shape-full);
-    overflow: hidden;
+    position: relative;
+    overflow: visible;
 }
+body.theme-light .plan-bar-track {
+    background: rgba(0,0,0,0.075);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.12);
+}
+
 .plan-bar-fill {
     height: 100%;
     border-radius: var(--shape-full);
-    background: var(--on-bg);
+    --bar-glow: rgba(140, 195, 255, 0.78);
+    background: linear-gradient(90deg,
+        rgba(255,255,255,0.82) 0%,
+        #ffffff 38%,
+        rgba(175,218,255,1) 50%,
+        #ffffff 62%,
+        rgba(255,255,255,0.82) 100%);
+    background-size: 220% 100%;
     width: 0%;
     position: relative;
     overflow: visible;
-    transition: width 0.8s cubic-bezier(0.25, 1, 0.5, 1);
     will-change: width;
+    animation: bar-liquid-flow 3.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
+body.theme-light .plan-bar-fill {
+    --bar-glow: rgba(25, 25, 35, 0.32);
+    background: linear-gradient(90deg,
+        #18181b 0%,
+        #3f3f46 45%,
+        #71717a 50%,
+        #3f3f46 55%,
+        #18181b 100%);
+    background-size: 220% 100%;
+}
+
+/* Soft ambient under-glow */
+.plan-bar-fill::before {
+    content: '';
+    position: absolute;
+    inset: -1px 0;
+    border-radius: inherit;
+    background: inherit;
+    filter: blur(7px);
+    opacity: 0;
+    z-index: -1;
+    pointer-events: none;
+    transition: opacity 0.45s ease;
+}
+.plan-bar-fill.has-fill::before { opacity: 0.48; }
+body.theme-light .plan-bar-fill.has-fill::before { opacity: 0.18; }
+
+/* Leading-edge plasma comet tip */
 .plan-bar-fill::after {
     content: '';
     position: absolute;
-    inset: 0;
-    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.28) 50%, transparent 100%);
-    animation: shimmer 2.2s linear infinite;
+    right: -4px;
+    top: 50%;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ffffff;
+    transform: translateY(-50%) scale(0);
+    opacity: 0;
+    pointer-events: none;
+    box-shadow:
+        0 0 8px 2px rgba(255, 255, 255, 0.95),
+        0 0 18px 5px var(--bar-glow);
+    transition: opacity 0.35s ease, transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.35s ease;
 }
-.plan-bar-fill.warn { background: var(--warn); }
-.plan-bar-fill.bad  { background: var(--bad); }
+body.theme-light .plan-bar-fill::after {
+    background: var(--on-bg);
+    box-shadow: 0 0 6px 1px var(--bar-glow);
+}
+.plan-bar-fill.has-fill::after {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+    animation: bar-tip-pulse 2s ease-in-out infinite;
+}
+.plan-bar-fill.is-sweeping::after {
+    transform: translateY(-50%) scale(1.28);
+    box-shadow:
+        0 0 12px 3px #ffffff,
+        0 0 26px 8px var(--bar-glow);
+}
+
+.plan-bar-fill.warn {
+    --bar-glow: rgba(251, 191, 36, 0.82);
+    background: linear-gradient(90deg, #d99b16 0%, #fbbf24 42%, #fef08a 50%, #fbbf24 58%, #d99b16 100%);
+    background-size: 220% 100%;
+}
+.plan-bar-fill.bad {
+    --bar-glow: rgba(239, 68, 68, 0.85);
+    background: linear-gradient(90deg, #b91c1c 0%, #ef4444 42%, #fecaca 50%, #ef4444 58%, #b91c1c 100%);
+    background-size: 220% 100%;
+}
+.plan-bar-fill.unlimited {
+    --bar-glow: rgba(52, 211, 153, 0.78);
+    background: linear-gradient(90deg, rgba(255,255,255,0.85) 0%, #a7f3d0 42%, #ffffff 50%, #a5f3fc 58%, rgba(255,255,255,0.85) 100%);
+    background-size: 220% 100%;
+}
 
 .plan-usage-nums {
     display: flex;
