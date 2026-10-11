@@ -51,8 +51,10 @@
   }
 
   function initSmoothScroll() {
+    window.addEventListener('scroll', onScrollTick, { passive: true });
+    window.addEventListener('touchmove', onScrollTick, { passive: true });
+
     if (reduce || isTouch || typeof Lenis === 'undefined') {
-      window.addEventListener('scroll', onScrollTick, { passive: true });
       return;
     }
     try {
@@ -88,17 +90,34 @@
     }
   }
 
-  /* ---------------- 2. Cursor-Tracking Glass Spotlight ---------------- */
+  /* ---------------- 2. Cursor & Touch-Tracking Glass Spotlight ---------------- */
   function bindSpotlight(el) {
-    if (!el || el.__fxSpot || reduce || isTouch) return;
+    if (!el || el.__fxSpot || reduce) return;
     el.__fxSpot = true;
-    el.addEventListener('mousemove', function (e) {
+
+    function setSpot(clientX, clientY) {
       var rect = el.getBoundingClientRect();
-      var x = e.clientX - rect.left;
-      var y = e.clientY - rect.top;
+      var x = clientX - rect.left;
+      var y = clientY - rect.top;
       el.style.setProperty('--spot-x', x.toFixed(1) + 'px');
       el.style.setProperty('--spot-y', y.toFixed(1) + 'px');
+    }
+
+    el.addEventListener('mousemove', function (e) {
+      setSpot(e.clientX, e.clientY);
     });
+
+    el.addEventListener('touchstart', function (e) {
+      if (e.touches && e.touches[0]) {
+        setSpot(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: true });
+
+    el.addEventListener('touchmove', function (e) {
+      if (e.touches && e.touches[0]) {
+        setSpot(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: true });
   }
 
   function initSpotlightsAll(root) {
@@ -107,11 +126,11 @@
     } catch (e) {}
   }
 
-  /* ---------------- 3. Magnetic Button & Pipeline Node Physics ---------------- */
+  /* ---------------- 3. Magnetic Button Hover & Tactile Touch Physics ---------------- */
   var MAG_SEL = '.ping-btn, .plan-refresh, #btn-theme, #btn-bg, #btn-logout, .accent-btn, .topo-node';
 
   function bindMagnetic(btn) {
-    if (!btn || btn.__fxMag || reduce || isTouch || typeof gsap === 'undefined') return;
+    if (!btn || btn.__fxMag || reduce || typeof gsap === 'undefined') return;
     btn.__fxMag = true;
     var isNode = btn.classList.contains('topo-node');
     var pullFactor = isNode ? 0.18 : 0.28;
@@ -134,12 +153,37 @@
     } catch (e) {}
   }
 
+  /* Tactile Spring Press Physics on Mobile Touch */
+  var TACTILE_SEL = '.ping-btn, .plan-refresh, #btn-theme, #btn-bg, #btn-logout, .accent-btn, .topo-node, .m-nav-btn, .tab-btn, .hdr-btn, .copy-btn, .hero-quick-btn, .login-btn, .sys-btn';
+
+  function bindTactileTouch(el) {
+    if (!el || el.__fxTouch || reduce || typeof gsap === 'undefined') return;
+    el.__fxTouch = true;
+
+    el.addEventListener('touchstart', function () {
+      gsap.to(el, { scale: 0.94, duration: 0.12, ease: 'power2.out' });
+    }, { passive: true });
+
+    function release() {
+      gsap.to(el, { scale: 1, duration: 0.45, ease: 'elastic.out(1.2, 0.45)' });
+    }
+    el.addEventListener('touchend', release, { passive: true });
+    el.addEventListener('touchcancel', release, { passive: true });
+  }
+
+  function initTactileAll(root) {
+    try {
+      (root || document).querySelectorAll(TACTILE_SEL).forEach(bindTactileTouch);
+    } catch (e) {}
+  }
+
   /* ---------------- 4. 3D Card Tilt (Vanilla-Tilt) ---------------- */
   var TILT_SEL = '.data-card-hero, .card';
 
   function initTiltOn(el) {
     if (!el || el.__fxTilt) return;
-    if (typeof VanillaTilt === 'undefined' || reduce || isTouch) return;
+    if (typeof VanillaTilt === 'undefined' || reduce) return;
+    if (window.innerWidth <= 680) return; // Prevent mobile touch scroll displacement
     if (el.classList.contains('main-chart-card')) return;
     try { if (el.querySelector && el.querySelector('canvas')) return; } catch (e) {}
     el.__fxTilt = true;
@@ -250,6 +294,7 @@
     initTiltAll(document);
     initSpotlightsAll(document);
     initMagneticAll(document);
+    initTactileAll(document);
     initPingFx();
     wrapToast();
     watchClientLoad();
@@ -265,6 +310,7 @@
             initTiltAll(n);
             initSpotlightsAll(n);
             initMagneticAll(n);
+            initTactileAll(n);
           }
         }
       });
@@ -281,6 +327,7 @@
     confetti: fire,
     popAt: popAt,
     initTilt: initTiltAll,
+    initTactile: initTactileAll,
     getLenis: function () { return lenisInstance; }
   };
 

@@ -2907,3 +2907,250 @@ body.theme-light .ping-bar {
     50%      { opacity: 0.45; transform: scale(0.85); }
 }
 
+/* ============================================================
+   Complete Mobile Optimization & Touch Viewport Architecture
+   Guarantees 100% full view on any phone, eliminates horizontal
+   overflow, and delivers fluid 60fps mobile animations.
+   ============================================================ */
+@media (max-width: 680px) {
+    /* Container & Wrapper */
+    .dashboard-wrapper {
+        padding: 12px 10px calc(var(--nav-height) + 28px + env(safe-area-inset-bottom)) !important;
+        max-width: 100vw !important;
+        overflow-x: hidden !important;
+    }
+    
+    /* Header optimization */
+    header {
+        margin-inline: -10px !important;
+        padding: 10px 12px !important;
+        gap: 6px !important;
+    }
+    .logo-name { font-size: 1.05rem !important; }
+    .logo-ext { display: none !important; }
+    .hdr-actions { gap: 1px !important; padding: 2px !important; }
+    .hdr-btn { width: 32px !important; height: 32px !important; padding: 6px !important; font-size: 0.8rem !important; }
+
+    /* Live Server Strip */
+    .live-strip-row {
+        gap: 6px !important;
+        margin-bottom: 12px !important;
+        flex-wrap: wrap !important;
+    }
+    .live-pill {
+        padding: 5px 9px !important;
+        font-size: 0.72rem !important;
+        gap: 5px !important;
+    }
+
+    /* Cards general */
+    .card {
+        padding: 16px 14px !important;
+        border-radius: 16px !important;
+        margin-bottom: 14px !important;
+        max-width: 100% !important;
+    }
+
+    /* Hero Traffic Card */
+    .data-card-hero {
+        padding: 18px 14px !important;
+    }
+    .data-card-hero .main-value {
+        font-size: 2rem !important;
+    }
+    .traffic-split {
+        flex-direction: row !important;
+        gap: 12px !important;
+        justify-content: center !important;
+    }
+    .split-item {
+        padding: 6px 10px !important;
+    }
+    .split-item .val {
+        font-size: 0.85rem !important;
+    }
+
+    /* Odometer Chrono Strip */
+    .chrono-modern {
+        margin-top: 14px !important;
+    }
+    .chrono-modern-head {
+        padding: 8px 12px !important;
+    }
+    .chrono-modern-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+    .chrono-cell {
+        padding: 10px 12px !important;
+    }
+    .chrono-slot {
+        height: 1.85rem !important;
+        line-height: 1.85rem !important;
+    }
+    .chrono-slot .flip-digit {
+        font-size: 1.55rem !important;
+        line-height: 1.85rem !important;
+    }
+
+    /* Account Details */
+    .info-row {
+        padding: 8px 0 !important;
+        font-size: 0.84rem !important;
+        gap: 10px !important;
+        align-items: baseline !important;
+    }
+    .info-row span {
+        flex-shrink: 0 !important;
+        font-size: 0.8rem !important;
+    }
+    .info-row strong {
+        font-size: 0.8rem !important;
+        text-align: right !important;
+        word-break: break-all !important;
+    }
+
+    /* Network Latency Pipeline (Flexible, fluid, zero-overflow on mobile) */
+    .ping-card {
+        padding: 16px 12px !important;
+    }
+    .ping-head {
+        margin-bottom: 12px !important;
+        padding-bottom: 10px !important;
+    }
+    .ping-ms {
+        font-size: 1.85rem !important;
+    }
+    .ping-btn {
+        padding: 7px 11px !important;
+        font-size: 0.78rem !important;
+        gap: 5px !important;
+    }
+    .ping-topology {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        padding: 14px 8px !important;
+        margin: 14px 0 12px !important;
+        gap: 3px !important;
+        border-radius: 16px !important;
+    }
+    .topo-node {
+        flex: 0 0 auto !important;
+        min-width: 44px !important;
+        gap: 3px !important;
+    }
+    .topo-icon-wrap {
+        width: 38px !important;
+        height: 38px !important;
+    }
+    .topo-icon-wrap .topo-icon {
+        font-size: 0.95rem !important;
+    }
+    .topo-name {
+        font-size: 0.72rem !important;
+    }
+    .topo-sub {
+        font-size: 0.54rem !important;
+        letter-spacing: 0.2px !important;
+    }
+    .topo-connector {
+        flex: 1 1 auto !important;
+        min-width: 18px !important;
+        padding: 0 1px !important;
+        gap: 4px !important;
+    }
+    .topo-track {
+        height: 3px !important;
+    }
+    .topo-packet {
+        width: 6px !important;
+        height: 6px !important;
+    }
+    .topo-hop-badge {
+        padding: 2px 4px !important;
+        font-size: 0.6rem !important;
+        letter-spacing: -0.02em !important;
+    }
+    .topo-hop-arr {
+        display: none !important;
+    }
+    .ping-history-section {
+        margin-top: 10px !important;
+        padding-top: 10px !important;
+    }
+    .ping-bars {
+        height: 26px !important;
+        gap: 3px !important;
+    }
+
+    /* Client Config & QR Code Card */
+    #client-config-card {
+        padding: 16px 12px !important;
+    }
+    #client-qr-canvas {
+        max-width: min(180px, 75vw) !important;
+        height: auto !important;
+        padding: 8px !important;
+    }
+    .copy-input-row {
+        gap: 6px !important;
+    }
+    .glass-input {
+        font-size: 0.75rem !important;
+        padding: 8px 10px !important;
+    }
+    .copy-input-row button {
+        padding: 8px 10px !important;
+        font-size: 0.76rem !important;
+        flex-shrink: 0 !important;
+    }
+
+    /* Modal cards */
+    .modal-card {
+        width: 95vw !important;
+        max-width: 95vw !important;
+        padding: 18px 14px !important;
+        border-radius: 18px !important;
+    }
+}
+
+/* Extra Compact Phones (<380px, e.g. iPhone SE) */
+@media (max-width: 380px) {
+    .dashboard-wrapper {
+        padding: 8px 6px calc(var(--nav-height) + 20px) !important;
+    }
+    header {
+        padding: 8px 8px !important;
+    }
+    .ping-topology {
+        padding: 10px 4px !important;
+        gap: 2px !important;
+    }
+    .topo-node {
+        min-width: 36px !important;
+    }
+    .topo-icon-wrap {
+        width: 34px !important;
+        height: 34px !important;
+    }
+    .topo-icon-wrap .topo-icon {
+        font-size: 0.85rem !important;
+    }
+    .topo-sub {
+        display: none !important;
+    }
+    .topo-connector {
+        min-width: 14px !important;
+    }
+    .topo-hop-badge {
+        padding: 1px 3px !important;
+        font-size: 0.55rem !important;
+    }
+    .chrono-cell {
+        padding: 8px 8px !important;
+    }
+    .chrono-slot .flip-digit {
+        font-size: 1.35rem !important;
+    }
+}
+
