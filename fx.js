@@ -107,13 +107,14 @@
     } catch (e) {}
   }
 
-  /* ---------------- 3. Magnetic Button Physics ---------------- */
-  var MAG_SEL = '.ping-btn, .plan-refresh, #btn-theme, #btn-bg, #btn-logout, .accent-btn';
+  /* ---------------- 3. Magnetic Button & Pipeline Node Physics ---------------- */
+  var MAG_SEL = '.ping-btn, .plan-refresh, #btn-theme, #btn-bg, #btn-logout, .accent-btn, .topo-node';
 
   function bindMagnetic(btn) {
     if (!btn || btn.__fxMag || reduce || isTouch || typeof gsap === 'undefined') return;
     btn.__fxMag = true;
-    var pullFactor = 0.28;
+    var isNode = btn.classList.contains('topo-node');
+    var pullFactor = isNode ? 0.18 : 0.28;
 
     btn.addEventListener('mousemove', function (e) {
       var rect = btn.getBoundingClientRect();
@@ -231,12 +232,25 @@
     });
   }
 
+  function initPingFx() {
+    var btn = document.getElementById('btn-ping');
+    if (!btn || btn.__fxPing) return;
+    btn.__fxPing = true;
+    btn.addEventListener('click', function () {
+      var card = document.getElementById('ping-card');
+      if (card && typeof gsap !== 'undefined' && !reduce) {
+        gsap.fromTo(card, { scale: 0.988 }, { scale: 1, duration: 0.42, ease: 'elastic.out(1, 0.55)' });
+      }
+    });
+  }
+
   /* ---------------- Boot ---------------- */
   function boot() {
     initSmoothScroll();
     initTiltAll(document);
     initSpotlightsAll(document);
     initMagneticAll(document);
+    initPingFx();
     wrapToast();
     watchClientLoad();
 

@@ -2740,13 +2740,13 @@ try {
         bars.forEach((bar, i) => {
             const val = history[history.length - MAX_BARS + i] ?? null;
             bar.classList.remove('active', 'good', 'warn', 'bad');
-            const scaleVal = val === null ? 0.1 : Math.max(0.1, Math.min(1, val / max));
+            const scaleVal = val === null ? 0.12 : Math.max(0.12, Math.min(1, val / max));
             if (val !== null) {
                 bar.classList.add(getQuality(val).cls);
                 if (i === bars.length - 1) bar.classList.add('active');
             }
             if (useGsap) {
-                gsap.to(bar, { scaleY: scaleVal, duration: 0.42, delay: i * 0.04, ease: 'elastic.out(1, 0.55)' });
+                gsap.to(bar, { scaleY: scaleVal, duration: 0.48, delay: i * 0.035, ease: 'elastic.out(1, 0.45)' });
             } else {
                 bar.style.transform = `scaleY(${scaleVal})`;
             }
@@ -2755,38 +2755,40 @@ try {
 
     const card = btn.closest('.card');
 
-    // Paint the two hops: your network path, and ours to the panel. Each link
+    // Paint the two hops: client -> VPS, and VPS -> internet. Each link
     // is colour-graded by its own quality and animates a pulse along the line.
     function renderHops(youMs, panelMs, panelUp) {
-        const set = (valId, linkId, ms, ok) => {
-            const v = document.getElementById(valId);
-            const link = document.getElementById(linkId);
-            if (!v || !link) return;
-            link.classList.remove('good', 'warn', 'bad', 'dead');
+        const set = (valIds, linkIds, ms, ok) => {
+            valIds = Array.isArray(valIds) ? valIds : [valIds];
+            linkIds = Array.isArray(linkIds) ? linkIds : [linkIds];
+            const v = valIds.map(id => document.getElementById(id)).find(Boolean);
+            const links = linkIds.map(id => document.getElementById(id)).filter(Boolean);
+            if (!v) return;
+            links.forEach(l => l.classList.remove('good', 'warn', 'bad', 'dead'));
             if (!ok || ms === null || ms === undefined) {
                 v.textContent = '—';
-                link.classList.add('dead');
+                links.forEach(l => l.classList.add('dead'));
                 return;
             }
             const q = getQuality(ms);
-            link.classList.add(q.cls);
+            links.forEach(l => l.classList.add(q.cls));
             if (typeof animateNumber === 'function' && !prefersReducedMotion()) {
                 animateNumber(v, ms, { decimals: 0, duration: 600, from: 0 });
             } else {
-                v.textContent = Math.round(ms);
+                v.textContent = Math.round(ms) + ' ms';
             }
         };
-        set('hop-ms-you', 'hop-link-1', youMs, true);
-        set('hop-ms-panel', 'hop-link-2', panelMs, panelUp);
+        set(['topo-hop-1-val', 'hop-ms-you'], ['topo-conn-1', 'hop-link-1', 'topo-hop-1'], youMs, true);
+        set(['topo-hop-2-val', 'hop-ms-panel'], ['topo-conn-2', 'hop-link-2', 'topo-hop-2'], panelMs, panelUp);
 
-        const panelNode = document.getElementById('hop-panel');
+        const panelNode = document.getElementById('topo-node-internet') || document.getElementById('hop-panel');
         panelNode?.classList.toggle('offline', !panelUp);
 
-        // Ripple the nodes left-to-right with elastic spring
+        // Ripple all pipeline nodes with elastic spring
         if (typeof gsap !== 'undefined' && !prefersReducedMotion()) {
-            gsap.fromTo('#hop-path .topo-node',
-                { scale: 0.88, opacity: 0.6 },
-                { scale: 1, opacity: 1, duration: 0.5, stagger: 0.1, ease: 'elastic.out(1, 0.55)', clearProps: 'all' });
+            gsap.fromTo('.ping-topology .topo-node',
+                { scale: 0.9, opacity: 0.7 },
+                { scale: 1, opacity: 1, duration: 0.52, stagger: 0.1, ease: 'elastic.out(1, 0.5)', clearProps: 'all' });
         }
     }
 
@@ -2795,15 +2797,15 @@ try {
         btn.classList.add('pinging');
         if (card) card.classList.add('ping-measuring');
         if (msEl) { msEl.textContent = '…'; msEl.className = 'ping-ms'; }
-        if (statusEl) statusEl.textContent = 'Measuring…';
+        if (statusEl) statusEl.textContent = 'Measuring latency…';
         if (qualityEl) { qualityEl.textContent = ''; qualityEl.className = 'ping-quality'; }
 
         // Trigger sequence: sonar ring 1 -> packet 1 -> sonar ring 2 -> packet 2 -> sonar ring 3
-        const youNode = document.getElementById('hop-you');
-        const srvNode = document.getElementById('hop-server');
-        const pnlNode = document.getElementById('hop-panel');
-        const pkt1 = document.getElementById('hop-packet-1');
-        const pkt2 = document.getElementById('hop-packet-2');
+        const youNode = document.getElementById('topo-node-client') || document.getElementById('hop-you');
+        const srvNode = document.getElementById('topo-node-vps') || document.getElementById('hop-server');
+        const pnlNode = document.getElementById('topo-node-internet') || document.getElementById('hop-panel');
+        const pkt1 = document.getElementById('topo-packet-1') || document.getElementById('hop-packet-1');
+        const pkt2 = document.getElementById('topo-packet-2') || document.getElementById('hop-packet-2');
 
         const resetSonar = () => {
             [youNode, srvNode, pnlNode].forEach(n => n?.classList.remove('pulse-fire'));
@@ -2815,22 +2817,22 @@ try {
             youNode?.classList.add('pulse-fire');
             if (pkt1) {
                 gsap.fromTo(pkt1,
-                    { left: '0%', opacity: 1, scale: 1.2 },
-                    { left: '100%', opacity: 0.85, scale: 1, duration: 0.55, ease: 'power1.inOut' }
+                    { left: '0%', opacity: 1, scale: 1.3 },
+                    { left: '100%', opacity: 0.9, scale: 1, duration: 0.5, ease: 'power2.inOut' }
                 );
             }
             setTimeout(() => {
                 srvNode?.classList.add('pulse-fire');
                 if (pkt2) {
                     gsap.fromTo(pkt2,
-                        { left: '0%', opacity: 1, scale: 1.2 },
-                        { left: '100%', opacity: 0.85, scale: 1, duration: 0.55, ease: 'power1.inOut' }
+                        { left: '0%', opacity: 1, scale: 1.3 },
+                        { left: '100%', opacity: 0.9, scale: 1, duration: 0.5, ease: 'power2.inOut' }
                     );
                 }
-            }, 300);
+            }, 280);
             setTimeout(() => {
                 pnlNode?.classList.add('pulse-fire');
-            }, 620);
+            }, 600);
         }
 
         // --- Hop 1: browser -> server. Best of 3 against a do-nothing endpoint ---
@@ -2881,7 +2883,7 @@ try {
 
         // Spring bounce on the number
         if (typeof gsap !== 'undefined' && msEl && !prefersReducedMotion()) {
-            gsap.fromTo(msEl, { scale: 1.25 }, { scale: 1, duration: 0.5, ease: 'elastic.out(1, 0.5)' });
+            gsap.fromTo(msEl, { scale: 1.25 }, { scale: 1, duration: 0.5, ease: 'elastic.out(1, 0.45)' });
         }
 
         setTimeout(resetSonar, 1400);

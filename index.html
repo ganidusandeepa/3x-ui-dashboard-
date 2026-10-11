@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=41">
+    <link rel="stylesheet" href="styles.css?v=42">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <link rel="preconnect" href="https://unpkg.com" crossorigin>
@@ -314,79 +314,103 @@
                     <div class="info-row"><span>Subscription ID:</span> <strong id="user-subid">-</strong></div>
                 </div>
 
-                <!-- Server Ping Card (Main-Branch Glowing Nodes + Two-Hop Live Telemetry) -->
-                <div class="card ping-card" id="ping-card">
+                <!-- Server Ping Card: 3-Node Interactive Network Pipeline -->
+                <div class="card ping-card user-view-card" id="ping-card">
                     <div class="ping-head">
                         <div>
                             <div class="ping-eyebrow"><i class="fa-solid fa-network-wired"></i> Network Latency Pipeline</div>
                             <div class="ping-val-row">
                                 <span class="ping-ms" id="ping-ms">—</span>
                                 <span class="ping-unit" id="ping-unit">ms</span>
+                                <span class="ping-quality" id="ping-quality"></span>
                             </div>
                         </div>
-                        <button class="ping-btn" id="btn-ping" title="Measure latency">
-                            <i class="fa-solid fa-bolt"></i>
+                        <button class="ping-btn" id="btn-ping" title="Run network latency test">
+                            <i class="fa-solid fa-bolt"></i> <span class="ping-btn-lbl">Test Ping</span>
                         </button>
                     </div>
 
-                    <!-- 3-Node Glowing Topology: You -> Server -> Xray Core -->
-                    <div class="hop-path ping-topology" id="hop-path">
-                        <div class="hop-node topo-node" id="hop-you">
+                    <!-- 3-Node Topology: You -> Server -> Internet -->
+                    <div class="ping-topology" id="ping-topology">
+                        <!-- Node 1: Client / You -->
+                        <div class="topo-node" id="topo-node-client" data-hop="you">
                             <div class="topo-icon-wrap client-glow">
                                 <i class="fa-solid fa-laptop topo-icon"></i>
                                 <div class="node-pulse-ring"></div>
                             </div>
-                            <span class="hop-node-lbl">You</span>
-                            <span class="hop-node-sub">Device</span>
-                        </div>
-
-                        <div class="hop-link topo-connector" id="hop-link-1">
-                            <div class="hop-line topo-track">
-                                <span class="hop-pulse topo-beam"></span>
-                                <span class="topo-packet" id="hop-packet-1"></span>
+                            <div class="topo-meta">
+                                <span class="topo-name">You</span>
+                                <span class="topo-sub">Device</span>
                             </div>
-                            <div class="hop-val topo-hop-badge"><span id="hop-ms-you">—</span><em>ms</em></div>
                         </div>
 
-                        <div class="hop-node topo-node" id="hop-server">
+                        <!-- Connector 1: You -> Server -->
+                        <div class="topo-connector" id="topo-conn-1">
+                            <div class="topo-track">
+                                <div class="topo-beam" id="topo-beam-1"></div>
+                                <div class="topo-packet" id="topo-packet-1"></div>
+                            </div>
+                            <div class="topo-hop-badge" id="topo-hop-1" title="Device to Server Latency">
+                                <i class="fa-solid fa-arrow-right topo-hop-arr"></i>
+                                <span class="topo-hop-val" id="topo-hop-1-val">— ms</span>
+                            </div>
+                        </div>
+
+                        <!-- Node 2: Server / 3x-ui VPS -->
+                        <div class="topo-node" id="topo-node-vps" data-hop="server">
                             <div class="topo-icon-wrap vps-glow">
                                 <i class="fa-solid fa-server topo-icon"></i>
                                 <div class="node-pulse-ring"></div>
                             </div>
-                            <span class="hop-node-lbl">Server</span>
-                            <span class="hop-node-sub">3x-ui VPS</span>
-                        </div>
-
-                        <div class="hop-link topo-connector" id="hop-link-2">
-                            <div class="hop-line topo-track">
-                                <span class="hop-pulse topo-beam"></span>
-                                <span class="topo-packet" id="hop-packet-2"></span>
+                            <div class="topo-meta">
+                                <span class="topo-name">Server</span>
+                                <span class="topo-sub">3x-ui VPS</span>
                             </div>
-                            <div class="hop-val topo-hop-badge"><span id="hop-ms-panel">—</span><em>ms</em></div>
                         </div>
 
-                        <div class="hop-node topo-node" id="hop-panel">
+                        <!-- Connector 2: Server -> Internet -->
+                        <div class="topo-connector" id="topo-conn-2">
+                            <div class="topo-track">
+                                <div class="topo-beam" id="topo-beam-2"></div>
+                                <div class="topo-packet" id="topo-packet-2"></div>
+                            </div>
+                            <div class="topo-hop-badge" id="topo-hop-2" title="Server to Internet Latency">
+                                <i class="fa-solid fa-arrow-right topo-hop-arr"></i>
+                                <span class="topo-hop-val" id="topo-hop-2-val">— ms</span>
+                            </div>
+                        </div>
+
+                        <!-- Node 3: Internet Target -->
+                        <div class="topo-node" id="topo-node-internet" data-hop="panel">
                             <div class="topo-icon-wrap internet-glow">
                                 <i class="fa-solid fa-globe topo-icon"></i>
                                 <div class="node-pulse-ring"></div>
                             </div>
-                            <span class="hop-node-lbl">Internet</span>
-                            <span class="hop-node-sub">Global Web</span>
+                            <div class="topo-meta">
+                                <span class="topo-name">Internet</span>
+                                <span class="topo-sub">Global Web</span>
+                            </div>
                         </div>
                     </div>
-                    <div class="ping-bars" id="ping-bars">
-                        <div class="ping-bar"></div>
-                        <div class="ping-bar"></div>
-                        <div class="ping-bar"></div>
-                        <div class="ping-bar"></div>
-                        <div class="ping-bar"></div>
-                        <div class="ping-bar"></div>
-                        <div class="ping-bar"></div>
-                        <div class="ping-bar"></div>
+
+                    <!-- Stability / History Equalizer Bars -->
+                    <div class="ping-history-section">
+                        <div class="ping-bars-label">Latency Stability History</div>
+                        <div class="ping-bars" id="ping-bars">
+                            <div class="ping-bar"></div>
+                            <div class="ping-bar"></div>
+                            <div class="ping-bar"></div>
+                            <div class="ping-bar"></div>
+                            <div class="ping-bar"></div>
+                            <div class="ping-bar"></div>
+                            <div class="ping-bar"></div>
+                            <div class="ping-bar"></div>
+                        </div>
                     </div>
+
                     <div class="ping-footer">
-                        <span class="ping-status" id="ping-status">Tap to measure latency</span>
-                        <span class="ping-quality" id="ping-quality"></span>
+                        <span class="ping-status" id="ping-status">Ready to test connection</span>
+                        <div class="ping-summary-chip" id="ping-summary-chip" style="display:none;"></div>
                     </div>
                 </div>
 
@@ -647,7 +671,14 @@
                 <div class="system-grid">
                     <div class="card sys-control-card">
                         <h3>Core Controller</h3>
-                        <p class="subtitle">Xray Version: <strong id="xray-version">-</strong></p>
+                        <p class="subtitle" style="display:flex; align-items:center; gap:6px;">
+                            <svg class="xray-emblem-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true" style="color:var(--good);">
+                                <circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3.2 2.2" opacity="0.8"/>
+                                <path d="M6.2 6.2L17.8 17.8M17.8 6.2L6.2 17.8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+                                <circle cx="12" cy="12" r="2.6" fill="currentColor"/>
+                            </svg>
+                            <span>Xray Version: <strong id="xray-version">-</strong></span>
+                        </p>
                         <div class="sys-actions">
                             <button class="sys-btn" id="btn-xray-restart"><i class="fa-solid fa-rotate"></i> Restart</button>
                             <button class="sys-btn danger" id="btn-xray-stop"><i class="fa-solid fa-circle-stop"></i> Stop</button>
@@ -832,7 +863,7 @@
     <!-- `defer` is REQUIRED here: the CDN libs above are deferred, and deferred
          scripts run after non-deferred ones. Without defer these would execute
          before GSAP/QRious existed. Deferred scripts run in document order. -->
-    <script defer src="main.js?v=55" data-cfasync="false"></script>
-    <script defer src="fx.js?v=7" data-cfasync="false"></script>
+    <script defer src="main.js?v=56" data-cfasync="false"></script>
+    <script defer src="fx.js?v=8" data-cfasync="false"></script>
 </body>
 </html>
