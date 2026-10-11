@@ -1,13 +1,16 @@
-/* fx.js — extra animation layer for the 3x-ui dashboard.
+/* fx.js — Award-winning animation & interactive UX layer for the 3x-ui dashboard.
  *
- * Adds, on top of the existing GSAP/anime setup:
- *   1. 3D hover tilt + light glare on cards (vanilla-tilt)
- *   2. Success confetti on login and copy actions (canvas-confetti)
- *   3. Shimmer skeleton on the hero traffic numbers while data loads
+ * Capabilities:
+ *   1. Lenis Butter-Smooth Kinetic Scrolling synced with GSAP ticker & ScrollTrigger
+ *   2. Top Laser Scroll Progress Bar (#scroll-progress-bar)
+ *   3. Dynamic cursor-tracking glass spotlight on cards & pills (--spot-x, --spot-y)
+ *   4. Magnetic hover physics on interactive control buttons
+ *   5. 3D card tilt & specular glare (vanilla-tilt)
+ *   6. Confetti bursts on copy/success actions (canvas-confetti)
+ *   7. Shimmer skeleton on traffic hero metrics during load
  *
- * Fully self-contained and defensive: every effect no-ops if its CDN lib
- * is missing, on touch devices where inappropriate, or under
- * prefers-reduced-motion. It never throws into the app.
+ * Defensive & robust: No-ops gracefully if any CDN library is unavailable or under
+ * prefers-reduced-motion. Never throws errors into runtime.
  */
 (function () {
   'use strict';
@@ -16,20 +19,126 @@
   try { reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
   var isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
-  /* ---------------- 3D card tilt ---------------- */
+  /* ---------------- 1. Lenis Smooth Scrolling ---------------- */
+  var lenisInstance = null;
+
+  function initSmoothScroll() {
+    if (reduce || isTouch || typeof Lenis === 'undefined') return;
+    try {
+      lenisInstance = new Lenis({
+        duration: 1.18,
+        easing: function (t) { return Math.min(1, 1.001 - Math.pow(2, -10 * t)); },
+        direction: 'vertical',
+        gestureDirection: 'vertical',
+        smooth: true,
+        smoothTouch: false,
+        wheelMultiplier: 1.05
+      });
+
+      if (typeof gsap !== 'undefined') {
+        if (typeof ScrollTrigger !== 'undefined') {
+          lenisInstance.on('scroll', ScrollTrigger.update);
+        }
+        gsap.ticker.add(function (time) {
+          lenisInstance.raf(time * 1000);
+        });
+        gsap.ticker.lagSmoothing(0);
+      } else {
+        function raf(time) {
+          lenisInstance.raf(time);
+          requestAnimationFrame(raf);
+        }
+        requestAnimationFrame(raf);
+      }
+
+      // Sync top laser progress bar
+      var progBar = document.getElementById('scroll-progress-bar');
+      if (progBar) {
+        lenisInstance.on('scroll', function (e) {
+          var max = document.documentElement.scrollHeight - window.innerHeight;
+          var pct = max > 0 ? Math.min(100, Math.max(0, (e.scroll / max) * 100)) : 0;
+          progBar.style.width = pct.toFixed(2) + '%';
+        });
+      }
+    } catch (e) {}
+  }
+
+  // Fallback scroll progress bar for touch / reduced motion / no Lenis
+  function initScrollProgressFallback() {
+    var progBar = document.getElementById('scroll-progress-bar');
+    if (!progBar || lenisInstance) return;
+    window.addEventListener('scroll', function () {
+      var max = document.documentElement.scrollHeight - window.innerHeight;
+      var scroll = window.scrollY || window.pageYOffset || 0;
+      var pct = max > 0 ? Math.min(100, Math.max(0, (scroll / max) * 100)) : 0;
+      progBar.style.width = pct.toFixed(2) + '%';
+    }, { passive: true });
+  }
+
+  /* ---------------- 2. Cursor-Tracking Glass Spotlight ---------------- */
+  function bindSpotlight(el) {
+    if (!el || el.__fxSpot || reduce || isTouch) return;
+    el.__fxSpot = true;
+    el.addEventListener('mousemove', function (e) {
+      var rect = el.getBoundingClientRect();
+      var x = e.clientX - rect.left;
+      var y = e.clientY - rect.top;
+      el.style.setProperty('--spot-x', x.toFixed(1) + 'px');
+      el.style.setProperty('--spot-y', y.toFixed(1) + 'px');
+    });
+  }
+
+  function initSpotlightsAll(root) {
+    try {
+      (root || document).querySelectorAll('.card, .login-card, .live-pill').forEach(bindSpotlight);
+    } catch (e) {}
+  }
+
+  /* ---------------- 3. Magnetic Button Physics ---------------- */
+  var MAG_SEL = '.ping-btn, .plan-refresh, #btn-theme, #btn-bg, #btn-logout';
+
+  function bindMagnetic(btn) {
+    if (!btn || btn.__fxMag || reduce || isTouch || typeof gsap === 'undefined') return;
+    btn.__fxMag = true;
+    var pullFactor = 0.32;
+
+    btn.addEventListener('mousemove', function (e) {
+      var rect = btn.getBoundingClientRect();
+      var x = (e.clientX - (rect.left + rect.width / 2)) * pullFactor;
+      var y = (e.clientY - (rect.top + rect.height / 2)) * pullFactor;
+      gsap.to(btn, { x: x, y: y, duration: 0.25, ease: 'power2.out' });
+    });
+
+    btn.addEventListener('mouseleave', function () {
+      gsap.to(btn, { x: 0, y: 0, duration: 0.45, ease: 'elastic.out(1, 0.45)' });
+    });
+  }
+
+  function initMagneticAll(root) {
+    try {
+      (root || document).querySelectorAll(MAG_SEL).forEach(bindMagnetic);
+    } catch (e) {}
+  }
+
+  /* ---------------- 4. 3D Card Tilt (Vanilla-Tilt) ---------------- */
   var TILT_SEL = '.data-card-hero, .card';
 
   function initTiltOn(el) {
     if (!el || el.__fxTilt) return;
     if (typeof VanillaTilt === 'undefined' || reduce || isTouch) return;
-    // Skip chart cards — tilting a live canvas looks glitchy.
+    // Skip chart cards & live canvases
     if (el.classList.contains('main-chart-card')) return;
     try { if (el.querySelector && el.querySelector('canvas')) return; } catch (e) {}
     el.__fxTilt = true;
     try {
       VanillaTilt.init(el, {
-        max: 6, speed: 400, scale: 1.012, perspective: 1200,
-        glare: true, 'max-glare': 0.18, gyroscope: false
+        max: 5,
+        speed: 400,
+        scale: 1.012,
+        perspective: 1200,
+        glare: true,
+        'max-glare': 0.15,
+        gyroscope: false
       });
     } catch (e) { el.__fxTilt = false; }
   }
@@ -38,13 +147,13 @@
     try { (root || document).querySelectorAll(TILT_SEL).forEach(initTiltOn); } catch (e) {}
   }
 
-  /* ---------------- Confetti ---------------- */
+  /* ---------------- 5. Canvas Confetti ---------------- */
   function fire(opts) {
     if (reduce || typeof confetti !== 'function') return;
     try { confetti(Object.assign({ disableForReducedMotion: true, zIndex: 9999 }, opts)); } catch (e) {}
   }
 
-  var PALETTE = ['#7c5cff', '#22d3ee', '#34d399', '#ffffff'];
+  var PALETTE = ['#60a5fa', '#a855f7', '#ec4899', '#34d399', '#ffffff'];
 
   function celebrate() {
     if (reduce || typeof confetti !== 'function') return;
@@ -54,11 +163,10 @@
   }
 
   function popAt(x, y) {
-    fire({ particleCount: 26, spread: 48, startVelocity: 26, scalar: 0.85,
-      origin: { x: x, y: y }, colors: PALETTE });
+    fire({ particleCount: 28, spread: 50, startVelocity: 26, scalar: 0.85, origin: { x: x, y: y }, colors: PALETTE });
   }
 
-  /* Wrap showToast so copy/success toasts get a small burst — no edits to main.js. */
+  /* Wrap showToast so copy/success toasts get a burst */
   function wrapToast() {
     if (typeof window.showToast !== 'function' || window.showToast.__fx) return;
     var orig = window.showToast;
@@ -74,7 +182,7 @@
     window.showToast = wrapped;
   }
 
-  /* ---------------- Shimmer skeleton on hero numbers while loading ---------------- */
+  /* ---------------- 6. Shimmer Skeleton on Hero Numbers ---------------- */
   var SKEL_IDS = ['user-used', 'user-dl', 'user-up'];
 
   function skeletonOn() {
@@ -108,17 +216,21 @@
           mo.observe(used, { childList: true, characterData: true, subtree: true });
         } catch (e) {}
       }
-      setTimeout(finish, 4000); // safety net so numbers never stay hidden
+      setTimeout(finish, 4000); // Safety net
     });
   }
 
-  /* ---------------- boot ---------------- */
+  /* ---------------- Boot ---------------- */
   function boot() {
+    initSmoothScroll();
+    initScrollProgressFallback();
     initTiltAll(document);
+    initSpotlightsAll(document);
+    initMagneticAll(document);
     wrapToast();
     watchClientLoad();
 
-    // Cards for the admin/client views render after login — pick them up live.
+    // Listen for dynamically created cards and controls
     try {
       var mo = new MutationObserver(function (muts) {
         for (var i = 0; i < muts.length; i++) {
@@ -128,19 +240,29 @@
             if (!n || n.nodeType !== 1) continue;
             if (n.matches && n.matches(TILT_SEL)) initTiltOn(n);
             initTiltAll(n);
+            initSpotlightsAll(n);
+            initMagneticAll(n);
           }
         }
       });
       mo.observe(document.body, { childList: true, subtree: true });
     } catch (e) {}
 
-    // main.js may (re)define showToast after us; re-wrap a couple of times.
     setTimeout(wrapToast, 600);
     setTimeout(wrapToast, 1800);
   }
 
-  window.FX = { celebrate: celebrate, confetti: fire, popAt: popAt, initTilt: initTiltAll };
+  window.FX = {
+    celebrate: celebrate,
+    confetti: fire,
+    popAt: popAt,
+    initTilt: initTiltAll,
+    getLenis: function () { return lenisInstance; }
+  };
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
 })();

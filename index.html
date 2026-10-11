@@ -7,27 +7,30 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=37">
+    <link rel="stylesheet" href="styles.css?v=38">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
     <!-- Kept render-blocking on purpose: deferring it makes every icon pop in
          late on an icon-heavy UI, which looks worse than the ~30KB costs. -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    <!-- Critical-path libraries only. `defer` so they never block HTML parsing.
-         Heavy extras are lazy-loaded on demand from main.js instead:
-           • Three.js + Vanta (~617KB) — only when the BG toggle is switched on
-           • Chart.js (~208KB)         — only when the admin view opens
-         Removed entirely: ScrollTrigger (never used — scroll reveal uses native
-         IntersectionObserver), anime.js (dead fallback; GSAP is always present),
-         Motion One (95KB for one button spring GSAP already handles). -->
+    <!-- Award-winning animation & smooth scroll stack (all deferred) -->
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" data-cfasync="false"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/ScrollTrigger.min.js" data-cfasync="false"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/Draggable.min.js" data-cfasync="false"></script>
+    <script defer src="https://unpkg.com/lenis@1.1.18/dist/lenis.min.js" data-cfasync="false"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js" data-cfasync="false"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/vanilla-tilt@1.8.1/dist/vanilla-tilt.min.js" data-cfasync="false"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js" data-cfasync="false"></script>
 </head>
 <body>
+    <div id="scroll-progress-bar" aria-hidden="true"></div>
+    <div class="ambient-aurora" aria-hidden="true">
+        <div class="aurora-orb orb-1"></div>
+        <div class="aurora-orb orb-2"></div>
+        <div class="aurora-orb orb-3"></div>
+    </div>
     <div id="toast-container"></div>
     <div id="vanta-bg" aria-hidden="true"></div>
 
@@ -140,7 +143,15 @@
         <main>
             <!-- Live Server Health Bar (Visible to Both Admin & Client) -->
             <div class="live-strip-row">
-                <div class="live-pill good" id="pill-xray-status"><i class="fa-solid fa-shield-halved"></i> Xray <span id="strip-xray-ver">Online</span></div>
+                <div class="live-pill" id="pill-xray-status">
+                    <span class="status-dot online" id="strip-xray-dot"></span>
+                    <svg class="xray-emblem-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3.2 2.2" opacity="0.72"/>
+                        <path d="M6.2 6.2L17.8 17.8M17.8 6.2L6.2 17.8" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/>
+                        <circle cx="12" cy="12" r="2.4" fill="currentColor"/>
+                    </svg>
+                    Xray <strong id="strip-xray-ver">-</strong>
+                </div>
                 <div class="live-pill" id="pill-live-users"><i class="fa-solid fa-users"></i> Users: <strong id="live-users">0</strong></div>
                 <div class="live-pill" id="pill-live-uptime"><i class="fa-solid fa-clock"></i> Uptime: <strong id="live-uptime">-</strong></div>
                 <div class="live-pill" id="pill-live-disk"><i class="fa-solid fa-hard-drive"></i> Storage: <strong id="live-disk">-</strong></div>
@@ -251,17 +262,52 @@
                         </div>
                     </div>
 
-                    <!-- Flip-clock countdown -->
-                    <div id="expiry-countdown" style="display:none; margin-top:20px; padding-top:20px; border-top:1px solid var(--border);">
-                        <div style="font-size:0.68rem;color:var(--on-dim);letter-spacing:1.4px;text-align:center;margin-bottom:12px;text-transform:uppercase;font-weight:600;">Time Remaining</div>
+                    <!-- Award-Winning 3D Glassmorphic Split-Flap Countdown -->
+                    <div id="expiry-countdown" class="chrono-countdown-section" style="display:none;">
+                        <div class="chrono-header">
+                            <div class="chrono-eyebrow">
+                                <span class="chrono-live-dot"></span>
+                                <i class="fa-regular fa-hourglass-half chrono-hourglass"></i>
+                                <span>Time Remaining</span>
+                            </div>
+                            <span class="chrono-badge" id="chrono-cycle-badge">ACTIVE CYCLE</span>
+                        </div>
                         <div class="flip-clock">
-                            <div class="flip-unit"><div class="flip-digit" id="flip-d">00</div><div class="flip-label">Days</div></div>
-                            <div class="flip-sep">:</div>
-                            <div class="flip-unit"><div class="flip-digit" id="flip-h">00</div><div class="flip-label">Hours</div></div>
-                            <div class="flip-sep">:</div>
-                            <div class="flip-unit"><div class="flip-digit" id="flip-m">00</div><div class="flip-label">Mins</div></div>
-                            <div class="flip-sep">:</div>
-                            <div class="flip-unit"><div class="flip-digit" id="flip-s">00</div><div class="flip-label">Secs</div></div>
+                            <div class="flip-unit" data-unit="days">
+                                <div class="flip-card-shell">
+                                    <div class="flip-digit" id="flip-d">00</div>
+                                    <span class="flip-hinge-left"></span>
+                                    <span class="flip-hinge-right"></span>
+                                </div>
+                                <div class="flip-label">Days</div>
+                            </div>
+                            <div class="flip-sep" aria-hidden="true"><span class="sep-dot"></span><span class="sep-dot"></span></div>
+                            <div class="flip-unit" data-unit="hours">
+                                <div class="flip-card-shell">
+                                    <div class="flip-digit" id="flip-h">00</div>
+                                    <span class="flip-hinge-left"></span>
+                                    <span class="flip-hinge-right"></span>
+                                </div>
+                                <div class="flip-label">Hours</div>
+                            </div>
+                            <div class="flip-sep" aria-hidden="true"><span class="sep-dot"></span><span class="sep-dot"></span></div>
+                            <div class="flip-unit" data-unit="mins">
+                                <div class="flip-card-shell">
+                                    <div class="flip-digit" id="flip-m">00</div>
+                                    <span class="flip-hinge-left"></span>
+                                    <span class="flip-hinge-right"></span>
+                                </div>
+                                <div class="flip-label">Mins</div>
+                            </div>
+                            <div class="flip-sep" aria-hidden="true"><span class="sep-dot"></span><span class="sep-dot"></span></div>
+                            <div class="flip-unit flip-unit-sec" data-unit="secs">
+                                <div class="flip-card-shell">
+                                    <div class="flip-digit" id="flip-s">00</div>
+                                    <span class="flip-hinge-left"></span>
+                                    <span class="flip-hinge-right"></span>
+                                </div>
+                                <div class="flip-label">Secs</div>
+                            </div>
                         </div>
                         <div id="expiry-countdown-val" style="display:none;"></div>
                     </div>
@@ -278,47 +324,68 @@
                     <div class="info-row"><span>Subscription ID:</span> <strong id="user-subid">-</strong></div>
                 </div>
 
-                <!-- Server Ping Card -->
+                <!-- Server Ping Card (Main-Branch Glowing Nodes + Two-Hop Live Telemetry) -->
                 <div class="card ping-card" id="ping-card">
                     <div class="ping-head">
                         <div>
-                            <div class="ping-eyebrow">Connection Latency</div>
+                            <div class="ping-eyebrow"><i class="fa-solid fa-network-wired"></i> Network Latency Pipeline</div>
                             <div class="ping-val-row">
                                 <span class="ping-ms" id="ping-ms">—</span>
                                 <span class="ping-unit" id="ping-unit">ms</span>
                             </div>
                         </div>
                         <button class="ping-btn" id="btn-ping" title="Measure latency">
-                            <i class="fa-solid fa-signal"></i>
+                            <i class="fa-solid fa-bolt"></i>
                         </button>
                     </div>
 
-                    <!-- The two hops this number is made of, shown separately so
-                         it's clear which part is your network and which is ours. -->
-                    <div class="hop-path" id="hop-path">
-                        <div class="hop-node" id="hop-you">
-                            <i class="fa-solid fa-mobile-screen"></i>
+                    <!-- 3-Node Glowing Topology: You -> Server -> Xray Core -->
+                    <div class="hop-path ping-topology" id="hop-path">
+                        <div class="hop-node topo-node" id="hop-you">
+                            <div class="topo-icon-wrap client-glow">
+                                <i class="fa-solid fa-laptop topo-icon"></i>
+                                <div class="node-pulse-ring"></div>
+                            </div>
                             <span class="hop-node-lbl">You</span>
+                            <span class="hop-node-sub">Device</span>
                         </div>
 
-                        <div class="hop-link" id="hop-link-1">
-                            <div class="hop-line"><span class="hop-pulse"></span></div>
-                            <div class="hop-val"><span id="hop-ms-you">—</span><em>ms</em></div>
+                        <div class="hop-link topo-connector" id="hop-link-1">
+                            <div class="hop-line topo-track">
+                                <span class="hop-pulse topo-beam"></span>
+                                <span class="topo-packet" id="hop-packet-1"></span>
+                            </div>
+                            <div class="hop-val topo-hop-badge"><span id="hop-ms-you">—</span><em>ms</em></div>
                         </div>
 
-                        <div class="hop-node" id="hop-server">
-                            <i class="fa-solid fa-server"></i>
+                        <div class="hop-node topo-node" id="hop-server">
+                            <div class="topo-icon-wrap vps-glow">
+                                <i class="fa-solid fa-server topo-icon"></i>
+                                <div class="node-pulse-ring"></div>
+                            </div>
                             <span class="hop-node-lbl">Server</span>
+                            <span class="hop-node-sub">3x-ui VPS</span>
                         </div>
 
-                        <div class="hop-link" id="hop-link-2">
-                            <div class="hop-line"><span class="hop-pulse"></span></div>
-                            <div class="hop-val"><span id="hop-ms-panel">—</span><em>ms</em></div>
+                        <div class="hop-link topo-connector" id="hop-link-2">
+                            <div class="hop-line topo-track">
+                                <span class="hop-pulse topo-beam"></span>
+                                <span class="topo-packet" id="hop-packet-2"></span>
+                            </div>
+                            <div class="hop-val topo-hop-badge"><span id="hop-ms-panel">—</span><em>ms</em></div>
                         </div>
 
-                        <div class="hop-node" id="hop-panel">
-                            <i class="fa-solid fa-shield-halved"></i>
-                            <span class="hop-node-lbl">Panel</span>
+                        <div class="hop-node topo-node" id="hop-panel">
+                            <div class="topo-icon-wrap internet-glow">
+                                <svg class="topo-icon xray-node-svg" viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
+                                    <circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3.4 2.4" opacity="0.78"/>
+                                    <path d="M5.8 5.8L18.2 18.2M18.2 5.8L5.8 18.2" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/>
+                                    <circle cx="12" cy="12" r="2.7" fill="currentColor"/>
+                                </svg>
+                                <div class="node-pulse-ring"></div>
+                            </div>
+                            <span class="hop-node-lbl">Xray</span>
+                            <span class="hop-node-sub">Core Panel</span>
                         </div>
                     </div>
                     <div class="ping-bars" id="ping-bars">
@@ -759,7 +826,7 @@
     <!-- `defer` is REQUIRED here: the CDN libs above are deferred, and deferred
          scripts run after non-deferred ones. Without defer these would execute
          before GSAP/QRious existed. Deferred scripts run in document order. -->
-    <script defer src="main.js?v=52" data-cfasync="false"></script>
-    <script defer src="fx.js?v=4" data-cfasync="false"></script>
+    <script defer src="main.js?v=53" data-cfasync="false"></script>
+    <script defer src="fx.js?v=5" data-cfasync="false"></script>
 </body>
 </html>

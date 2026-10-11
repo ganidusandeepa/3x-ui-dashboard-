@@ -208,6 +208,51 @@ function initScrollReveal() {
     try {
         if (__scrollObserver) { __scrollObserver.disconnect(); __scrollObserver = null; }
         if (typeof gsap === 'undefined' || prefersReducedMotion()) return;
+
+        const cards = document.querySelectorAll('#tab-user-view .card');
+        if (!cards.length) return;
+
+        if (typeof ScrollTrigger !== 'undefined') {
+            try {
+                gsap.registerPlugin(ScrollTrigger);
+                cards.forEach((card, i) => {
+                    if (i > 0) {
+                        gsap.fromTo(card,
+                            { y: 35, opacity: 0, rotateX: 6, transformPerspective: 1000 },
+                            {
+                                y: 0,
+                                opacity: 1,
+                                rotateX: 0,
+                                duration: 0.65,
+                                ease: 'power3.out',
+                                scrollTrigger: {
+                                    trigger: card,
+                                    start: 'top 88%',
+                                    toggleActions: 'play none none none'
+                                }
+                            }
+                        );
+                        const rows = card.querySelectorAll('.info-row');
+                        if (rows.length) {
+                            gsap.from(rows, {
+                                x: -12,
+                                opacity: 0,
+                                duration: 0.28,
+                                stagger: 0.04,
+                                ease: 'power2.out',
+                                scrollTrigger: {
+                                    trigger: card,
+                                    start: 'top 85%',
+                                    toggleActions: 'play none none none'
+                                }
+                            });
+                        }
+                    }
+                });
+                return;
+            } catch(e) {}
+        }
+
         __scrollObserver = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
                 if (entry.isIntersecting) {
@@ -223,7 +268,6 @@ function initScrollReveal() {
             });
         }, { threshold: 0.08, rootMargin: '0px 0px -20px 0px' });
 
-        const cards = document.querySelectorAll('#tab-user-view .card');
         cards.forEach((card, i) => {
             if (i > 0) {
                 card.style.opacity = '0';
@@ -1052,17 +1096,22 @@ function animateProgressBar(barEl, pctEl, targetPct, opts = {}) {
     }
 }
 
-// --- Expiry Countdown (flip-clock) ---
+// --- Expiry Countdown (3D Split-Flap Kinetic Chrono) ---
 function setFlipDigit(id, val) {
     const el = document.getElementById(id);
     if (!el) return;
     const str = String(val).padStart(2, '0');
     if (el.textContent === str) return;
+    const shell = el.closest('.flip-card-shell') || el;
     if (typeof gsap !== 'undefined' && !prefersReducedMotion()) {
         const tl = gsap.timeline();
-        tl.to(el, { rotateX: -90, filter: 'blur(3px)', duration: 0.10, ease: 'power2.in' });
-        tl.call(() => { el.textContent = str; });
-        tl.to(el, { rotateX: 0, filter: 'blur(0px)', duration: 0.14, ease: 'power2.out' });
+        tl.to(shell, { rotateX: -90, scale: 0.95, duration: 0.14, ease: 'power2.in' });
+        tl.call(() => {
+            el.textContent = str;
+            el.classList.add('tick-glow');
+        });
+        tl.to(shell, { rotateX: 0, scale: 1, duration: 0.22, ease: 'back.out(1.4)' });
+        tl.to(el, { duration: 0.4, onComplete: () => el.classList.remove('tick-glow') }, '+=0.1');
     } else {
         el.textContent = str;
         el.classList.remove('tick');
@@ -1098,6 +1147,17 @@ function startExpiryCountdown(expiryTime) {
     // If client has custom expiryTime, use it; otherwise target monthly cycle reset (1st of next month 00:00:00)
     const targetTime = (exp && exp > 0) ? exp : periodInfo.nextMonthReset;
     const urgent = targetTime - Date.now() < 7 * 86400000;
+    el.classList.toggle('urgent', urgent);
+    const badge = document.getElementById('chrono-cycle-badge');
+    if (badge) {
+        if (exp && exp > 0) {
+            badge.textContent = urgent ? 'EXPIRES SOON' : 'ACTIVE SUBSCRIPTION';
+        } else {
+            const now = new Date();
+            const monthName = now.toLocaleString('default', { month: 'short' });
+            badge.textContent = `${monthName.toUpperCase()} CYCLE`;
+        }
+    }
     const tick = () => {
         const diff = targetTime - Date.now();
         if (diff <= 0) {
@@ -1139,15 +1199,20 @@ function updateServerHealthUI(s) {
         // 1. Xray / 3x-ui Version & State
         const xrayVerEl = document.getElementById('strip-xray-ver');
         const xrayPill = document.getElementById('pill-xray-status');
+        const xrayDot = document.getElementById('strip-xray-dot');
         const ver = s.xray?.version;
         const state = s.xray?.state;
+        const running = !state || state === 'running';
         if (xrayVerEl) {
-            const running = !state || state === 'running';
-            xrayVerEl.textContent = (ver && ver !== '-') ? `v${ver}` : (running ? 'Online' : 'Error');
-            if (xrayPill) {
-                xrayPill.classList.toggle('good', running);
-                xrayPill.classList.toggle('bad', !running);
-            }
+            // Main branch format: raw version (e.g. 26.9.30)
+            xrayVerEl.textContent = (ver && ver !== '-') ? String(ver).replace(/^v/i, '') : (running ? 'Online' : 'Error');
+        }
+        if (xrayDot) {
+            xrayDot.classList.toggle('online', running);
+        }
+        if (xrayPill) {
+            xrayPill.classList.toggle('good', running);
+            xrayPill.classList.toggle('bad', !running);
         }
 
         // 2. Uptime
@@ -2768,11 +2833,11 @@ try {
         const panelNode = document.getElementById('hop-panel');
         panelNode?.classList.toggle('offline', !panelUp);
 
-        // Ripple the nodes left-to-right so the path reads as a flow.
+        // Ripple the nodes left-to-right with elastic spring
         if (typeof gsap !== 'undefined' && !prefersReducedMotion()) {
-            gsap.fromTo('#hop-path .hop-node',
-                { scale: 0.86, opacity: 0.45 },
-                { scale: 1, opacity: 1, duration: 0.45, stagger: 0.09, ease: 'elastic.out(1, 0.6)', clearProps: 'all' });
+            gsap.fromTo('#hop-path .topo-node',
+                { scale: 0.88, opacity: 0.6 },
+                { scale: 1, opacity: 1, duration: 0.5, stagger: 0.1, ease: 'elastic.out(1, 0.55)', clearProps: 'all' });
         }
     }
 
@@ -2784,8 +2849,42 @@ try {
         if (statusEl) statusEl.textContent = 'Measuring…';
         if (qualityEl) { qualityEl.textContent = ''; qualityEl.className = 'ping-quality'; }
 
-        // --- Hop 1: browser -> server. Best of 3 against a do-nothing endpoint,
-        // so one unlucky sample (GC pause, radio wake-up) doesn't skew it. ---
+        // Trigger sequence: sonar ring 1 -> packet 1 -> sonar ring 2 -> packet 2 -> sonar ring 3
+        const youNode = document.getElementById('hop-you');
+        const srvNode = document.getElementById('hop-server');
+        const pnlNode = document.getElementById('hop-panel');
+        const pkt1 = document.getElementById('hop-packet-1');
+        const pkt2 = document.getElementById('hop-packet-2');
+
+        const resetSonar = () => {
+            [youNode, srvNode, pnlNode].forEach(n => n?.classList.remove('pulse-fire'));
+            [pkt1, pkt2].forEach(p => { if (p) { p.style.opacity = '0'; p.style.left = '0%'; } });
+        };
+        resetSonar();
+
+        if (!prefersReducedMotion() && typeof gsap !== 'undefined') {
+            youNode?.classList.add('pulse-fire');
+            if (pkt1) {
+                gsap.fromTo(pkt1,
+                    { left: '0%', opacity: 1, scale: 1.2 },
+                    { left: '100%', opacity: 0.85, scale: 1, duration: 0.55, ease: 'power1.inOut' }
+                );
+            }
+            setTimeout(() => {
+                srvNode?.classList.add('pulse-fire');
+                if (pkt2) {
+                    gsap.fromTo(pkt2,
+                        { left: '0%', opacity: 1, scale: 1.2 },
+                        { left: '100%', opacity: 0.85, scale: 1, duration: 0.55, ease: 'power1.inOut' }
+                    );
+                }
+            }, 300);
+            setTimeout(() => {
+                pnlNode?.classList.add('pulse-fire');
+            }, 620);
+        }
+
+        // --- Hop 1: browser -> server. Best of 3 against a do-nothing endpoint ---
         let latency = null;
         const samples = [];
         for (let i = 0; i < 3; i++) {
@@ -2819,7 +2918,6 @@ try {
         const q = getQuality(latency);
         if (msEl) {
             msEl.className = 'ping-ms ' + q.cls;
-            // Count up to the measured value for a livelier reveal.
             if (typeof animateNumber === 'function' && !prefersReducedMotion()) {
                 animateNumber(msEl, latency, { decimals: 0, duration: 650, from: 0 });
             } else {
@@ -2832,10 +2930,12 @@ try {
 
         updateBars();
 
-        // spring bounce on the number
+        // Spring bounce on the number
         if (typeof gsap !== 'undefined' && msEl && !prefersReducedMotion()) {
-            gsap.fromTo(msEl, { scale: 1.22 }, { scale: 1, duration: 0.5, ease: 'elastic.out(1, 0.5)' });
+            gsap.fromTo(msEl, { scale: 1.25 }, { scale: 1, duration: 0.5, ease: 'elastic.out(1, 0.5)' });
         }
+
+        setTimeout(resetSonar, 1400);
     }
 
     btn.addEventListener('click', runPing);
