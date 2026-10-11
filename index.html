@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=43">
+    <link rel="stylesheet" href="styles.css?v=44">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <link rel="preconnect" href="https://unpkg.com" crossorigin>
@@ -325,8 +325,8 @@
                                 <span class="ping-quality" id="ping-quality"></span>
                             </div>
                         </div>
-                        <button class="ping-btn" id="btn-ping" title="Run network latency test">
-                            <i class="fa-solid fa-bolt"></i> <span class="ping-btn-lbl">Test Ping</span>
+                        <button class="ping-btn" id="btn-ping" title="Run network latency test" aria-label="Run network latency test">
+                            <i class="fa-solid fa-bolt"></i>
                         </button>
                     </div>
 
@@ -863,7 +863,7 @@
     <!-- `defer` is REQUIRED here: the CDN libs above are deferred, and deferred
          scripts run after non-deferred ones. Without defer these would execute
          before GSAP/QRious existed. Deferred scripts run in document order. -->
-    <script defer src="main.js?v=57" data-cfasync="false"></script>
-    <script defer src="fx.js?v=9" data-cfasync="false"></script>
+    <script defer src="main.js?v=58" data-cfasync="false"></script>
+    <script defer src="fx.js?v=10" data-cfasync="false"></script>
 </body>
 </html>
