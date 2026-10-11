@@ -317,6 +317,97 @@ function getClientTrafficMetrics(email, rawUp, rawDown, limitBytes) {
   };
 }
 
+// ---- 3x-ui OpenAPI (v3.x / v2.8+) Server Status & Client IP Helpers ----
+async function fetchServerInfoForPanel(baseUrl, authHeaders) {
+  return cachedJson(`srvinfo:${baseUrl}`, 5, async () => {
+    const h = Object.assign({ Accept: 'application/json', Referer: `${baseUrl}/` }, authHeaders);
+    const attempts = [
+      () => fetch(`${baseUrl}/panel/api/server/status`, { method: 'GET', headers: h, signal: AbortSignal.timeout(6000) }),
+      () => fetch(`${baseUrl}/panel/api/server/status`, { method: 'POST', headers: h, signal: AbortSignal.timeout(6000) }),
+      () => fetch(`${baseUrl}/server/status`, { method: 'POST', headers: h, signal: AbortSignal.timeout(6000) })
+    ];
+    for (const fn of attempts) {
+      try {
+        const res = await fn();
+        if (!res.ok) continue;
+        const data = await res.json();
+        const s = (data && data.obj) ? data.obj : data;
+        if (s && (s.xray || s.uptime !== undefined || s.disk || s.mem)) {
+          return {
+            xray: { version: s.xray?.version || '-', state: s.xray?.state || 'running' },
+            uptime: Number(s.uptime) || 0,
+            tcpCount: Number(s.tcpCount) || 0,
+            udpCount: Number(s.udpCount) || 0,
+            disk: s.disk || null
+          };
+        }
+      } catch (e) {}
+    }
+    return null;
+  });
+}
+
+function normalizeClientIpsPayload(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw.map(x => {
+      if (typeof x === 'string') return x.trim();
+      if (x && typeof x === 'object') return String(x.ip || x.address || x.clientIp || '').trim();
+      return '';
+    }).filter(s => s && !/no ip/i.test(s));
+  }
+  if (typeof raw === 'string') {
+    if (/no ip/i.test(raw)) return [];
+    return raw.split(/[\n,\s]+/).map(s => s.trim()).filter(s => s && !/no ip/i.test(s));
+  }
+  return [];
+}
+
+async function fetchClientIpsForPanel(baseUrl, authHeaders, email) {
+  if (!email) return [];
+  return cachedJson(`clientips:${baseUrl}:${email}`, 5, async () => {
+    const enc = encodeURIComponent(email);
+    const postHeaders = Object.assign({ 'Content-Type': 'application/json', Accept: 'application/json', Referer: `${baseUrl}/` }, authHeaders);
+    const getHeaders = Object.assign({ Accept: 'application/json', Referer: `${baseUrl}/` }, authHeaders);
+    // Try 3x-ui v3.x /panel/api/clients/ips/:email first, then v2.x /panel/api/inbounds/clientIps/:email, then legacy / GET fallbacks
+    const routes = [
+      { url: `${baseUrl}/panel/api/clients/ips/${enc}`, method: 'POST', headers: postHeaders, body: JSON.stringify({}) },
+      { url: `${baseUrl}/panel/api/inbounds/clientIps/${enc}`, method: 'POST', headers: postHeaders, body: JSON.stringify({}) },
+      { url: `${baseUrl}/panel/inbound/clientIps/${enc}`, method: 'POST', headers: postHeaders, body: JSON.stringify({}) },
+      { url: `${baseUrl}/panel/api/clients/ips/${enc}`, method: 'GET', headers: getHeaders },
+      { url: `${baseUrl}/panel/api/inbounds/clientIps/${enc}`, method: 'GET', headers: getHeaders }
+    ];
+    for (const rt of routes) {
+      try {
+        const r = await fetch(rt.url, {
+          method: rt.method,
+          headers: rt.headers,
+          body: rt.body,
+          signal: AbortSignal.timeout(5000)
+        });
+        if (!r.ok) continue;
+        const j = await r.json();
+        if (j && j.success && j.obj !== undefined) {
+          const ips = normalizeClientIpsPayload(j.obj);
+          if (ips.length > 0) return ips;
+        }
+      } catch (e) {}
+    }
+    // Global clientIps map fallback if panel exposes it
+    try {
+      const r = await fetch(`${baseUrl}/panel/api/server/clientIps`, { method: 'GET', headers: getHeaders, signal: AbortSignal.timeout(4000) });
+      if (r.ok) {
+        const j = await r.json();
+        if (j && j.success && j.obj && typeof j.obj === 'object') {
+          const ips = normalizeClientIpsPayload(j.obj[email]);
+          if (ips.length > 0) return ips;
+        }
+      }
+    } catch (e) {}
+    return [];
+  });
+}
+
 // ---- Client lookup + config-link builder, scoped to ONE panel (master or a
 // node) so the same logic can search either. Returns the clientData object,
 // or null if this panel doesn't have the client (so the caller can try the
@@ -341,9 +432,8 @@ async function resolveClientFromPanel(baseUrl, authHeaders, id, sourceLabel) {
   }
   if (!foundClient) return null;
 
-  // These five lookups are all independent of each other — fire them
-  // concurrently instead of sequentially. On the same VPS as the panel this
-  // turns ~5 round trips into effectively 1 (the slowest of the five).
+  // These lookups are all independent of each other — fire them
+  // concurrently instead of sequentially.
   const normLinks = (obj) => Array.isArray(obj) ? obj.map(x => {
     if (typeof x === 'string') return { remark: '', link: x };
     if (x && typeof x === 'object') return { remark: x.remark || x.name || x.tag || '', link: x.link || x.url || x.uri || '' };
@@ -363,10 +453,6 @@ async function resolveClientFromPanel(baseUrl, authHeaders, id, sourceLabel) {
     }
     return null;
   };
-
-  // Note: client IPs are deliberately NOT fetched here — they were removed
-  // from the client-facing response for privacy, so fetching them would just
-  // be a wasted round trip on every login.
 
   const findAllLinks = async () => {
     try {
@@ -400,9 +486,18 @@ async function resolveClientFromPanel(baseUrl, authHeaders, id, sourceLabel) {
     return 0;
   };
 
-  const [isOnline, allLinks, subProtoLinks, lastOnlineTs] = await Promise.all([
-    findOnline(), findAllLinks(), findSubProtoLinks(), findLastOnline()
+  const [rawOnline, allLinks, subProtoLinks, lastOnlineTs, clientIps, serverInfo] = await Promise.all([
+    findOnline(),
+    findAllLinks(),
+    findSubProtoLinks(),
+    findLastOnline(),
+    fetchClientIpsForPanel(baseUrl, authHeaders, foundClient.email).catch(() => []),
+    fetchServerInfoForPanel(baseUrl, authHeaders).catch(() => null)
   ]);
+
+  const ipCount = Array.isArray(clientIps) ? clientIps.length : 0;
+  const isOnline = rawOnline === true || ipCount > 0;
+  const onlineUsers = ipCount > 0 ? ipCount : (isOnline ? 1 : 0);
 
   // Config links point at THIS panel's own host — for a node-resolved client
   // that's the node's address (where its Xray inbound actually lives), not
@@ -511,7 +606,26 @@ async function resolveClientFromPanel(baseUrl, authHeaders, id, sourceLabel) {
     foundClient.total || (subInfo && subInfo.total) || 0
   );
 
-  return { ...foundClient, isOnline, subLink, vlessLink, vmessLink, trojanLink, configLink, protocol, subInfo, allLinks, subProtoLinks, lastOnlineTs, sourceNode: sourceLabel || null, traffic: trafficMetrics };
+  return {
+    ...foundClient,
+    isOnline,
+    ipCount,
+    onlineUsers,
+    userCount: onlineUsers,
+    serverInfo,
+    subLink,
+    vlessLink,
+    vmessLink,
+    trojanLink,
+    configLink,
+    protocol,
+    subInfo,
+    allLinks,
+    subProtoLinks,
+    lastOnlineTs,
+    sourceNode: sourceLabel || null,
+    traffic: trafficMetrics
+  };
 }
 
 // ---- Shared client lookup (mirrors /api auth 'client') ----
@@ -614,6 +728,31 @@ app.get('/api/ping', async (req, res) => {
     await fetch(`${PANEL_URL}/`, { method: 'HEAD', signal: AbortSignal.timeout(6000) });
   } catch (e) { reachable = false; }
   res.set('Cache-Control', 'no-store').json({ latency: Date.now() - t0, reachable, ts: t0 });
+});
+
+// Public sanitized server health info (Xray / 3x-ui version, uptime, disk storage, online users)
+app.get('/api/server-info', async (req, res) => {
+  try {
+    const cookie = await getSession();
+    if (!cookie) return res.json({ success: false, msg: 'Panel Auth Failed' });
+    const h = panelHeaders(cookie);
+    const [srvInfo, onlines] = await Promise.all([
+      fetchServerInfoForPanel(PANEL_URL, h).catch(() => null),
+      fetchOnlinesForPanel(PANEL_URL, h).catch(() => [])
+    ]);
+    if (!srvInfo) return res.json({ success: false });
+    const onlineUsers = Array.isArray(onlines) ? onlines.length : 0;
+    return res.json({
+      success: true,
+      obj: {
+        ...srvInfo,
+        onlineUsers,
+        userCount: onlineUsers
+      }
+    });
+  } catch (e) {
+    return res.json({ success: false });
+  }
 });
 
 // ============================ Settings (admin) ============================
@@ -881,13 +1020,15 @@ app.get('/public/stream', async (req, res) => {
       if (!client) {
         sseSend(res, 'notfound', { id, ts: Date.now() });
       } else {
-        // Authoritative online status each tick, from the SAME panel the
-        // client was found on, so the pill doesn't flip back to AWAY.
-        let isOnline = false;
-        try {
-          const onlines = await fetchOnlinesForPanel(clientPanel.baseUrl, clientPanel.headers);
-          if (Array.isArray(onlines)) isOnline = onlines.includes(client.email);
-        } catch (e) {}
+        // Authoritative online status, connected IPs count, and server health from the SAME panel
+        const [onlines, clientIps, serverInfo] = await Promise.all([
+          fetchOnlinesForPanel(clientPanel.baseUrl, clientPanel.headers).catch(() => []),
+          fetchClientIpsForPanel(clientPanel.baseUrl, clientPanel.headers, client.email).catch(() => []),
+          fetchServerInfoForPanel(clientPanel.baseUrl, clientPanel.headers).catch(() => null)
+        ]);
+        const ipCount = Array.isArray(clientIps) ? clientIps.length : 0;
+        const isOnline = (Array.isArray(onlines) && onlines.includes(client.email)) || ipCount > 0;
+        const onlineUsers = ipCount > 0 ? ipCount : (isOnline ? 1 : 0);
 
         const trafficMetrics = getClientTrafficMetrics(
           client.email,
@@ -900,6 +1041,7 @@ app.get('/public/stream', async (req, res) => {
           ts: Date.now(), email: client.email, down: client.down, up: client.up,
           total: client.total, enable: client.enable, isOnline, lastOnline: client.lastOnline,
           uuid: client.uuid, subId: client.subId, expiryTime: client.expiryTime,
+          ipCount, onlineUsers, userCount: onlineUsers, serverInfo,
           traffic: trafficMetrics
         });
       }

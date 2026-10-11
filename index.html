@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=36">
+    <link rel="stylesheet" href="styles.css?v=37">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <!-- Kept render-blocking on purpose: deferring it makes every icon pop in
@@ -138,6 +138,14 @@
         </header>
 
         <main>
+            <!-- Live Server Health Bar (Visible to Both Admin & Client) -->
+            <div class="live-strip-row">
+                <div class="live-pill good" id="pill-xray-status"><i class="fa-solid fa-shield-halved"></i> Xray <span id="strip-xray-ver">Online</span></div>
+                <div class="live-pill" id="pill-live-users"><i class="fa-solid fa-users"></i> Users: <strong id="live-users">0</strong></div>
+                <div class="live-pill" id="pill-live-uptime"><i class="fa-solid fa-clock"></i> Uptime: <strong id="live-uptime">-</strong></div>
+                <div class="live-pill" id="pill-live-disk"><i class="fa-solid fa-hard-drive"></i> Storage: <strong id="live-disk">-</strong></div>
+            </div>
+
             <!-- USER VIEW TAB -->
             <section id="tab-user-view" class="tab-content">
                 <div class="overview-grid">
@@ -264,6 +272,7 @@
                     <h3><i class="fa-solid fa-id-card"></i> Account Details</h3>
                     <div class="info-row"><span>ID/Email:</span> <strong id="user-email">-</strong></div>
                     <div class="info-row"><span>Status:</span> <strong id="user-online">-</strong></div>
+                    <div class="info-row"><span>Connected Users:</span> <strong id="user-active-count" style="color:var(--good);">-</strong></div>
                     <div class="info-row"><span>Last Online:</span> <strong id="user-last-online">-</strong></div>
                     <div class="info-row"><span>UUID:</span> <strong id="user-uuid" style="word-break:break-all;font-size:0.85rem;">-</strong></div>
                     <div class="info-row"><span>Subscription ID:</span> <strong id="user-subid">-</strong></div>
@@ -750,7 +759,7 @@
     <!-- `defer` is REQUIRED here: the CDN libs above are deferred, and deferred
          scripts run after non-deferred ones. Without defer these would execute
          before GSAP/QRious existed. Deferred scripts run in document order. -->
-    <script defer src="main.js?v=51" data-cfasync="false"></script>
+    <script defer src="main.js?v=52" data-cfasync="false"></script>
     <script defer src="fx.js?v=4" data-cfasync="false"></script>
 </body>
 </html>

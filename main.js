@@ -1120,6 +1120,72 @@ function startExpiryCountdown(expiryTime) {
     __expiryCountdownTimer = setInterval(tick, 1000);
 }
 
+// --- Live Server Health Strip Helpers (Xray / 3x-ui Version, Connected Users, Uptime, Storage) ---
+function setLiveUsersUI(count) {
+    try {
+        const n = Math.max(0, Number(count) || 0);
+        const el = document.getElementById('live-users');
+        if (el) el.textContent = String(n);
+        const pill = document.getElementById('pill-live-users');
+        if (pill) {
+            pill.classList.toggle('good', n > 0);
+        }
+    } catch (e) {}
+}
+
+function updateServerHealthUI(s) {
+    if (!s || typeof s !== 'object') return;
+    try {
+        // 1. Xray / 3x-ui Version & State
+        const xrayVerEl = document.getElementById('strip-xray-ver');
+        const xrayPill = document.getElementById('pill-xray-status');
+        const ver = s.xray?.version;
+        const state = s.xray?.state;
+        if (xrayVerEl) {
+            const running = !state || state === 'running';
+            xrayVerEl.textContent = (ver && ver !== '-') ? `v${ver}` : (running ? 'Online' : 'Error');
+            if (xrayPill) {
+                xrayPill.classList.toggle('good', running);
+                xrayPill.classList.toggle('bad', !running);
+            }
+        }
+
+        // 2. Uptime
+        const upEl = document.getElementById('live-uptime');
+        if (upEl && s.uptime !== undefined && Number(s.uptime) > 0) {
+            const u = Number(s.uptime);
+            const d = Math.floor(u / 86400);
+            const h = Math.floor((u % 86400) / 3600);
+            const m = Math.floor((u % 3600) / 60);
+            upEl.textContent = d > 0 ? `${d}d ${h}h` : `${h}h ${m}m`;
+        }
+
+        // 3. Storage / Disk
+        const diskEl = document.getElementById('live-disk');
+        if (diskEl && s.disk && Number(s.disk.total) > 0) {
+            const curGB = (Number(s.disk.current || 0) / (1024 ** 3)).toFixed(1);
+            const totGB = (Number(s.disk.total) / (1024 ** 3)).toFixed(1);
+            const pct = Math.round((Number(s.disk.current || 0) / Number(s.disk.total)) * 100);
+            diskEl.textContent = `${curGB}/${totGB} GB (${pct}%)`;
+        }
+
+        // 4. Users count fallback when not in client-specific override
+        if (currentRole !== 'client' && (s.userCount !== undefined || s.onlineUsers !== undefined)) {
+            setLiveUsersUI(s.userCount ?? s.onlineUsers ?? 0);
+        }
+    } catch (e) {}
+}
+
+async function loadServerHealth() {
+    try {
+        const res = await fetch('/api/server-info', { cache: 'no-store' });
+        const d = await res.json();
+        if (d && d.success && d.obj) {
+            updateServerHealthUI(d.obj);
+        }
+    } catch (e) {}
+}
+
 // --- Apply Client Data to UI ---
 function applyClientDataToUI(client) {
     if (!client) return;
@@ -1129,6 +1195,10 @@ function applyClientDataToUI(client) {
     client = Object.assign({}, __currentClientData || {}, client);
     __currentClientData = client;
     updateClientSpeedsFromDelta(client.down, client.up);
+
+    if (client.serverInfo) {
+        updateServerHealthUI(client.serverInfo);
+    }
 
     const downBytes = Math.max(0, Number(client.down) || 0);
     const upBytes = Math.max(0, Number(client.up) || 0);
@@ -1166,11 +1236,30 @@ function applyClientDataToUI(client) {
         document.getElementById('user-email').textContent = client.email || '-';
         if (client.uuid !== undefined) document.getElementById('user-uuid').textContent = client.uuid || '-';
         if (client.subId !== undefined) document.getElementById('user-subid').textContent = client.subId || '-';
-        if (client.lastOnlineTs !== undefined || client.lastOnline !== undefined) {
-            const ts = Number(client.lastOnlineTs) > 0 ? Number(client.lastOnlineTs)
-                     : (client.lastOnline !== undefined ? Number(client.lastOnline) : 0);
+
+        const lastOnlineMs = Number(client.lastOnlineTs) > 0 ? Number(client.lastOnlineTs)
+                           : (client.lastOnline !== undefined ? Number(client.lastOnline) : 0);
+        const rawCount = Number(client.ipCount ?? client.onlineUsers ?? client.userCount ?? 0);
+        const isClientOnline = client.isOnline === true || rawCount > 0 || (lastOnlineMs > 0 && (Date.now() - lastOnlineMs) < 180000);
+        const activeUserCount = rawCount > 0 ? rawCount : (isClientOnline ? 1 : 0);
+
+        const onlineEl = document.getElementById('user-online');
+        if (onlineEl) {
+            onlineEl.textContent = isClientOnline ? 'Online' : 'Offline';
+            onlineEl.style.color = isClientOnline ? 'var(--good)' : 'var(--text-dim)';
+        }
+
+        const activeCountEl = document.getElementById('user-active-count');
+        if (activeCountEl) {
+            activeCountEl.textContent = activeUserCount > 0 ? `${activeUserCount} Online` : '0 (Offline)';
+            activeCountEl.style.color = activeUserCount > 0 ? 'var(--good)' : 'var(--text-dim)';
+        }
+
+        setLiveUsersUI(activeUserCount);
+
+        if (client.lastOnlineTs !== undefined || client.lastOnline !== undefined || isClientOnline) {
             const el = document.getElementById('user-last-online');
-            if (el) el.textContent = fmtLastSeen(ts, client.isOnline);
+            if (el) el.textContent = fmtLastSeen(lastOnlineMs, isClientOnline);
         }
     } catch(e) {}
 
@@ -1456,6 +1545,7 @@ function startClientApp(client) {
     document.getElementById('tab-user-view').classList.add('active');
 
     applyClientDataToUI(client);
+    if (!client?.serverInfo) loadServerHealth();
     requestAnimationFrame(() => { animateClientEntry(); initScrollReveal(); });
 
     // Auto-measure server latency on entering the client page, then refresh it.
@@ -1723,6 +1813,7 @@ function initAdminCharts() {
 function applyAdminStatusToUI(stat) {
     if (!stat || !stat.success) return;
     const s = stat.obj;
+    updateServerHealthUI(s);
     const down = toGB((s.netTraffic && (s.netTraffic.down ?? s.netTraffic.recv)) ?? s.netIO?.down);
     const up = toGB((s.netTraffic && (s.netTraffic.up ?? s.netTraffic.sent)) ?? s.netIO?.up);
     const total = (parseFloat(down) + parseFloat(up)).toFixed(2);
@@ -2771,6 +2862,7 @@ try {
 
 // --- DOMContentLoaded Setup ---
 document.addEventListener("DOMContentLoaded", async () => {
+    loadServerHealth();
     try {
         const p = new URLSearchParams(window.location.search);
         if (p.get('admin') === '1') {

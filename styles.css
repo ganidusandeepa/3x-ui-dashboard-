@@ -2229,3 +2229,72 @@ body.theme-light .ring-fill { filter: none; }
 @media (prefers-reduced-motion: reduce) {
     .hop-pulse { animation: none; opacity: 0.4; }
 }
+
+/* ======================================================================
+   Live Server Health Strip (Xray / 3x-ui Version, Connected Users, Uptime, Storage)
+   ====================================================================== */
+.live-strip-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 18px;
+}
+.live-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--on-mid);
+    white-space: nowrap;
+    transition: border-color var(--m3-effects), background var(--m3-effects), color var(--m3-effects), box-shadow var(--m3-effects);
+}
+.live-pill i {
+    color: var(--on-dim);
+    font-size: 0.78rem;
+}
+.live-pill strong {
+    color: var(--on-bg);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.live-pill.good {
+    background: rgba(52, 211, 153, 0.12);
+    border-color: rgba(52, 211, 153, 0.35);
+    color: var(--good);
+}
+.live-pill.good i,
+.live-pill.good strong,
+.live-pill.good span {
+    color: var(--good);
+}
+.live-pill.bad {
+    background: rgba(242, 109, 109, 0.12);
+    border-color: rgba(242, 109, 109, 0.35);
+    color: var(--bad);
+}
+.live-pill.bad i,
+.live-pill.bad strong,
+.live-pill.bad span {
+    color: var(--bad);
+}
+body.theme-light .live-pill {
+    background: rgba(0, 0, 0, 0.035);
+    border-color: rgba(0, 0, 0, 0.1);
+}
+@media (max-width: 640px) {
+    .live-strip-row {
+        gap: 7px;
+        margin-bottom: 14px;
+    }
+    .live-pill {
+        padding: 6px 11px;
+        font-size: 0.74rem;
+    }
+}
+
